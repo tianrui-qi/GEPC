@@ -80,7 +80,7 @@ def resume_batch(main_folder):
     
     return new_features, dataset, params
 
-
+#%% Main
 if __name__=='__main__':
     
     import qsub
@@ -94,7 +94,8 @@ if __name__=='__main__':
     
     # Resume batch:
     # features_list, dataset, params = resume_batch(main_folder)
-    jobs = []
+    args = []
+    kwargs = []
     
     for features in features_list:
         
@@ -110,20 +111,22 @@ if __name__=='__main__':
             )
         os.makedirs(save_folder)
         
-        kwargs = dict(
+        args+=[[]]
+        kwargs += [dict(
             features=features_str,
             save_folder=save_folder,
             logfile=main_folder+'/log.csv'
-            )
+            )]
         
-        # Train and evaluate:
-        jobs+=qsub.submit(
-            cfg.package_path+'/core/timeseries.py',
-            args=[],
-            kwargs=kwargs
-            )
-    
-        print('job: %s')
-        print(kwargs)
+    # Train and evaluate:
+    job=qsub.submit(
+        cfg.package_path+'/core/timeseries.py',
+        args=args,
+        kwargs=kwargs,
+        job_array=True,
+        conda_env='delta_env',
+        hardware_requirements=dict(time_limit=16)
+        )
+    print(job)
         
     
