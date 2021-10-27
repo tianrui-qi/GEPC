@@ -1,0 +1,1065 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Sep 10 16:14:23 2020
+
+@author: jeanbaptiste
+"""
+import numpy as np
+import matplotlib.pyplot as plt
+import os, cv2
+
+def getRandomStimulations(totalchambers, timepoints, upper_limit=1, lower_limit=-2):
+    '''
+    Generate an array of bounded cumulative sums of +1/-1 Bernouilli 
+    sequences that is then thresholded around 0. The final binary sequence 
+    qualitatively approximates the type of optogenetic input control sequences 
+    presented in Chait et al.
+
+    Parameters
+    ----------
+    totalchambers : int
+        Total number of cells/chambers/sequences to generate.
+    timepoints : int
+        Length of sequences.
+    upper_limit : int, optional
+        Upper bound of the cumulative sum of the sequence. Higher upper limits
+        will generate more and longer sequences of 1s, or 'green' inputs.
+        The default is 1.
+    lower_limit : int, optional
+        Lower bound of the cumulative sum of the sequence. Lower lower limits
+        will generate more and longer sequences of 0s, or 'red' inputs.
+        The default is -2.
+
+    Returns
+    -------
+    2D array of booleans
+        Sequence of random binary/optogenetic inputs.
+
+    '''
+    
+    # Generate binary coin flips:
+    flips = np.round(np.random.rand(totalchambers,timepoints))
+    flips[flips==0]=-1
+    
+    # Initialize sum array:
+    sum_arr = np.zeros((totalchambers,timepoints))
+    sum_arr[:,0] = np.floor((upper_limit+lower_limit)/2)
+    
+    # Run over timepoints:
+    for t in range(timepoints-1):
+        sum_arr[:,t+1] = sum_arr[:,t] + flips[:,t] # Add timepoints sequentially
+        sum_arr = sum_arr.clip(lower_limit,upper_limit) # Apply lower and upper limits
+        
+    return sum_arr>=0
+
+
+def random_stimulations(
+        timepoints = 36*12,nostim_timepoints = 3*12, total_simulations = 12000
+        ):
+    '''
+    Produces a generic sample of random stimulations sequences
+
+    Parameters
+    ----------
+    timepoints : int, optional
+        Total number of timepoints. The default is 36*12.
+    nostim_timepoints : int, optional
+        Number of initial timepoints set to 0. The default is 3*12.
+    total_simulations : int, optional
+        Total number of stimulation sequences to generate. The default is 12000.
+
+    Returns
+    -------
+    stims : 2D array of bool
+        Random stimulation sequences.
+
+    '''
+    
+    # Init stims array
+    stims = np.empty((0,timepoints),dtype=bool)
+    
+    # Lambda to generate new stimulations and append to stims:
+    get_stims = lambda upper_limit, lower_limit: np.append(
+            stims,
+            getRandomStimulations(
+                min(total_simulations-stims.shape[0],int(total_simulations/6)),
+                timepoints,
+                upper_limit=upper_limit,
+                lower_limit=lower_limit
+                ),
+            axis=0
+            )
+    
+    # Generate random stimulations:
+    stims = get_stims(upper_limit=3,lower_limit=-2)
+    stims = get_stims(upper_limit=1,lower_limit=-2)
+    stims = get_stims(upper_limit=0,lower_limit=-2)
+    stims = get_stims(upper_limit=3,lower_limit=-3)
+    stims = get_stims(upper_limit=2,lower_limit=-3)
+    stims = get_stims(upper_limit=1,lower_limit=-3)
+    
+    # Shuffle them:
+    np.random.shuffle(stims)
+    
+    # Set first few hours to all red inputs, like in the experiments
+    stims[:,:nostim_timepoints] = 0
+    
+    return stims
+
+
+def sample_generator(fluo, 
+                     stims, 
+                     batch_size=50, 
+                     timesteps=36, 
+                     horizon=24, 
+                     dyn_range = 4095):
+    '''
+    Generate a random training batch from a previously generated dataset.
+
+    Parameters
+    ----------
+    fluo : 2D array of floats
+        Fluorescence levels of single cells under optogenetic inputs. Array 
+        dimensions are cells x time.
+    stims : 2D array of floats
+        Optogenetic inputs array. 0 = red, 1 = green. Array dimensions are 
+        cells x time.
+    batch_size : int, optional
+        Batch size for training the network.
+        The default is 50.
+    timesteps : int or tuple of 2 ints, optional
+        "Past" time steps to use as input. If a tuple of 2 ints is given, the 2
+        ints will be the lower and upper bound of uniformly sampled past 
+        sequence lengths.
+        The default is 36.
+    horizon : int, optional
+        "Future" time points prediction horizon.
+        The default is 24.
+    dyn_range: int or float, optional
+        The dynamic range of the fluorescence levels, for normalization.
+        The default is 4095.
+
+    Yields
+    ------
+    Past : 3D array of floats
+        Batch of randomly selected sequences of "past" fluorescence levels and
+        optogenetic inputs. 
+        Array dimensions are batch_size x timesteps x 2, unless random 
+        timesteps are used in which case the 2nd axis will be of variable 
+        length timesteps[1].
+    Future : 3D array of floats
+        Batch of randomly selected sequences of "future" fluorescence levels 
+        and optogenetic inputs.
+        Array dimensions are batch_size x horizon x 2
+
+    '''
+
+    # Allocate Y array:
+    Future = np.empty([batch_size,horizon,2],dtype=float)
+    
+    # Yield samples:
+    while True:
+        # Get random cells to sample:
+        cells = np.random.randint(fluo.shape[0],size=[batch_size]) # Get random "cells"
+        if type(timesteps) is not int \
+            and (type(timesteps) is tuple or type(timesteps) is list)\
+            and len(timesteps) == 2:
+            timesteps_v = np.random.randint(timesteps[0],timesteps[1],size=[batch_size],dtype=int)
+            Past = np.zeros([batch_size,timesteps[1],2],dtype=float)
+        else:
+            timesteps_v = [timesteps for _ in range(batch_size)]
+            Past = np.zeros([batch_size,timesteps,2],dtype=float)
+        
+        
+        # Compile X and Y arrays:
+        for i in range(batch_size):
+            
+            # Select random timpeoint:
+            timepoint = np.random.randint(timesteps_v[i],fluo.shape[1]-horizon) # Get random "time points"
+            # "Past":
+            Past[i,-timesteps_v[i]:,0] = fluo[cells[i],(timepoint-timesteps_v[i]):timepoint]/dyn_range
+            Past[i,-timesteps_v[i]:,1] = stims[cells[i],(timepoint-timesteps_v[i]):timepoint]
+            # Future:
+            Future[i,:,0] = fluo[cells[i],timepoint:(timepoint+horizon)]/dyn_range
+            Future[i,:,1] = stims[cells[i],timepoint:(timepoint+horizon)]
+            
+        yield Past, Future
+        
+def InputFlattener(gen):
+    '''
+    Flatten samples from sample_generator() into 2 vectors (for MLP)
+
+    Parameters
+    ----------
+    gen : generator
+        A generator of the type of sample_generator, that returns batches of
+        samples in the form of Past and Future fluorescence+optogenetic inputs.
+
+    Yields
+    ------
+    X : 2D array
+        A batch of vectors containing training inputs: past fluorescence, past
+        optogenetic inputs, future optogenetic inputs.
+    Y : 2D array
+        A batch of vectors containing training outputs: future fluorescence.
+
+    '''
+    
+    while True:
+        sample = next(gen)
+        X = np.concatenate((sample[0][:,:,0],
+                                 sample[0][:,:,1],
+                                 sample[1][:,:,1]),
+                                axis=1)
+        Y = sample[1][:,:,0]
+        
+        yield X, Y
+        
+def InputFlattener_opto(gen):
+    '''
+    Flatten samples from sample_generator() into 2 vectors (for MLP)
+
+    Parameters
+    ----------
+    gen : generator
+        A generator of the type of sample_generator, that returns batches of
+        samples in the form of Past and Future fluorescence+optogenetic inputs.
+
+    Yields
+    ------
+    X : 2D array
+        A batch of vectors containing training inputs: past fluorescence, past
+        optogenetic inputs, future optogenetic inputs.
+    Y : 2D array
+        A batch of vectors containing training outputs: future fluorescence.
+
+    '''
+    
+    while True:
+        sample = next(gen)
+        X = np.concatenate((sample[0][:,:,0],
+                                 sample[0][:,:,1],
+                                 sample[1][:,:,0]),
+                                axis=1)
+        Y = sample[1][:,:,1]
+        
+        yield X, Y
+        
+def InputSplitter(gen):
+    '''
+    Split output of sample generator into X and Y tensors for the lstm to train
+    against
+
+    Parameters
+    ----------
+    gen : generator
+        A generator of the type of sample_generator, that returns batches of
+        samples in the form of Past and Future fluorescence+optogenetic inputs.
+
+    Yields
+    ------
+    X : tuple of 3D numpy arrays.
+        Past tensor from the sample generator and the future optogenetic 
+        stimulation values.
+    Y : 3D numpy array
+        Future fluorescence values.
+
+    '''
+    
+    while True:
+        sample = next(gen)
+        X = [sample[0], 
+             np.expand_dims(sample[1][:,:,1],axis=-1)]
+        Y = np.expand_dims(sample[1][:,:,0],axis=-1)
+        
+        yield X, Y
+
+def InputRepeat(gen):
+    '''
+    Repeat input fluorescence as output for the lstm (autoencoder)
+
+    Parameters
+    ----------
+    gen : generator
+        A generator of the type of sample_generator, that returns batches of
+        samples in the form of Past and Future fluorescence+optogenetic inputs.
+
+    Yields
+    ------
+    X : tuple of 3D numpy arrays.
+        Past tensor from the sample generator and the future optogenetic
+        stimulation values.
+    Y : 3D numpy array
+        Past fluorescence values.
+
+    '''
+    
+    while True:
+        sample = next(gen)
+        X = [sample[0], 
+             np.expand_dims(sample[1][:,:,1],axis=-1)]
+        Y = np.expand_dims(sample[0][:,:,0],axis=-1)
+        
+        yield X, Y
+
+def sample_generator_strategies(fluo, 
+                            stims,
+                            strats,
+                            objectives,
+                            batch_size=50, 
+                            timesteps=36, 
+                            horizon=24,
+                            warm_up=36,
+                            dyn_range = 4095):
+    
+    
+    # Allocate Y array:
+    Future = np.empty([batch_size,horizon,2],dtype=float)
+    
+    while True:
+        
+        # Get random cells to sample:
+        cells = np.random.randint(fluo.shape[0],size=[batch_size]) # Get random "cells"
+        if type(timesteps) is not int \
+            and (type(timesteps) is tuple or type(timesteps) is list)\
+            and len(timesteps) == 2:
+            timesteps_v = np.random.randint(timesteps[0],timesteps[1],size=[batch_size],dtype=int)
+            Past = np.zeros([batch_size,timesteps[1],2],dtype=float)
+        else:
+            timesteps_v = [timesteps for _ in range(batch_size)]
+            Past = np.zeros([batch_size,timesteps,2],dtype=float)
+        
+        
+        # Compile X and Y arrays:
+        for i in range(batch_size):
+            
+            # Select random timpeoint:
+            timepoint = np.random.randint(timesteps_v[i],fluo.shape[1]-horizon) # Get random "time points"
+            # "Past":
+            Past[i,-timesteps_v[i]:,0] = fluo[cells[i],(timepoint-timesteps_v[i]):timepoint]/dyn_range
+            Past[i,-timesteps_v[i]:,1] = stims[cells[i],(timepoint-timesteps_v[i]):timepoint]
+            # Future:
+            
+            Future[i,:,0] = strats[cells[i],timepoint-warm_up,:horizon]
+            Future[i,:,1] = objectives[cells[i],timepoint-warm_up:(timepoint+horizon-warm_up)]/dyn_range
+            
+        yield Past, Future
+
+def sample_generator_rl(fluo, 
+                        stims,
+                        objectives,
+                        batch_size=50, 
+                        timesteps=36, 
+                        horizon=24,
+                        warm_up=36,
+                        dyn_range = 4095):
+    
+    
+    # Allocate Y array:
+    Future = np.empty([batch_size,horizon,1],dtype=float)
+    
+    while True:
+        
+        # Get random cells to sample:
+        cells = np.random.randint(fluo.shape[0],size=[batch_size]) # Get random "cells"
+        if type(timesteps) is not int \
+            and (type(timesteps) is tuple or type(timesteps) is list)\
+            and len(timesteps) == 2:
+            timesteps_v = np.random.randint(timesteps[0],timesteps[1],size=[batch_size],dtype=int)
+            Past = np.zeros([batch_size,timesteps[1],2],dtype=float)
+        else:
+            timesteps_v = [timesteps for _ in range(batch_size)]
+            Past = np.zeros([batch_size,timesteps,2],dtype=float)
+        
+        
+        # Compile X and Y arrays:
+        for i in range(batch_size):
+            
+            # Select random timpeoint:
+            timepoint = np.random.randint(timesteps_v[i],fluo.shape[1]-horizon) # Get random "time points"
+            # "Past":
+            Past[i,-timesteps_v[i]:,0] = fluo[cells[i],(timepoint-timesteps_v[i]):timepoint]/dyn_range
+            Past[i,-timesteps_v[i]:,1] = stims[cells[i],(timepoint-timesteps_v[i]):timepoint]
+            # Future:
+            
+            Future[i,:,0] = objectives[cells[i],timepoint-warm_up:(timepoint+horizon-warm_up)]/dyn_range
+            
+        yield (Past, Future), Future
+        
+
+def OptoPlotBackground(stims,x=None,ymin=0,ymax=1,alpha=1):
+    '''
+    Plot a background of red and green stripes for optogenetic inputs
+
+    Parameters
+    ----------
+    stims : 1D array of floats
+        0s and 1s representing a time sequence of red and green optogenetic 
+        inputs.
+    x : 1D array of ints or floats, optional
+        An array of the same size as stims for X-axis coordinates of the 
+        inputs. If None, stims sequence indexes will be used.
+        The default is None.
+    ymin : float or int, optional
+        Lower bound of the stripes. 
+        The default is 0.
+    ymax : float or int, optional
+        Upper bound of the stripes. 
+        The default is 1.
+
+    Returns
+    -------
+    None.
+
+    '''
+    
+    lightx, lighty = [], []
+    for i, e in enumerate(stims):
+        if x is None:
+            illumination_start = i-.5
+            illumination_stop = i+.5
+        else:
+            if i>0:
+                illumination_start = x[i]-(x[i]-x[i-1])/2
+            else:
+                illumination_start = x[i]
+            if i<len(x)-1:
+                illumination_stop = x[i]+(x[i+1]-x[i])/2
+            else:
+                illumination_stop = x[i]
+                
+        lightx.append(illumination_start)
+        lightx.append(illumination_start)
+        lightx.append(illumination_stop)
+        lightx.append(illumination_stop)
+        lighty.append(ymax if not e else ymin)
+        lighty.append(ymax if e else ymin)
+        lighty.append(ymax if e else ymin)
+        lighty.append(ymax if not e else ymin)
+        
+    lightx, lighty = np.array(lightx), np.array(lighty)
+    
+    plt.fill_between(lightx, lighty,ymin,facecolor='xkcd:light mint',alpha=alpha)
+    plt.fill_between(lightx, lighty,ymax,facecolor='xkcd:pale rose',alpha=alpha)
+
+def evaluationPlot(stims,past,future,prediction,savefig=None,show=True,dyn_range=4095):
+    '''
+    Plot an evaluation sample, the mean and standard deviation estimates for
+    future responses based on Gillespie simulations, and the neural network 
+    forecast.
+
+    Parameters
+    ----------
+    stims : 1D array of floats
+        Optogenetic stimulations for this sample (past and future).
+    past : 1D array of floats
+        Past simulated fluorescence trajectory for this sample.
+    future : 1D or 2D array of floats
+        Future simulated fluorescence trajectories for this sample. Dimensions
+        are simulations x time.
+    prediction : 1D array of floats
+        Neural network prediction for this sample.
+    savefig : NoneType or str or path-like or file-like, optional
+        Filename to save plot as. See documentation for fname parameter of
+        matplotlib.pyplot.savefig. If None, no file is saved.
+        The default is None.
+    show : bool, optional.
+        Flag to show the figure.
+        The default is True.
+    dyn_range : int or float, optional
+        Dynamic range to plot the data.
+
+    Returns
+    -------
+    None.
+
+    '''
+    
+    # Compute mean and std dev of future predictions:
+    future_mean = np.mean(future,axis=0)
+    future_std = np.std(future,axis=0)
+    
+    # Get past and future timepoints (t=0 is present, ie latest past timepoint)
+    pt = np.arange(-len(past)+1,1) # 'Past' X-axis timepoints 
+    ft = np.arange(1,future.shape[-1]+1) # 'Future' X-axis timepoints
+    
+    # Plot stimulations background:
+    OptoPlotBackground(stims,
+                       x=np.concatenate((pt,ft),axis=0),
+                       ymin=0,
+                       ymax=dyn_range)
+    
+    if future.ndim == 2:
+        # Plot 'past' fluorescence trajectory:
+        plt.plot(pt,past,'xkcd:black')
+        
+        # Plot standard deviation envelop of future trajectories:
+        plt.fill_between(ft,
+                         (future_mean+future_std),
+                         (future_mean-future_std),
+                         facecolor='xkcd:grey', alpha=.5)
+        
+        # Plot 3 random future trajectories:
+        for _ in range(3):
+            plt.plot(ft,future[np.random.randint(future.shape[0]),:],'xkcd:dark grey',lw=.5)
+            
+        # Plot mean future trajectory:
+        plt.plot(ft,future_mean,color='xkcd:black')
+        
+    else:
+        # Plot full fluorescence trajectory:
+        plt.plot((*pt,*ft), (*past,*future), color='xkcd:black')
+    
+    # Plot prediction:
+    plt.plot((0, *ft),(past[-1], *prediction),color='xkcd:electric blue')
+    
+    # Wrap up:
+    plt.plot([.5, .5],[0,dyn_range],'--k')
+    plt.ylim(0,dyn_range)
+    plt.xlim(-len(past)+1,future.shape[-1])
+    plt.xlabel('time points')
+    plt.ylabel('Fluorescence (a.u.)')
+    plt.title('Evaluation sample')
+    if savefig is not None:
+        plt.savefig(savefig+'.png',dpi=300)
+        plt.savefig(savefig+'.svg',dpi=300)
+        plt.savefig(savefig+'.pdf',dpi=300)
+    if show:
+        plt.show()
+    plt.clf()
+
+
+def controlPlot(fluorescence, 
+                objective, 
+                stims,
+                best_strategy=None,
+                best_prediction=None,
+                warm_up_steps=0,
+                sampling=5,
+                timepoint=None,
+                savefile=None,
+                dyn_range=4095):
+    '''
+    Plot control experiment past values, strategy and prediction
+
+    Parameters
+    ----------
+    fluorescence : 1D numpy array
+        Measured/simulated fluorescence values.
+    objective : 1D numpy array
+        Control objective.
+    stims : 1D numpy array of bools
+        Past optogenetic stimulations.
+    best_strategy : 1D numpy array or None, optional
+        Control strategy at timepoint.
+        The default is None.
+    best_prediction : 1D numpy array or None, optional
+        MPC prediction for control strategy.
+        The default is None.
+    warm_up_steps : int, optional
+        Number of "warm-up" timesteps where there is no control objective.
+        The default is 0.
+    sampling : int or float, optional
+        Sampling period, in minutes. 
+        The default is 5.
+    timepoint : int or None, optional
+        Current timestep. If None, the whole fluorescence timeseries is plotted
+        The default is None.
+    savefile : str or None, optional
+        Filename to save the figure as.
+        The default is None.
+    dyn_range : int or float, optional
+        The dynamic range of the fluorescence levels, for normalization.
+        The default is 4095.
+
+    Returns
+    -------
+    None.
+
+    '''
+    
+    # If no timepoint provided, plot whole trace:
+    if timepoint is None:
+        timepoint=fluorescence.shape[0]
+    
+    # Plot past optogenetic stimulations:
+    OptoPlotBackground(stims[:timepoint],
+                              x=np.arange(0,timepoint,1)*sampling/60,
+                              ymin=0,
+                              ymax=dyn_range)
+    
+    # Plot future strategy (if provided):
+    if best_strategy is not None:
+        OptoPlotBackground(best_strategy,
+                            x=np.arange(timepoint,timepoint+best_strategy.shape[0])*sampling/60,
+                            ymin=0,
+                            ymax=dyn_range,
+                            alpha=.6)
+    
+    # Plot Past/Future line: (unless final timepoint)
+    if timepoint+1 < fluorescence.shape[0]:
+        plt.plot(((np.array([-1, -1])+timepoint)*sampling)/60,[0,dyn_range],color='k',linewidth=.5,linestyle='--')
+    
+    # Plot objective:
+    plt.plot(np.arange(warm_up_steps,fluorescence.shape[0]-1)*sampling/60,objective,color='xkcd:grey')
+    
+    # Plot cell fluorescence:
+    plt.plot(np.arange(0,timepoint)*sampling/60,fluorescence[:timepoint],color='k')
+    
+    # Plot prediction (if provided):
+    if best_prediction is not None:        
+        plt.plot(np.arange(timepoint-1,timepoint+best_prediction.shape[0])*sampling/60,
+                  np.concatenate(([fluorescence[timepoint-1]],best_prediction*dyn_range),axis=0),
+                  color='xkcd:purple')
+    
+    # Label axes etc:
+    plt.xlabel('time (hours)')
+    plt.ylabel('Fluorescence (a.u.)')
+    plt.xlim(0,fluorescence.shape[0]*sampling/60)
+    plt.ylim(0,dyn_range)
+    if  savefile is not None:
+        plt.savefig(savefile,dpi=300)
+    plt.show()
+
+def mean_std_plot(objective,
+                  fluorescence,
+                  sampling=5,
+                  savefile=None,
+                  title=None,
+                  dyn_range=4095):
+    '''
+    Plot control results (mean and std) for multiple cells.
+
+    Parameters
+    ----------
+    objective : 1D numpy array of floats
+        Objective array describing a single, shared objective for all cells.
+    fluorescence : 2D numpy array of floats
+        Fluorescence levels of controlled cells. Must be the same number of 
+        time points as objective. Dimensions are cells -by- duration.
+    sampling : int or float, optional
+        Sampling period, in minutes. 
+        The default is 5.
+    savefile : str or None, optional.
+        Filename to save the figure as.
+        The default is None.
+    title : str or None, optional.
+        Figure title.
+        The default is None.
+    dyn_range : int or float, optional
+        The dynamic range of the fluorescence levels, for normalization.
+        The default is 4095.
+
+    Returns
+    -------
+    None.
+
+    '''
+    X = np.arange(0,fluorescence.shape[1])*sampling/60
+    mean = np.mean(fluorescence,axis=0)
+    std = np.std(fluorescence,axis=0)
+    
+    # Plot objective:
+    plt.plot(X,objective,linestyle='--',color='xkcd:dark grey')
+    
+    # Plot std dev:
+    plt.fill_between(X,mean-std,mean+std,alpha=.3,color='xkcd:blue')
+    
+    # Plot mean:
+    plt.plot(X,mean,color='xkcd:blue')
+    
+    # Compute & plot error:
+    sc_rmse, p_abs_e = control_rmse(fluorescence,objective)
+    plt.plot(X,sc_rmse,color='xkcd:orange')
+    plt.plot(X,p_abs_e,color='xkcd:turquoise')
+    
+    plt.xlabel('time (hours)')
+    plt.ylabel('Fluorescence (a.u.)')
+    plt.xlim(0,objective.shape[0]*sampling/60)
+    plt.ylim(0,dyn_range)
+    plt.text(.05*objective.shape[0]*sampling/60,
+             .80*dyn_range,
+             's.c. RMSE=%.1f\npop. error=%.1f\nn=%d cells' %(np.mean(sc_rmse),
+                                                           np.mean(p_abs_e),
+                                                           fluorescence.shape[0]))
+    plt.title(title)
+    plt.legend(['Objective', 'Mean Fluo', 's.c. RMSE', 'pop. error', 'Std. dev.'],loc='upper right')
+    if  savefile is not None:
+        plt.savefig(savefile,dpi=300)
+    
+def control_rmse(fluorescence,objective):
+    
+    Error = np.zeros_like(fluorescence)
+    for c, fluo in enumerate(fluorescence):
+        Error[c] = fluo-objective
+    sc_rmse = np.sqrt(np.mean(np.square(Error),axis=0))
+    p_abs_e = np.abs(np.mean(Error,axis=0))
+    
+    return sc_rmse, p_abs_e
+
+def sine_objective(period=8*60,
+                    offset=1000,
+                    amplitude=750,
+                    delay=0,
+                    duration=24*60,
+                    sampling=5):
+    '''
+    Generate sine objective vector
+
+    Parameters
+    ----------
+    period : int or float, optional
+        Period of the sine, in minutes. 
+        The default is 8*60.
+    offset : int or float, optional
+        The offset value added to the sine function. 
+        The default is 750.
+    amplitude : int or float, optional
+        The amplitude of the sine function. 
+        The default is 500.
+    delay : int or float, optional
+        The amount to delay the shift the sine by, in minutes.
+        The default is 0.
+    duration : int or float, optional
+        The total duration of the sine objective, in minutes. Must be a
+        multiple of sampling.
+        The default is 24*60.
+    sampling : int, optional
+        The sampling rate of control objective, in minutes.
+        The default is 5.
+
+    Returns
+    -------
+    1D numpy array
+        Sine objective.
+
+    '''
+    
+    return np.array([offset + amplitude*np.sin(2*np.pi*(t*sampling-delay)/period - np.pi/2) for t in range(0,int(duration/sampling))])
+
+def concentric_sines_objectives(gridsize,
+                          period=8*60,
+                          offset=1000,
+                          amplitude=750,
+                          prop_speed=2,
+                          duration=24*60,
+                          sampling=5):
+    '''
+    Generate control objective array of concentric sinewaves
+
+    Parameters
+    ----------
+    gridsize : int
+        Size of the array to draw the sines in.
+    period : int or float, optional
+        Period of the sine, in minutes. 
+        The default is 8*60.
+    offset : int or float, optional
+        The offset value added to the sine function. 
+        The default is 750.
+    amplitude : int or float, optional
+        The amplitude of the sine function. 
+        The default is 500.
+    prop_speed : int or float, optional
+        'Propagation speed' of the sine waves. 
+        The default is 2.
+    duration : int or float, optional
+        The total duration of the sine objective, in minutes. Must be a
+        multiple of sampling.
+        The default is 24*60.
+    sampling : int, optional
+        The sampling rate of control objective, in minutes.
+        The default is 5.
+
+    Returns
+    -------
+    objectives: 2D numpy array
+        The objectives array to feed into the control pipeline. The dimensions
+        are (gridsize**2) -by- duration/sampling
+
+    '''
+    
+    # Define objective propagation coefficient:
+    obj_prop = (prop_speed*period)/(gridsize)
+    
+    # Concentric circles in a grid:
+    objectives = np.full((gridsize**2,int(duration/sampling)),offset-amplitude)
+    c=0
+    for i in range(gridsize):
+        for j in range(gridsize):
+            delay = np.sqrt((i-float(gridsize)/2)**2+(j-float(gridsize)/2)**2)*obj_prop
+            objectives[c,int(delay/sampling):] = sine_objective(delay=delay)[int(delay/sampling):]
+            c += 1
+    return objectives
+
+def movie_objective(movie_folder,
+                    shape=(3840,2160),
+                    omin=250,
+                    omax=1750,
+                    clip_ratio=.02,
+                    color=False):
+    '''
+    Turn movie frames into control objectives for cells
+
+    Parameters
+    ----------
+    movie_folder : str
+        Path to folder containing movie frames.
+    shape : tuple of 2 ints, optional
+        Target shape of the processed movie. Each pixel is a cell.  
+        The default is (100,100).
+    omin : int or float, optional
+        Min value to clip the movie pixels to. 
+        The default is 250.
+    omax : int or float, optional
+        Max value to clip the movie pixels to.
+        The default is 1750.
+    clip_ratio : float, optional
+        Ratio of extrema pixels to clip to omin or omax. 
+        The default is .02.
+    color : bool, optional
+        Whether the movie frame files are RGB.
+        The default is False.
+
+    Returns
+    -------
+    objective : 2D numpy array of floats
+        Single-cell control objectives. The dimensions are shape[0]*shape[1] 
+        -by- number of movie frames
+
+    '''
+
+    # Identify images:
+    imgfiles = [x for x in os.listdir(movie_folder) if os.path.splitext(x)[1].lower() in ('.tif','.tiff','.png')]
+    imgfiles.sort()
+    objective = np.empty(shape+(len(imgfiles),))
+    
+    # Compile into objectives array:
+    for f, filename in enumerate(imgfiles):
+        if color:
+            I = cv2.imread(os.path.join(movie_folder,filename),cv2.IMREAD_COLOR)
+            I = np.mean(I,axis=2).astype(np.uint16)
+        else:
+            I = cv2.imread(os.path.join(movie_folder,filename),cv2.IMREAD_ANYDEPTH)
+        I = cv2.resize(I,shape[::-1])
+        objective[:,:,f] = np.array(I,dtype=float)
+    
+    # min & max:
+    mmin = np.quantile(objective,clip_ratio)
+    mmax = np.quantile(objective,1-clip_ratio)
+    
+    objective = ((objective-mmin)/(mmax-mmin))*(omax-omin)+omin
+    objective = np.clip(objective,a_min=omin,a_max=omax)
+    
+    objective = np.reshape(objective, (shape[0]*shape[1],len(imgfiles)))
+    
+    return objective
+
+def random_objectives(
+        total_cells,
+        total_timepoints,
+        omin=250,
+        omax=1750,
+        std_slope=1500/(6*12),
+        sampling = 5
+        ):
+    '''
+    Generate random cell control objectives.
+
+    Parameters
+    ----------
+    total_cells : int
+        Number of single-cell objectives to generate.
+    total_timepoints : TYPE
+        Number of timepoints per objective time-series.
+    omin : int or float, optional
+        Min value that objectives can reach. 
+        The default is 250.
+    omax : int or float, optional
+        Max value that objectives can reach.
+        The default is 1750.
+    std_slope : float, optional
+        Std deviation of the slope of the objectives. Each random objective is
+        a succession of linear segments of normally-randomized slope.
+        The default is 1500/(6*12).
+    sampling : int, optional
+        The sampling rate of control objective, in minutes.
+        The default is 5.
+
+    Returns
+    -------
+    objective : TYPE
+        DESCRIPTION.
+
+    '''
+    
+    # Init array:
+    objective = np.empty((total_cells,total_timepoints))
+    objective[:,0] = np.random.uniform(omin, omax, size=total_cells)
+    
+    # Run through cells, generate independent random objectives:
+    for c in range(total_cells):
+        t0 = 0
+        while t0 < total_timepoints-2:
+            
+            # Get random segment slope:
+            slope = np.random.normal(0,std_slope, size=1)
+                
+            # Get random duration for next segment (up to 4 hours):
+            t1 = np.min((t0 + np.random.randint(1,int(4*60/sampling)),
+                        total_timepoints-1))
+            
+            # Add to objective:
+            for t0 in range(t0,t1):
+                
+                objective[c,t0+1] = objective[c,t0] + slope[0]
+                
+                # If objective goes above or below min/max, break to next segment:
+                if objective[c,t0+1]<omin or objective[c,t0+1]>omax:
+                    break
+    
+    return objective
+            
+            
+
+def plot_grid_results(objectives,
+                      fluorescence,
+                      stims,
+                      shape,
+                      show=['objectives','fluorescence','stims','error'],
+                      save_folder='figures/grid_movie/',
+                      warm_up=3*60,
+                      sampling=5,
+                      vmin=100,
+                      vmax=4095,
+                      error_colormap='inferno',
+                      plot=True,
+                      verbose=True,
+                      ):
+    '''
+    Plot results from a 'movie' type of control experiment
+
+    Parameters
+    ----------
+    objectives : 2D numpy array of floats or None
+        Control objectives array.
+    fluorescence : 2D numpy array of floats
+        Measured fluorescence levels.
+    stims : 2D numpy array of bools or None
+        Optogenetic stimulations array.
+    shape : list of 2 ints
+        Shape of the 'movie' frames.
+    show : list of str, optional
+        List of arrays to display. Must contain at least 'fluorescence' 
+        The default is ['objectives','fluorescence','stims','error'].
+    save_folder : str, optional
+        Path to save assembled frames to. 
+        The default is 'figures/grid_movie/'.
+    warm_up : int or float, optional
+        Duration of "warm-up" in minutes where there is no control objective.
+        The default is 3*60.
+    sampling : int, optional
+        Sampling rate, in minutes.
+        The default is 5.
+    vmin : int or float, optional
+        Minimum value to clip fluo/objective values at.
+        The default is 100.
+    vmax : int or float, optional
+        Minimum value to clip fluo/objective values at.
+        The default is 4095.
+    error_colormap : str, optional
+        Name of PyPlot colormap to use for the error array.
+        The default is 'inferno'.
+    plot : bool, optional
+        Flag to plot each frame on the fly. 
+        The default is True.
+    verbose : bool, optional
+        Flag to display progress.
+        The default is True.
+        
+
+    Raises
+    ------
+    ValueError
+        If 'fluorescence' is not provided somewhere in the show list.
+
+    Returns
+    -------
+    None.
+
+    '''
+
+    if 'fluorescence' not in show:
+        raise ValueError("String 'fluorescence' must be in the show list")
+    
+
+    if 'error' in show:
+        cm = plt.get_cmap(error_colormap)
+        max_error = np.max(np.abs(objectives-fluorescence[:,int(warm_up/sampling)+1:]))
+    # Initialize arrays:
+    fluorescence_grid = np.zeros(shape)
+    if 'objectives' in show:
+        objective_grid = np.zeros(shape)
+    if 'stims' in show:
+        stims_grid = np.zeros(shape)
+    if 'error' in show:
+        error_grid = np.zeros(shape)
+    
+    for timepoint in range(fluorescence.shape[1]):
+        
+        c=0
+        for i in range(shape[0]):
+            for j in range(shape[1]):
+                if timepoint > warm_up/sampling:
+                    if 'objectives' in show:
+                        objective_grid[i,j] = objectives[c,timepoint-int(warm_up/sampling)-1]
+                    if 'error' in show:
+                        error_grid[i,j] = np.abs(objectives[c,timepoint-int(warm_up/sampling)-1]-fluorescence[c,timepoint])
+                if 'fluorescence' in show:
+                    fluorescence_grid[i,j] = fluorescence[c,timepoint]
+                if 'stims' in show:
+                    stims_grid[i,j] = stims[c,timepoint]
+                c += 1
+        
+        
+        # Turn objective and fluorescence into rgb image:
+        rgb = {}
+        if 'fluorescence' in show:
+            rgb['fluorescence'] = np.repeat((fluorescence_grid[:,:,np.newaxis]-vmin)/(vmax-vmin),3,axis=2)
+        if 'objectives' in show:
+            rgb['objectives'] = np.repeat((objective_grid[:,:,np.newaxis]-vmin)/(vmax-vmin),3,axis=2)
+        if 'stims' in show:
+            rgb['stims'] = np.zeros(shape=stims_grid.shape + (3,))
+            rgb['stims'][:,:,0]=np.logical_not(stims_grid)
+            rgb['stims'][:,:,1]=stims_grid
+        if 'error' in show:
+            rgb['error'] = cm(error_grid/max_error)[:,:,:3] # Discarding alpha channel
+        
+        
+        # Compile images together:
+        if len(show)==1:
+            assemble = rgb[show[0]]
+        elif len(show)==2:
+            assemble = np.clip(np.concatenate((rgb[show[0]],rgb[show[1]]), axis=1),
+                               a_min=0,
+                               a_max=1)
+        elif len(show)==3:
+            assemble = np.clip(np.concatenate((rgb[show[0]],rgb[show[1]],rgb[show[2]]), axis=1),
+                               a_min=0,
+                               a_max=1)
+        elif len(show)==4:
+            assemble = np.clip(
+                            np.concatenate((np.concatenate((rgb[show[0]],rgb[show[1]]), axis=1),
+                                       np.concatenate((rgb[show[2]],rgb[show[3]]), axis=1)),
+                                      axis=0),
+                            a_min=0,
+                            a_max=1)
+        
+        if plot:
+            plt.imshow(assemble)
+            plt.show()
+        if save_folder is not None:
+            cv2.imwrite(os.path.join(save_folder,'img_%06d.tif' %(timepoint,)),(255*assemble[:,:,::-1]).astype(np.uint8))
+        if verbose:
+            print('Movie frame %d/%d'%(timepoint,fluorescence.shape[1]))
