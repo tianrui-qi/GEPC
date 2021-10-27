@@ -234,7 +234,7 @@ def _inputs_processor(kwargs):
     
     for k, v in kwargs.items():
         if k in ('features', 'datasets'):
-            params[k] = tuple(v.split(', '))
+            params[k] = tuple(v.split(','))
             
         if k in ('save_folder','logfile'):
             params[k] = v
@@ -271,7 +271,8 @@ if __name__=='__main__':
         )
     
     # Create save folder:
-    os.makedirs(params['save_folder'])
+    if not os.path.exists(params['save_folder']):
+        os.makedirs(params['save_folder'])
     
     # Train and evaluate:
     network = batch_train_eval(dataset, network, params)

@@ -97,13 +97,13 @@ if __name__=='__main__':
     args = []
     kwargs = []
     
-    for f_ind, features in enumerate(features_list):
+    for f_ind, features in enumerate(features_list[:3]):
         
         # Format for command line:
-        features_str = '"'
+        features_str = ''
         for f in features:
-            features_str += f+', '
-        features_str=features_str[:-2]+'"'
+            features_str += f+','
+        features_str=features_str[:-1]
 
         # Save folder:
         save_folder = os.path.join(
@@ -125,7 +125,8 @@ if __name__=='__main__':
         kwargs=kwargs,
         job_array=True,
         conda_env='delta_env',
-        hardware_requirements=dict(time_limit=16)
+        hardware_requirements=dict(time_limit=16),
+        cleanup=False
         )
     print(job)
         
