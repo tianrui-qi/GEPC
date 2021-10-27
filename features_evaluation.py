@@ -120,7 +120,7 @@ if __name__=='__main__':
         
     # Train and evaluate:
     job=qsub.submit(
-        cfg.package_path+'/core/timeseries.py',
+        cfg.package_path+'/core/timeseries/timeseries.py',
         args=args,
         kwargs=kwargs,
         job_array=True,
