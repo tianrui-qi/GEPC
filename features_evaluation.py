@@ -24,7 +24,7 @@ CHAMBER_FEATURES = ('chamber_median_fluo','chamber_std_fluo','cell_count')
 IMAGE_FEATURES = ('sharpness',)
 
 
-def init_batch(main_folder, dataset, params):
+def init_batch(main_folder):
 
     # Create folder:
     os.makedirs(main_folder)
@@ -97,7 +97,7 @@ if __name__=='__main__':
     args = []
     kwargs = []
     
-    for features in features_list:
+    for f_ind, features in enumerate(features_list):
         
         # Format for command line:
         features_str = '"'
@@ -107,7 +107,7 @@ if __name__=='__main__':
 
         # Save folder:
         save_folder = os.path.join(
-            main_folder, datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            main_folder, 'task_%d'%f_ind
             )
         os.makedirs(save_folder)
         
