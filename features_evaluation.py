@@ -24,7 +24,7 @@ CHAMBER_FEATURES = ('chamber_median_fluo','chamber_std_fluo','cell_count')
 IMAGE_FEATURES = ('sharpness',)
 
 
-def init_batch(main_folder, dataset, params):
+def init_batch(main_folder):
 
     # Create folder:
     os.makedirs(main_folder)
@@ -97,17 +97,17 @@ if __name__=='__main__':
     args = []
     kwargs = []
     
-    for features in features_list:
+    for f_ind, features in enumerate(features_list[:3]):
         
         # Format for command line:
-        features_str = '"'
+        features_str = ''
         for f in features:
-            features_str += f+', '
-        features_str=features_str[:-2]+'"'
+            features_str += f+','
+        features_str=features_str[:-1]
 
         # Save folder:
         save_folder = os.path.join(
-            main_folder, datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            main_folder, 'task_%d'%f_ind
             )
         os.makedirs(save_folder)
         
@@ -120,12 +120,13 @@ if __name__=='__main__':
         
     # Train and evaluate:
     job=qsub.submit(
-        cfg.package_path+'/core/timeseries.py',
+        cfg.package_path+'/core/timeseries/timeseries.py',
         args=args,
         kwargs=kwargs,
         job_array=True,
         conda_env='delta_env',
-        hardware_requirements=dict(time_limit=16)
+        hardware_requirements=dict(time_limit=16),
+        cleanup=False
         )
     print(job)
         

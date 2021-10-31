@@ -8,11 +8,10 @@ Created on Wed Oct 27 14:18:43 2021
 from datetime import datetime
 
 # General stuff:
-package_path='/project/dunlop/shared_python_packages/deepcellcontrol/'
-
+package_path='/project/dunlop/shared_packages/deepcellcontrol/'
 
 # Datasets:
-datasets_path = '/projectnb/dunlop/deepcellcontrol/assets/data/'
+datasets_path = '/home/jeanbaptiste/data/shared_packages/deepcellcontrol/assets/data/'
 datasets = dict(
     experimental_1=(
         datasets_path+'experimental/2021-09-20_Dataset_2/dataset.pkl',
@@ -23,7 +22,7 @@ datasets = dict(
     )
 
 # Models:
-models_path = '/projectnb/dunlop/deepcellcontrol/assets/models/'
+models_path = '/home/jeanbaptiste/data/shared_packages/deepcellcontrol/assets/models'
 
 # Default LSTM parameters:
 LSTM_params = dict(
@@ -34,7 +33,7 @@ LSTM_params = dict(
     latent_dim=64,
     training_parameters = dict(
         learning_rate=1e-4,
-        patience = 500,
+        patience = 50,
         steps_per_epoch = 200,
         epochs=2000
         ),
