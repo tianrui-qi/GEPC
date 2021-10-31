@@ -97,7 +97,7 @@ if __name__=='__main__':
     args = []
     kwargs = []
     
-    for f_ind, features in enumerate(features_list[:3]):
+    for f_ind, features in enumerate(features_list):
         
         # Format for command line:
         features_str = ''
@@ -125,9 +125,7 @@ if __name__=='__main__':
         kwargs=kwargs,
         job_array=True,
         conda_env='delta_env',
-        hardware_requirements=dict(time_limit=16),
+        hardware_requirements=dict(cores=4,time_limit=16),
         cleanup=False
         )
     print(job)
-        
-    
