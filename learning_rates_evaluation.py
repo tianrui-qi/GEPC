@@ -69,7 +69,8 @@ if __name__=='__main__':
         kwargs=kwargs,
         job_array=True,
         conda_env='delta_env',
-        hardware_requirements=dict(cores=4, time_limit=80)
+        hardware_requirements=dict(cores=4, time_limit=80),
+        cleanup=False
         )
     print(job)
         
