@@ -233,6 +233,11 @@ def _inputs_processor(kwargs):
     params = copy.deepcopy(cfg.LSTM_params)
     
     for k, v in kwargs.items():
+        
+        if k=='parameters':
+            with open(v,'rb') as f:
+                params=pickle.load(f)
+        
         if k in ('features', 'datasets'):
             params[k] = tuple(v.split(', '))
             
