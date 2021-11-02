@@ -124,14 +124,15 @@ def batch_train_eval(dataset, network, params):
     
     # Plot history:
     metrics_lin = lambda name : [np.mean(x[name]) for x in history.history['metrics']]
-    plt.semilogy(history.history['loss'])
-    plt.semilogy(metrics_lin('mae'))
-    plt.semilogy(metrics_lin('rmse'))
+    plt.semilogy(history.history['loss'],label='$loss (MSE)$')
+    plt.semilogy(np.sqrt(history.history['loss']),label='$\sqrt{loss}$')
+    plt.semilogy(metrics_lin('mae'),label='$validation MAE$')
+    plt.semilogy(metrics_lin('rmse'), label='$validation RMSE$')
     plt.grid(axis='y',which='both')
     plt.xlabel('epoch')
     plt.ylabel('loss')
-    plt.title('Training loss')
-    plt.legend(('loss', 'MAE','RMSE'))
+    plt.title('Loss and validation')
+    plt.legend()
     plt.savefig(os.path.join(params['save_folder'],'training_loss.png'),dpi=300)
     plt.savefig(os.path.join(params['save_folder'],'training_loss.svg'),dpi=300)
     # plt.show()
