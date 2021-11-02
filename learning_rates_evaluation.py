@@ -26,7 +26,7 @@ if __name__=='__main__':
         ).strftime("%Y-%m-%d_%H-%M-%S")
     
     # Initialize training batch:
-    rates = [1e-3, 1e-4, 1e-5]
+    rates = [1e-1, 1e-2]
     
     # Resume batch:
     # features_list, dataset, params = resume_batch(main_folder)
