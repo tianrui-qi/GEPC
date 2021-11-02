@@ -40,8 +40,8 @@ if __name__=='__main__':
         # Training parameters:
         params = copy.deepcopy(cfg.LSTM_params)
         params['training_parameters']['learning_rate']=rate
-        params['epochs'] = 10,000
-        params['patience'] = 3,000
+        params['training_parameters']['epochs'] = 10_000
+        params['training_parameters']['patience'] = 3_000
         
         # Training features:
         params['features'] = ('fluos','stims','area')
@@ -64,7 +64,7 @@ if __name__=='__main__':
         
     # Train and evaluate:
     job=qsub.submit(
-        cfg.package_path+'/core/timeseries.py',
+        cfg.package_path+'/core/timeseries/timeseries.py',
         args=args,
         kwargs=kwargs,
         job_array=True,
