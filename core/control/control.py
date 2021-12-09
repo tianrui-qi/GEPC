@@ -6,6 +6,8 @@ Created on Mon Oct 26 12:56:30 2020
 @author: jeanbaptiste
 """
 
+import tensorflow as tf
+
 import numpy as np
 
 from ..models import mlp, lstm

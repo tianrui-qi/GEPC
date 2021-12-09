@@ -9,7 +9,7 @@ from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Dense, LSTM, Input, Dropout
 from tensorflow.keras.optimizers import Adam
 # from tensorflow.autograph.experimental import do_not_convert
-
+import tensorflow as tf
 
 def lstm(
         past_steps=36, 
@@ -21,7 +21,7 @@ def lstm(
         metrics=None,
         learning_rate=0.001
         ):
-    
+
     # Inputs:
     past_events = Input((past_steps,features),name='past_inputs') # Past fluo + light inputs
     future_light = Input((horizon,1),name='future_inputs') # Only future light inputs

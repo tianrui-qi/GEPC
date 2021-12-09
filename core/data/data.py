@@ -20,6 +20,10 @@ SHARP_NORM_FACTOR = 2_000
 SHARP_NORM_SHIFT = 9_000
 FLUO_FEATURES = (
     "fluos",
+    "fluo",
+    "fluo1",
+    "fluo2",
+    "fluo3",
     "chamber_mean_fluo",
     "chamber_median_fluo",
     "chamber_std_fluo"
