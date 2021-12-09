@@ -285,19 +285,3 @@ def normalization(raw):
             normalized[key] = sharp_norm(normalized[key])
 
     return normalized
-
-
-if __name__ == "__main__":
-    data = Datasets(
-        ("data/experimental/2021-09-30_Dataset_5/dataset.pkl",),
-        features=(
-            "fluos",
-            "chamber_median_fluo",
-            "length",
-            "stims",
-            "left_stims",
-            "right_stims",
-        ),
-    )
-    data.load()
-    batch = data.get_batch()

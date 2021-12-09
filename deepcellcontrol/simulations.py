@@ -12,8 +12,8 @@ from multiprocessing import Pool
 
 import numpy as np
 
-from .. import utilities as utils
-from .. import data
+from . import utilities as utils
+from . import data
 
 SAMPLING = 5
 
@@ -369,26 +369,3 @@ def control(
                     )
     
     return stims, fluorescence
-
-if __name__=='__main__':
-    
-    # Acquire training set:
-    stims = utils.random_stimulations()
-    fluo = training_set(stims)
-    np.save('data/simulations/training_set/fluos',fluo) # Removing first timepoint (before any stim applied)
-    np.save('data/simulations/training_set/stims',stims)
-    
-    # Acquire evaluation set:
-    stims = utils.random_stimulations(
-        timepoints=int((21*60)/SAMPLING),total_simulations=1000
-        )
-    result = evaluation_set(stims, cut_off=int((15*60)/SAMPLING)) #15h past/future cutoff
-    np.save(
-        'data/simulations/evaluation_set/fluos_past',
-        np.array([x[0] for x in result])
-        )
-    np.save(
-        'data/simulations/evaluation_set/fluos_future',
-        np.array([x[1] for x in result]) # Removing last timepoint to keep same size as stims
-        )
-    np.save('data/simulations/evaluation_set/stims',np.array(stims))

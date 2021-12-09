@@ -10,7 +10,7 @@ import tensorflow as tf
 
 import numpy as np
 
-from ..models import mlp, lstm
+from .models import mlp, lstm
 
 
 class _Controller:

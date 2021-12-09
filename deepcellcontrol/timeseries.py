@@ -15,11 +15,8 @@ import numpy as np
 from tensorflow.keras.callbacks import Callback, ModelCheckpoint, EarlyStopping
 import matplotlib.pyplot as plt
 
-if __name__=='__main__':
-    # Note: This will fail if the deepcellcontrol package is not in the python path
-    from deepcellcontrol.core import utilities as utils
-else:
-    from .. import utilities as utils
+from . import utilities as utils
+from . import config as cfg
 
 def train(
         dataset,
@@ -249,36 +246,3 @@ def _inputs_processor(kwargs):
             params[k] = int(v)
     
     return params
-
-if __name__=='__main__':
-    
-    from deepcellcontrol import core
-    from deepcellcontrol import config as cfg
-    import qsub
-    
-    # Process raw arguments:
-    _, kwargs = qsub.cmdln_args()
-    params = _inputs_processor(kwargs)
-    
-    # Load dataset:
-    dataset = core.data.Datasets(
-        cfg.datasets["experimental_1"],features = params['features']
-        )
-    dataset.load()
-    dataset.normalize()
-    dataset.data_type='normalized_dataset'
-    
-    # Init LSTM network:
-    network = core.models.lstm(
-        past_steps=params['past_steps'],
-        horizon=params['horizon'],
-        features=len(params['features']),
-        latent_dim=params['latent_dim']
-        )
-    
-    # Create save folder:
-    if not os.path.exists(params['save_folder']):
-        os.makedirs(params['save_folder'])
-    
-    # Train and evaluate:
-    network = batch_train_eval(dataset, network, params)
