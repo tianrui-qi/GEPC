@@ -51,16 +51,18 @@ def lstm(
     
 
 # @do_not_convert    
-def mlp(past_steps=36,
+def mlp(
+        past_steps=36,
         features=2,
         horizon=24,
         hidden_layers=10, 
         hidden_dim=64,
         dropout=0,
-        activation=None,
+        activation='linear',
         loss='mse',
         metrics=None,
-        learning_rate=0.001):
+        learning_rate=0.001
+        ):
     
     model = Sequential()
     model.add(Input(shape=(features*past_steps + horizon,)))

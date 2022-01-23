@@ -41,3 +41,22 @@ LSTM_params = dict(
     save_folder=models_path+datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
     logfile=None
     )
+
+MLP_params = dict(
+    datasets=datasets['experimental_1'],
+    features=('fluos','stims'),
+    past_steps=36,
+    features=2,
+    horizon=24,
+    hidden_layers=10, 
+    hidden_dim=64,
+    dropout=0,
+    training_parameters = dict(
+        learning_rate=1e-3,
+        patience = 500,
+        steps_per_epoch = 200,
+        epochs=2000
+        ),
+    save_folder=models_path+datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+    logfile=None
+    )

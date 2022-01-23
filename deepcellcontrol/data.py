@@ -206,6 +206,18 @@ class Datasets(Generator):
         if self.format_mode == "lstm":
             X = [past, future[:, :, [feature == "stims" for feature in self.features]]]
             Y = future[:, :, [feature == "fluos" for feature in self.features]]
+        
+        if self.format_mode == "mlp":
+            X = np.concatenate(
+                np.reshape(
+                    past,
+                    shape = (past.shape[0], past.shape[1]*past.shape[2]),
+                    order='C'
+                    ), 
+                future[:, :, [feature == "stims" for feature in self.features]],
+                axis=1
+                )
+            Y = future[:, :, [feature == "fluos" for feature in self.features]]
 
         return X, Y
     
@@ -224,6 +236,24 @@ class Datasets(Generator):
                 (
                     np.squeeze(X[0][:,:,[feature == "stims" for feature in self.features]]),
                     np.squeeze(X[1])
+                    ),
+                axis=1
+                )
+        
+        if self.format_mode == "mlp":
+            fluos_ind = [f for f, feature in enumerate(self.features) if feature == "fluos"][0]
+            stims_ind = [f for f, feature in enumerate(self.features) if feature == "stims"][0]
+            fluos = np.concatenate(
+                (
+                    X[:,fluos_ind:fluos_ind+self.past_steps],
+                    Y
+                    ),
+                axis=1
+                )
+            stims = np.concatenate(
+                (
+                    X[:,stims_ind:stims_ind+self.past_steps],
+                    X[:,self.horizon:],
                     ),
                 axis=1
                 )
