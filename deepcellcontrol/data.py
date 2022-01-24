@@ -202,19 +202,22 @@ class Datasets(Generator):
     def batch_format(self, past, future):
         """Format data to neural network i/o specs"""
 
-        # TODO: MLP mode
         if self.format_mode == "lstm":
             X = [past, future[:, :, [feature == "stims" for feature in self.features]]]
             Y = future[:, :, [feature == "fluos" for feature in self.features]]
         
         if self.format_mode == "mlp":
             X = np.concatenate(
-                np.reshape(
-                    past,
-                    shape = (past.shape[0], past.shape[1]*past.shape[2]),
-                    order='C'
-                    ), 
-                future[:, :, [feature == "stims" for feature in self.features]],
+                (
+                    np.reshape(
+                        past,
+                        newshape = (past.shape[0], past.shape[1]*past.shape[2]),
+                        order='F'
+                        ), 
+                    np.squeeze(
+                        future[:, :, [feature == "stims" for feature in self.features]]
+                        )
+                    ),
                 axis=1
                 )
             Y = future[:, :, [feature == "fluos" for feature in self.features]]
@@ -223,7 +226,6 @@ class Datasets(Generator):
     
     def batch_reconstruct(self, X, Y):
         
-        # TODO: MLP mode
         if self.format_mode == "lstm":
             fluos = np.concatenate(
                 (
@@ -246,14 +248,14 @@ class Datasets(Generator):
             fluos = np.concatenate(
                 (
                     X[:,fluos_ind:fluos_ind+self.past_steps],
-                    Y
+                    np.squeeze(Y)
                     ),
                 axis=1
                 )
             stims = np.concatenate(
                 (
                     X[:,stims_ind:stims_ind+self.past_steps],
-                    X[:,self.horizon:],
+                    X[:,-self.horizon:],
                     ),
                 axis=1
                 )

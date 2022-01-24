@@ -12,6 +12,7 @@ import os
 import deepcellcontrol as dcc
 # import qsub
 params = copy.deepcopy(dcc.config.MLP_params)
+params["training_parameters"]["epochs"]=2_000
 
 # Load dataset:
 dataset = dcc.data.Datasets(

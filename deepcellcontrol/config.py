@@ -46,7 +46,6 @@ MLP_params = dict(
     datasets=datasets['experimental_1'],
     features=('fluos','stims'),
     past_steps=36,
-    features=2,
     horizon=24,
     hidden_layers=10, 
     hidden_dim=64,
