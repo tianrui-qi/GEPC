@@ -50,7 +50,12 @@ class Server(Thread):
         """Tensorflow device. Can be '/device:CPU:0', '/device:GPU:0' or
         logical GPUs. If None, no specific device is assigned. See tf.device()
         """
-        
+        self.batch_size = 3
+        """Number of positions inputs to process at once. This is a trade-off, 
+        we process larger batches faster but we have to wait for all positions
+        to be done when we could be doing other operations"""
+        self._stop_flag = False
+        "Flag to trigger the daemon to stop, for debugging mostly"
     
     def run(self):
         """
@@ -71,13 +76,14 @@ class Server(Thread):
 
         """
         
-        while True:
+        while not self._stop_flag:
             
-            # Wait for inputs:
-            while self.queue.empty():
-                time.sleep(.01)
+            time.sleep(.01)
             
             self._run()
+        
+        # Reset flag
+        self._stop_flag = False
     
     def _run(self):
         """
@@ -90,6 +96,10 @@ class Server(Thread):
         None.
 
         """
+        
+        # If queue is empty, nothing to do
+        if self.queue.empty():
+            return
         
         # Retrieve inputs from queue:
         feedback_inputs, metadata, output_dispatchers = self.get_inputs()
@@ -125,7 +135,7 @@ class Server(Thread):
         output_dispatchers = []
         
         # Get items (if any) and append to lists:
-        while not self.queue.empty():
+        while not self.queue.empty() and len(feedback_inputs) < self.batch_size:
             inputs, meta, dispatcher = self.queue.get()
             feedback_inputs += [inputs]
             metadata += [meta]
