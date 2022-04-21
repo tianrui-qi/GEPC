@@ -142,6 +142,25 @@ class _MPC(_Controller):
             self.strategy_optimizer = NullOptimizer(self.horizon)
         else:
             self.strategy_optimizer = strategy_optimizer
+    
+    def _serialize(self):
+        """
+        Serialize to save settings to JSON
+
+        Returns
+        -------
+        dict
+            serialized key value pairs
+
+        """
+        o = dict()
+        o["__class__"] = str(self.__class__)
+        o["horizon"] = self.horizon
+        o["past_steps"] = self.past_steps
+        o["model"] = []
+        self.model.summary(print_fn=lambda x: o["model"].append(x))
+        o["strategy_optimizer"] = self.strategy_optimizer.__dict__
+        return o
 
     def get_strategy(self, inputs, objectives):
         """
@@ -515,6 +534,7 @@ class LSTMMPC(_MPC):
 
 
 class _RL(_Controller):
+    
     def __init__(self, horizon=24, past_steps=None, *args, **kwargs):
         """
         Instanciation.
@@ -537,6 +557,24 @@ class _RL(_Controller):
         super().__init__(*args, **kwargs)
         self.horizon = horizon
         self.past_steps = past_steps
+        self.model = None
+    
+    def _serialize(self):
+        """
+        Serialize to save settings to JSON
+
+        Returns
+        -------
+        dict
+            serialized key value pairs
+
+        """
+        o = dict()
+        o["__class__"] = str(self.__class__)
+        o["horizon"] = self.horizon
+        o["past_steps"] = self.past_steps
+        o["model"] = self.model.summary()
+        return o
 
     def get_strategy(self, inputs, objectives):
 
