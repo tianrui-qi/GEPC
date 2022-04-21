@@ -97,6 +97,7 @@ def random_stimulations(
     stims = get_stims(upper_limit=0,lower_limit=-2)
     stims = get_stims(upper_limit=3,lower_limit=-3)
     stims = get_stims(upper_limit=2,lower_limit=-3)
+    stims = get_stims(upper_limit=4,lower_limit=-3)
     stims = get_stims(upper_limit=1,lower_limit=-3)
     
     # Shuffle them:
@@ -760,7 +761,7 @@ def concentric_sines_objectives(gridsize,
         The default is 750.
     amplitude : int or float, optional
         The amplitude of the sine function. 
-        The default is 500.
+        The default is 750.
     prop_speed : int or float, optional
         'Propagation speed' of the sine waves. 
         The default is 2.
@@ -789,7 +790,14 @@ def concentric_sines_objectives(gridsize,
     for i in range(gridsize):
         for j in range(gridsize):
             delay = np.sqrt((i-float(gridsize)/2)**2+(j-float(gridsize)/2)**2)*obj_prop
-            objectives[c,int(delay/sampling):] = sine_objective(delay=delay)[int(delay/sampling):]
+            objectives[c,int(delay/sampling):] = sine_objective(
+                period=period,
+                offset=offset,
+                amplitude=amplitude,
+                delay=delay,
+                duration=duration,
+                sampling=sampling
+                )[int(delay/sampling):]
             c += 1
     return objectives
 
