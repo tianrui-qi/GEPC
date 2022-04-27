@@ -924,16 +924,17 @@ def single_cell_plot(raw_dataset, cell_nb, savefig = None):
     ax2.plot(x,raw_dataset["area"][cell_nb],"b",label="area", zorder = 10)
     ax2.plot(x,raw_dataset["perimeter"][cell_nb],"b",alpha=.5,label="perimeter", zorder = 10)
     
-    # Divisions:
-    yl = ax1.get_ylim()
-    for _x, _d in zip(x, raw_dataset["divisions"][cell_nb]):
-        if _d:
-            ax1.plot([_x, _x],yl,color="k", alpha=.1, zorder= 5)
-    ax1.set_ylim(yl)
+    # # Divisions:
+    # yl = ax1.get_ylim()
+    # for _x, _d in zip(x, raw_dataset["divisions"][cell_nb]):
+    #     if _d:
+    #         ax1.plot([_x, _x],yl,color="k", alpha=.1, zorder= 5)
+    # ax1.set_ylim(yl)
     
     ax1.set_ylabel('length & width, pixels', color='g')
     ax2.set_ylabel('area & perim., pixels', color='b')
     plt.xlim([x[0], x[-1]])
+    plt.grid(which="both", axis="both")
     ax1.legend(loc="upper left")
     ax2.legend(loc="upper right")
     
