@@ -26,8 +26,48 @@ def train(
         steps_per_epoch=250,
         patience=50,
         learning_rate=1e-3,
-        save_folder='./'
+        save_folder='./',
+        evaluation_dataset = None
         ):
+    """
+    Train forecasting network
+
+    Parameters
+    ----------
+    dataset : data.Dataset
+        Dataset for training.
+    network : tensorflow.keras.models.Model
+        The network to train.
+    batch_size : int, optional
+        Training batch size. The default is 400.
+    epochs : int, optional
+        Number of training epochs. The default is 2000.
+    steps_per_epoch : int, optional
+        Number of steps / batches per epoch. The default is 250.
+    patience : int, optional
+        The number of epochs without loss decrease that will stop learning 
+        before the total number of epochs is reached. See keras's earlystopping
+        The default is 50.
+    learning_rate : TYPE, optional
+        Network learning rate. The default is 1e-3.
+    save_folder : str, optional
+        The path under which the model should be saved. 
+        The default is './'.
+    evaluation_dataset : data.Dataset, optional
+        Dataset for evaluation. Test partition must be > 0. If None, the test 
+        partition of the training dataset will be used instead. If training 
+        test partition is 0, no on-line evaluation is performed. The default is
+        None.
+
+    Returns
+    -------
+    network : tensorflow.keras.models.Model
+        Trained network/model.
+    history : tensorflow.History object
+        Record of training loss values and metrics values
+        at successive epochs.
+
+    """
 
     # Adjust learning rate:
     network.optimizer.learning_rate = learning_rate
@@ -46,19 +86,35 @@ def train(
     early_stopping = EarlyStopping(
         monitor='loss', mode='min', verbose=1, patience=patience
         )
-    evaluation_clbk = EvaluationCallback(dataset)
+    callbacks = [model_checkpoint, early_stopping]
+    
+    # Evaluation callback:
+    if evaluation_dataset is not None:
+        if evaluation_dataset.test_ratio == 0:
+            raise ValueError(
+                "Evaluation dataset test ratio must be greater than 0"
+                )
+        evaluation_clbk = EvaluationCallback(evaluation_dataset)
+        callbacks.append(evaluation_clbk)
+    elif dataset.test_ratio > 0:
+        evaluation_clbk = EvaluationCallback(dataset)
+        callbacks.append(evaluation_clbk)
+    else:
+        evaluation_clbk = None
+    
 
     # train network
     history = network.fit_generator(
         dataset,
         steps_per_epoch=steps_per_epoch,
         epochs=epochs,
-        callbacks=[model_checkpoint, evaluation_clbk, early_stopping]
+        callbacks=callbacks
         )
     network.load_weights(os.path.join(save_folder,'model.hdf5'))
     
     # Add rmse and mae to history metrics a posteriori:
-    history.history['metrics'] = evaluation_clbk.metrics
+    if evaluation_clbk is not None:
+        history.history['metrics'] = evaluation_clbk.metrics
     
     return network, history
 
@@ -71,6 +127,32 @@ def evaluate(
         verbose = 1,
         return_eval = False
         ):
+    """
+    Evaluate model after training
+
+    Parameters
+    ----------
+    dataset : data.Dataset
+        Dataset for evaluation.
+    network : tensorflow.keras.models.Model
+        The trained network.
+    batch_size : int, optional
+        Evaluation batch size. The default is 10_000.
+    num_batches : int, optional
+        Number of batches to evaluate. The default is 10.
+    verbose : int, optional
+        Verbosity level. The default is 1.
+    return_eval : bool, optional
+        Whether to return the last batch evaluation results. 
+        The default is False.
+
+    Returns
+    -------
+    dict or Tuple of (dict, dict)
+        RMSE and MAE for each evaluation and, optionally, the last batch to
+        be evaluated.
+
+    """
     
     # Set up dataset:
     dataset.mode='evaluation'
@@ -99,11 +181,30 @@ def evaluate(
     return dict(rmse=rmse, mae=mae)
 
 
-def batch_train_eval(dataset, network, params):
+def batch_train_eval(dataset, network, params, evaluation_dataset = None):
+    """
+    Train and evaluate network, and create and save post-training plots
+
+    Parameters
+    ----------
+    dataset : data.Dataset
+        Training dataset.
+    network : tensorflow.keras.models.Model
+        The network to train.
+    params : dict
+        Dict of training parameters as kwargs. See train() and config.py for
+        more information.
+
+    Returns
+    -------
+    network : tensorflow.keras.models.Model
+        The trained network.
+
+    """
 
     # Write training parameters to disk:
-    with open(params['save_folder']+'/training_parameters.txt','w') as params_file:
-        json.dump(params, params_file)
+    with open(params['save_folder']+'/training_parameters.json','w') as params_file:
+        json.dump(params, params_file, sort_keys=True, indent=4)
 
     # Update dataset's features:
     dataset.features = params['features']
@@ -116,6 +217,7 @@ def batch_train_eval(dataset, network, params):
         dataset, 
         network,
         save_folder = params['save_folder'],
+        evaluation_dataset=evaluation_dataset,
         **params['training_parameters']
         )
     
@@ -136,7 +238,10 @@ def batch_train_eval(dataset, network, params):
     plt.clf()
     
     # Evaluate:
-    metrics, eval_d = evaluate(dataset, network, return_eval=True)
+    if evaluation_dataset is None:
+        metrics, eval_d = evaluate(dataset, network, return_eval=True)
+    else:
+        metrics, eval_d = evaluate(evaluation_dataset, network, return_eval=True)
 
     # Plot evaluation:
     plt.plot(metrics['mae'])

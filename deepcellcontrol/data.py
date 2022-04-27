@@ -14,6 +14,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from . import utilities as utils
+from . import config
 
 class Normalization():
     """
@@ -26,14 +27,61 @@ class Normalization():
     """
     
     def __init__(self):
+        
+        # Normalization parameters:
         self.fluo_max = 4095
+        "Max possible fluorescence value"
         self.length_factor = 200
+        "Cell length scaling. factor = 0.9 value cutoff in inv exp norm"
         self.area_factor = 3_000
+        "Cell area scaling. factor = 0.9 value cutoff in inv exp norm"
         self.count_factor = 20
+        "Cells count scaling. factor = 0.9 value cutoff in inv exp norm"
         self.sharpness_factor = 2_000
+        "Image sharpness factor. See sigmoid_normalization method"
         self.sharpness_shift = 9_000
+        "Image sharpness mid-range shift. See sigmoid_normalization method"
     
-    def _linear_normalization(self, values, vmin, vmax):
+    def normalize(self, data):
+        """
+        Apply normalization to data / dataset
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary of features and their values. The values can be scalars
+            or 1D vectors.
+
+        Returns
+        -------
+        data : dict
+            NNormalized data.
+
+        """
+        
+        
+        for feature, values in data.items():
+            
+            if feature in config.fluo_features:
+                values = self.fluo(values)
+            
+            if feature in config.length_features:
+                values = self.length(values)
+            
+            if feature in config.area_features:
+                values = self.area(values)
+            
+            if feature in config.count_features:
+                values = self.count(values)
+            
+            if feature in config.sharpness_features:
+                values = self.sharpness(values)
+            
+            data[feature] = values
+        
+        return data
+    
+    def linear_normalization(self, values, vmin, vmax):
         """
         Simple linear normalization function. 
 
@@ -58,7 +106,7 @@ class Normalization():
         
         return values
     
-    def _invert_exp_normalization(self, values, factor, vmin=None):
+    def invert_exp_normalization(self, values, factor, vmin=None):
         """
         Inverted exponential normalization (saturating function)
         y = 1 - 10^{-x/factor}
@@ -90,7 +138,7 @@ class Normalization():
         
         return values
     
-    def _sigmoid_normalization(self, values, factor, shift):
+    def sigmoid_normalization(self, values, factor, shift):
         """
         Sigmoidal normalization.
         y = 1 / (1 + e^{-(x-shift)/factor})
@@ -135,7 +183,7 @@ class Normalization():
 
         """
         
-        values = self._linear_normalization(values, vmin=0, vmax=self.fluo_max)
+        values = self.linear_normalization(values, vmin=0, vmax=self.fluo_max)
         
         return values
     
@@ -155,7 +203,7 @@ class Normalization():
 
         """
         
-        values = self._invert_exp_normalization(values, self.length_factor)
+        values = self.invert_exp_normalization(values, self.length_factor)
         
         return values
     
@@ -175,7 +223,7 @@ class Normalization():
 
         """
         
-        values = self._invert_exp_normalization(values, self.area_factor)
+        values = self.invert_exp_normalization(values, self.area_factor)
         
         return values
     
@@ -195,7 +243,7 @@ class Normalization():
 
         """
         
-        values = self._invert_exp_normalization(values, self.count_factor)
+        values = self.invert_exp_normalization(values, self.count_factor)
         
         return values
     
@@ -215,36 +263,11 @@ class Normalization():
 
         """
         
-        values = self._sigmoid_normalization(
+        values = self.sigmoid_normalization(
             values, self.sharpness_factor, self.sharpness_shift
             )
         
         return values
-
-        
-# FLUO_FEATURES = (
-#     "fluos",
-#     "fluo",
-#     "fluo1",
-#     "fluo2",
-#     "fluo3",
-#     "chamber_mean_fluo",
-#     "chamber_median_fluo",
-#     "chamber_std_fluo"
-#     )
-# LENGTH_FEATURES = ("length",)
-# COUNT_FEATURES = ("cell_count",)
-# AREA_FEATURES = ("area",)
-# SHARPNESS_FEATURES = ("sharpness",)
-
-# # Linear normalizatino functions:
-# fluo_norm = lambda x: x / DYN_RANGE
-# # invert exp normalization functions:
-# length_norm = lambda x: 1 - np.power(10.0, -x / LENGTH_NORM_FACTOR)
-# area_norm = lambda x: 1 - np.power(10.0, -x / AREA_NORM_FACTOR)
-# cell_count_norm = lambda x: 1 - np.power(10.0, -x / COUNT_NORM_FACTOR)
-# # Sigmoid normalization functions:
-# sharp_norm = lambda x: 1 / (1 + np.exp(-(x - SHARP_NORM_SHIFT) / SHARP_NORM_FACTOR))
 
 
 class Datasets(Generator):
@@ -280,6 +303,7 @@ class Datasets(Generator):
         self.horizon = 24
         self.past_steps = 36
         self.batch_size = 100
+        self.normalization = Normalization()
 
     def load(self):
         """
@@ -429,7 +453,10 @@ class Datasets(Generator):
                     "Raw values not loaded for dataset #%d: %s"
                     % (set_number, self.datasets[set_number])
                 )
-            dataset["normalized_dataset"] = normalization(dataset["raw_dataset"])
+            
+            dataset["normalized_dataset"] = self.normalization.normalize(
+                dataset["raw_dataset"]
+                )
 
     def get_cell(self, set_number, cell_number):
         """
@@ -542,7 +569,7 @@ class Datasets(Generator):
 
         if self.format_mode == "lstm":
             X = [past, future[:, :, [feature == "stims" for feature in self.features]]]
-            Y = future[:, :, [feature == "fluos" for feature in self.features]]
+            Y = future[:, :, [feature in ("fluos", "fluo1") for feature in self.features]]
         
         if self.format_mode == "mlp":
             X = np.concatenate(
@@ -558,7 +585,7 @@ class Datasets(Generator):
                     ),
                 axis=1
                 )
-            Y = future[:, :, [feature == "fluos" for feature in self.features]]
+            Y = future[:, :, [feature in ("fluos", "fluo1") for feature in self.features]]
 
         return X, Y
     
@@ -585,7 +612,7 @@ class Datasets(Generator):
         if self.format_mode == "lstm":
             fluos = np.concatenate(
                 (
-                    np.squeeze(X[0][:,:,[feature == "fluos" for feature in self.features]]),
+                    np.squeeze(X[0][:,:,[feature in ("fluos", "fluo1") for feature in self.features]]),
                     np.squeeze(Y)
                     ),
                 axis=1
@@ -599,7 +626,7 @@ class Datasets(Generator):
                 )
         
         if self.format_mode == "mlp":
-            fluos_ind = [f for f, feature in enumerate(self.features) if feature == "fluos"][0]
+            fluos_ind = [f for f, feature in enumerate(self.features) if feature in ("fluos", "fluo1")][0]
             stims_ind = [f for f, feature in enumerate(self.features) if feature == "stims"][0]
             fluos = np.concatenate(
                 (
@@ -684,7 +711,7 @@ class Datasets(Generator):
 
 #     return normalized
 
-def compile_dataset(xpfolder):
+def compile_dataset(xpfolder, min_area =  200):
     """
     Compile a dataset from the pickle files of a full DeLTA pipeline run
 
@@ -692,6 +719,9 @@ def compile_dataset(xpfolder):
     ----------
     xpfolder : str
         Path to the experiment folder.
+    min_area : int or float, optional
+        The minimum area of a cell for it to be considered as a potential
+        mother cell.
 
     Returns
     -------
@@ -716,8 +746,7 @@ def compile_dataset(xpfolder):
         'chamber_median_fluo1', 
         'chamber_std_fluo1', 
         'stims',
-        'neighbor_stims', 
-        'divisions'
+        'neighbor_stims',
         ]
     
     
@@ -783,11 +812,11 @@ def compile_dataset(xpfolder):
                     )
                 
                 # Sharpness
-                mother_data["sharpness"][f] = np.mean(
-                    cv2.Laplacian(
-                        delta.utilities.cropbox(trans_frames[f],roi.box), 2
-                        )
-                    )
+                img = delta.utilities.cropbox(trans_frames[f],roi.box) # Crop chamber image out
+                img = delta.utilities.rangescale(img, rescale = (0, 1)) # Rescale values
+                img = (img*255).astype(np.uint8) # Rescale to uint8 range
+                mother_data["sharpness"][f] = np.mean(cv2.Laplacian(img,2)) # "sharpness"
+                
                 
                 # Stimulations:
                 mother_data["stims"][f] = mothers_pkl[series_nb][series_pos_nb][roi.roi_nb]["stims"][f]
@@ -797,7 +826,12 @@ def compile_dataset(xpfolder):
                     mother_data["neighbor_stims"][f] += mothers_pkl[series_nb][series_pos_nb][roi.roi_nb-1]["stims"][f]*0.5
                 if roi.roi_nb < len(mothers_pkl[series_nb][series_pos_nb]) - 1:
                     mother_data["neighbor_stims"][f] += mothers_pkl[series_nb][series_pos_nb][roi.roi_nb+1]["stims"][f]*0.5
-                    
+
+                # Remove cells that are too small:
+                for cell in cells.copy():
+                    if roi.lineage.getvalue(cell,f,"area") < min_area:
+                        cells.remove(cell)
+
                 # If no cell in frame, skip to next frame:
                 if len(cells) == 0:
                     continue
@@ -808,11 +842,8 @@ def compile_dataset(xpfolder):
                         cells[0],f,feature
                     )
                 
-                # Divisions
-                mother_data["divisions"][f] = not roi.lineage.getvalue(cells[0],f,"daughters") is None
-                
                 # total_cells
-                mother_data["cell_count"][f] = len(cells)
+                mother_data["cell_count"][f] = len(cells) 
                 
                 # All cells fluo:
                 all_fluo = []

@@ -12,7 +12,7 @@ package_path='/project/dunlop/shared_python_packages/deepcellcontrol/'
 
 
 # Datasets:
-datasets_path = '/projectnb/dunlop/deepcellcontrol/assets/data/'
+datasets_path = 'D:/shared_packages/deepcellcontrol/assets/data/'
 datasets = dict(
     experimental_1=(
         datasets_path+'experimental/2021-09-20_Dataset_2/dataset.pkl',
@@ -23,7 +23,7 @@ datasets = dict(
     )
 
 # Models:
-models_path = '/projectnb/dunlop/deepcellcontrol/assets/models/'
+models_path = 'D:/shared_packages/deepcellcontrol/assets/models/'
 
 # Default LSTM parameters:
 LSTM_params = dict(
@@ -31,7 +31,7 @@ LSTM_params = dict(
     features=('fluos','stims'),
     past_steps=36,
     horizon = 24,
-    latent_dim=64,
+    latent_dim=16,
     training_parameters = dict(
         learning_rate=1e-4,
         patience = 500,
@@ -42,13 +42,14 @@ LSTM_params = dict(
     logfile=None
     )
 
+# Default MLP parameters:
 MLP_params = dict(
     datasets=datasets['experimental_1'],
     features=('fluos','stims'),
     past_steps=36,
     horizon=24,
     hidden_layers=10, 
-    hidden_dim=64,
+    hidden_dim=16,
     dropout=0,
     training_parameters = dict(
         learning_rate=1e-3,
@@ -59,3 +60,22 @@ MLP_params = dict(
     save_folder=models_path+datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
     logfile=None
     )
+
+# Feature types names (for normalization purposes):
+fluo_features = (
+    "fluos",
+    "fluo",
+    "fluo1",
+    "fluo2",
+    "fluo3",
+    "chamber_mean_fluo",
+    "chamber_median_fluo",
+    "chamber_std_fluo",
+    "chamber_mean_fluo1",
+    "chamber_median_fluo1",
+    "chamber_std_fluo1"
+    )
+length_features = ("length", "width")
+count_features = ("cell_count",)
+area_features = ("area","perimeter")
+sharpness_features = ("sharpness",)

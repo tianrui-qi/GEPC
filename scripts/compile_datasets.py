@@ -39,3 +39,27 @@ for xp in experiments:
             cell_nb,
             savefig = savefolder + f"cell_{cell_nb}"
             )
+
+# otf = mothers_pkl[3][81-75]
+# otd = dict()
+# for k in dataset:
+#     otd[k] = []
+#     for c in otf:
+#         if k in c:
+#             otd[k] += [np.array(c[k])[:199,np.newaxis]]
+
+# for k in dataset:
+#     if len(otd[k]) > 0:
+#         for c in range(len(otd[k])):
+#             if np.any(otd[k][c]-dataset[k][c] > 1e-3):
+#                 plt.plot(otd[k][c])
+#                 plt.plot(dataset[k][c])
+#                 plt.title((k,c))
+#                 plt.show()
+
+# k = "sharpness"
+# c = 1
+# print(otd[k][c]-dataset[k][c])
+# print(otd[k][c]-dataset[k][c] > 1e-3)
+# plt.plot(otd[k][c])
+# plt.plot(dataset[k][c])
