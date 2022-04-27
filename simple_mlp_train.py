@@ -25,13 +25,13 @@ dataset.data_type='normalized_dataset'
 
 # Init LSTM network:
 network = dcc.models.mlp(
+    hidden_dim=32,
     past_steps=36,
     horizon=24,
     features=2,
     )
 
 # Create save folder:
-
 if not os.path.exists(params['save_folder']):
     os.makedirs(params['save_folder'])
 
