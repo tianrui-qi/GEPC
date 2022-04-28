@@ -269,6 +269,240 @@ class Normalization():
         
         return values
 
+class AbstractFormatter():
+    """
+    Abstract class to format past (& potentially future) data for training,
+    evaluation, or feedback control
+    """
+    
+    def __init__(self, features):
+        self.features = features
+        "List of features to compile as input (in addition to 'stims')"
+    
+    def training(self, past, future):
+        """
+        Formatting method when in training or evaluation mode
+
+        Parameters
+        ----------
+        past : 3D numpy array
+            Past datapoints. Dimensions are (cells, past_steps, features)
+        future : 3D numpy array
+            Future datapoints. Dimensions are (cells, horizon, features)
+
+        Returns
+        -------
+        None.
+
+        """
+        pass
+    
+    def control(self, past):
+        """
+        Formatting method when in control mode
+        
+        Parameters
+        ----------
+        past : 3D numpy array
+            Past datapoints. Dimensions are (cells, past_steps, features)
+        future : 3D numpy array
+            Future datapoints. Dimensions are (cells, horizon, features)
+
+        Returns
+        -------
+        None.
+
+        """
+        pass
+    
+
+class LSTMFormatter(AbstractFormatter):
+    """
+    Formatter for the LSTM neural network
+    """
+    
+    def training(self, past, future):
+        """
+        Formatting method when in training or evaluation mode
+
+        Parameters
+        ----------
+        past : 3D numpy array
+            Past datapoints. Dimensions are (cells, past_steps, features)
+        future : 3D numpy array
+            Future datapoints. Dimensions are (cells, horizon, features)
+
+        Returns
+        -------
+        X : List of 2 3D numpy arrays
+            The inputs to the LSTM network. Dimensions are 
+            [(cells, past_steps, features) and (cells, horizon, 1)]
+        Y : 3D numpy array
+            The groundtruth for the LSTM network. Dimensions are
+            (cells, horizon, 1)
+
+        """
+        
+        X = [self.control(past), future[:, :, [feature == "stims" for feature in self.features]]]
+        Y = future[:, :, [feature in ("fluos", "fluo1") for feature in self.features]]
+        
+        return X, Y
+    
+    def control(self, past):
+        """
+        Formatting method when in control mode
+        
+        Parameters
+        ----------
+        past : 3D numpy array
+            Past datapoints. Dimensions are (cells, past_steps, features)
+
+        Returns
+        -------
+        X : 3D numpy array
+            The inputs to an LSTMMPC controller. Dimensions are
+            (cells, past_steps, features)
+
+        """
+        
+        return past
+    
+    def reconstruct(self, X, Y):
+        """
+        Reconstruct original fluorescence and stimulations time-series from
+        X, Y pair
+
+        Parameters
+        ----------
+        X : List of 2 3D numpy arrays
+            The inputs to the LSTM network. Dimensions are 
+            [(cells, past_steps, features) and (cells, horizon, 1)]
+        Y : 3D numpy array
+            The groundtruth for the LSTM network. Dimensions are
+            (cells, horizon, 1)
+
+        Returns
+        -------
+        fluos : 2D numpy array
+            Reconstructed fluorescence trajectories. Dimensions are 
+            (cells, past_steps + horizon)
+        stims : 2D numpy array
+            Reconstructed stimulations. Dimensions are 
+            (cells, past_steps + horizon)
+
+        """
+        
+        fluo_ind = [f for f, feature in enumerate(self.features) if feature in ("fluos", "fluo1")][0]
+        
+        fluos = np.concatenate((X[0][:,:,fluo_ind], Y[:,:,0]), axis=1)
+        stims = np.concatenate(
+            (X[0][:,:,self.features.index("stims")],X[1][:,:,0]),axis=1
+            )
+        
+        return fluos, stims
+
+class MLPFormatter(AbstractFormatter):
+    """
+    Formatter for the MLP prediction network
+    """
+    
+    def training(self, past, future):
+        """
+        Formatting method when in training or evaluation mode
+
+        Parameters
+        ----------
+        past : 3D numpy array
+            Past datapoints. Dimensions are (cells, past_steps, features)
+        future : 3D numpy array
+            Future datapoints. Dimensions are (cells, horizon, features)
+
+        Returns
+        -------
+        X : 2D numpy array
+            The inputs to the MLP network. Dimensions are 
+            (cells, past_steps * features + horizon * 1)
+        Y : 3D numpy array
+            The groundtruth for the MLP network. Dimensions are
+            (cells, horizon, 1)
+
+        """
+        
+        X = np.concatenate(
+            (self.control(past), future[:, :, self.features.index("stims")]),
+            axis=1
+            )
+        Y = future[:, :, [feature in ("fluos", "fluo1") for feature in self.features]]
+
+        return X, Y
+    
+    def control(self, past):
+        """
+        Formatting method when in control mode
+        
+        Parameters
+        ----------
+        past : 3D numpy array
+            Past datapoints. Dimensions are (cells, past_steps, features)
+
+        Returns
+        -------
+        X : 3D numpy array
+            The inputs to an MLPMPC controller. Dimensions are
+            (cells, past_steps * features)
+
+        """
+        
+        X = np.reshape(
+            past,
+            newshape = (past.shape[0], past.shape[1]*past.shape[2]),
+            order='F'
+            )
+        
+        return X
+        
+    def reconstruct(self, X, Y):
+        """
+        Reconstruct original fluorescence and stimulations time-series from
+        X, Y pair
+
+        Parameters
+        ----------
+        X : 2D numpy array
+            The inputs to the MLP network. Dimensions are 
+            (cells, past_steps * features + horizon * 1)
+        Y : 3D numpy array
+            The groundtruth for the MLP network. Dimensions are
+            (cells, horizon, 1)
+
+        Returns
+        -------
+        fluos : 2D numpy array
+            Reconstructed fluorescence trajectories. Dimensions are 
+            (cells, past_steps + horizon)
+        stims : 2D numpy array
+            Reconstructed stimulations. Dimensions are 
+            (cells, past_steps + horizon)
+
+        """
+        
+        past_steps = int((X.shape[1] - Y.shape[1]) / len(self.features))
+        
+        
+        fluos_ind = [f for f, feature in enumerate(self.features) if feature in ("fluos", "fluo1")][0]
+        fluos_ind *= past_steps
+        stims_ind = [f for f, feature in enumerate(self.features) if feature == "stims"][0]
+        stims_ind *= past_steps
+        
+        fluos = np.concatenate(
+            (X[:,fluos_ind:fluos_ind+past_steps],Y[:,:,0]), axis=1
+            )
+        stims = np.concatenate(
+            (X[:,stims_ind:stims_ind+past_steps], X[:,-Y.shape[1]:]),
+            axis=1
+            )
+        
+        return fluos, stims
 
 class Datasets(Generator):
     """
@@ -276,7 +510,7 @@ class Datasets(Generator):
     Generator class so it can be fed directly to TF's .fit() function
     """
 
-    def __init__(self, datasets, features):
+    def __init__(self, datasets, features, formatter):
         """
         Instanciate
 
@@ -296,10 +530,10 @@ class Datasets(Generator):
         """
         self.datasets = datasets
         self.features = features
+        self.formatter = formatter
         self.test_ratio = 0.1
         self.data_type = "raw_dataset"
         self.mode = "training"
-        self.format_mode = "lstm"
         self.horizon = 24
         self.past_steps = 36
         self.batch_size = 100
@@ -457,48 +691,20 @@ class Datasets(Generator):
             dataset["normalized_dataset"] = self.normalization.normalize(
                 dataset["raw_dataset"]
                 )
-
-    def get_cell(self, set_number, cell_number):
+    
+    def sample(self):
         """
-        Get features for specific cell
-
-        Parameters
-        ----------
-        set_number : int
-            Dataset the cell is in.
-        cell_number : int
-            Cell number in the set.
+        Get single sample
 
         Returns
         -------
-        2D array
-            cell data. Dimensions are (total_time, nb_features)
+        past : TYPE
+            DESCRIPTION.
+        future : TYPE
+            DESCRIPTION.
 
         """
-
-        cell = []
-        for feature in self.features:
-            cell += [
-                np.squeeze(
-                    self.data[set_number][self.data_type][feature][cell_number, :]
-                )
-            ]
-
-        return np.moveaxis(
-            np.array(cell), (0, 1), (1, 0)
-        )  # axis 0 = time, axis 1 = features
-
-    def get_random_cell(self):
-        """
-        Get a random cell from all sets
-
-        Returns
-        -------
-        2D array
-            cell data. Dimensions are (total_time, nb_features)
-
-        """
-
+        
         # Get random cell from proper partition:
         if self.mode == "training":
             cell_nb = np.random.choice(self._training_set)
@@ -511,141 +717,31 @@ class Datasets(Generator):
                 if set_nb > 0:
                     cell_nb -= self._cumsum_cells[set_nb - 1]
                 break
-
-        # Return cell:
-        return self.get_cell(set_nb, cell_nb)
-
-    def get_random_windows(self, cell):
-        """
-        Get features over random time windows for cell (past & future)
-
-        Parameters
-        ----------
-        cell : 2D array
-            cell data. Dimensions are (nb_features, total_time)
-
-        Returns
-        -------
-        past : 2D array
-            Cell data before random timepoint. 
-            Dimensions are (past_steps, nb_features)
-        future : 2D array
-            Cell data after random timepoint. 
-            Dimensions are (horizon, nb_features)
-
-        """
-
+        
+        # Get dataset ref:
+        dataset = self.data[set_nb][self.data_type]
+        
+        # Random time point:
         timepoint = np.random.randint(
-            self.past_steps, cell.shape[0] - self.horizon
-        )  # Get random "time points"
-        # "Past":
-        past = cell[timepoint - self.past_steps : timepoint, :]
-        # "Future":
-        future = cell[timepoint : timepoint + self.horizon, :]
-
+            self.past_steps, dataset["stims"].shape[1] - self.horizon
+        )
+        
+        # Init sample:
+        past = np.empty((self.past_steps, len(self.features)), dtype=np.float32)
+        future = np.empty((self.horizon, len(self.features)), dtype=np.float32)
+        
+        # Run through features, compile sample:
+        for f, feature in enumerate(self.features):
+            past[:,f] = dataset[feature][
+                cell_nb, timepoint - self.past_steps : timepoint, 0
+                ]
+            future[:,f] = dataset[feature][
+                cell_nb, timepoint : timepoint + self.horizon, 0
+                ]
+        
         return past, future
 
-    def batch_format(self, past, future):
-        """
-        Format data to neural network i/o specs
-
-        Parameters
-        ----------
-        past : 2D array
-            Cell data before random timepoint. 
-            Dimensions are (nb_features, past_steps)
-        future : 2D array
-            Cell data after random timepoint. 
-            Dimensions are (nb_features, horizon)
-
-        Returns
-        -------
-        X : ND array
-            Input batch, formatted as required by the trained model.
-        Y : ND array
-            Input batch, formatted as required by the trained model.
-
-        """
-
-        if self.format_mode == "lstm":
-            X = [past, future[:, :, [feature == "stims" for feature in self.features]]]
-            Y = future[:, :, [feature in ("fluos", "fluo1") for feature in self.features]]
-        
-        if self.format_mode == "mlp":
-            X = np.concatenate(
-                (
-                    np.reshape(
-                        past,
-                        newshape = (past.shape[0], past.shape[1]*past.shape[2]),
-                        order='F'
-                        ), 
-                    np.squeeze(
-                        future[:, :, [feature == "stims" for feature in self.features]]
-                        )
-                    ),
-                axis=1
-                )
-            Y = future[:, :, [feature in ("fluos", "fluo1") for feature in self.features]]
-
-        return X, Y
-    
-    def batch_reconstruct(self, X, Y):
-        """
-        Reconstruct fluo and stimulation timeseries from batch data
-
-        Parameters
-        ----------
-        X : ND array
-            Input batch, formatted as required by the trained model.
-        Y : ND array
-            Input batch, formatted as required by the trained model.
-
-        Returns
-        -------
-        fluos : 1D array
-            Original fluorescence data. Dimensions are (past_steps+horizon,)
-        stims : 1D array
-            Original stimulations data. Dimensions are (past_steps+horizon,)
-
-        """
-        
-        if self.format_mode == "lstm":
-            fluos = np.concatenate(
-                (
-                    np.squeeze(X[0][:,:,[feature in ("fluos", "fluo1") for feature in self.features]]),
-                    np.squeeze(Y)
-                    ),
-                axis=1
-                )
-            stims = np.concatenate(
-                (
-                    np.squeeze(X[0][:,:,[feature == "stims" for feature in self.features]]),
-                    np.squeeze(X[1])
-                    ),
-                axis=1
-                )
-        
-        if self.format_mode == "mlp":
-            fluos_ind = [f for f, feature in enumerate(self.features) if feature in ("fluos", "fluo1")][0]
-            stims_ind = [f for f, feature in enumerate(self.features) if feature == "stims"][0]
-            fluos = np.concatenate(
-                (
-                    X[:,fluos_ind:fluos_ind+self.past_steps],
-                    np.squeeze(Y)
-                    ),
-                axis=1
-                )
-            stims = np.concatenate(
-                (
-                    X[:,stims_ind:stims_ind+self.past_steps],
-                    X[:,-self.horizon:],
-                    ),
-                axis=1
-                )
-        
-        return fluos, stims
-
-    def get_batch(self):
+    def batch(self):
         """
         Get batch of X, Y data to feed into NN
 
@@ -666,17 +762,16 @@ class Datasets(Generator):
         )
 
         for batch_ind in range(self.batch_size):
-            cell = self.get_random_cell()
-            past[batch_ind], future[batch_ind] = self.get_random_windows(cell)
+            past[batch_ind], future[batch_ind] = self.sample()
 
-        X, Y = self.batch_format(past, future)
+        X, Y = self.formatter.training(past, future)
 
         return X, Y
 
     def send(self, ignored_arg):
         """Generator function (called by next())"""
 
-        batch = self.get_batch()
+        batch = self.batch()
 
         return batch
 
@@ -684,32 +779,6 @@ class Datasets(Generator):
         """Generator function for end of iterations"""
         raise StopIteration
 
-
-# def normalization(raw):
-#     """Normalize data for raw dataset"""
-
-#     normalized = dict()
-#     for key in raw:
-
-#         normalized[key] = np.copy(raw[key]).astype(np.float32)
-#         normalized[key][np.isnan(normalized[key])] = 0
-
-#         if key in FLUO_FEATURES:
-#             normalized[key] = fluo_norm(normalized[key])
-
-#         if key in LENGTH_FEATURES:
-#             normalized[key] = length_norm(normalized[key])
-
-#         if key in COUNT_FEATURES:
-#             normalized[key] = cell_count_norm(normalized[key])
-        
-#         if key in AREA_FEATURES:
-#             normalized[key] = area_norm(normalized[key])
-        
-#         if key in SHARPNESS_FEATURES:
-#             normalized[key] = sharp_norm(normalized[key])
-
-#     return normalized
 
 def compile_dataset(xpfolder, min_area =  200):
     """
