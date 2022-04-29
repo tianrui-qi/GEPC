@@ -35,11 +35,11 @@ class Normalization():
         "Cell length scaling. factor = 0.9 value cutoff in inv exp norm"
         self.area_factor = 3_000
         "Cell area scaling. factor = 0.9 value cutoff in inv exp norm"
-        self.count_factor = 20
+        self.count_factor = 9
         "Cells count scaling. factor = 0.9 value cutoff in inv exp norm"
-        self.sharpness_factor = 2_000
+        self.sharpness_factor = 1
         "Image sharpness factor. See sigmoid_normalization method"
-        self.sharpness_shift = 9_000
+        self.sharpness_shift = 3.6
         "Image sharpness mid-range shift. See sigmoid_normalization method"
     
     def normalize(self, data):
@@ -54,11 +54,12 @@ class Normalization():
 
         Returns
         -------
-        data : dict
-            NNormalized data.
+        normalized : dict
+            Normalized data.
 
         """
         
+        normalized = {}
         
         for feature, values in data.items():
             
@@ -77,9 +78,9 @@ class Normalization():
             if feature in config.sharpness_features:
                 values = self.sharpness(values)
             
-            data[feature] = values
+            normalized[feature] = values
         
-        return data
+        return normalized
     
     def linear_normalization(self, values, vmin, vmax):
         """
@@ -400,6 +401,18 @@ class LSTMFormatter(AbstractFormatter):
             )
         
         return fluos, stims
+
+class LSTMAutoencoderFormatter(LSTMFormatter):
+    
+    def training(self, past, future):
+        
+        X, _ = super().training(past, future)
+        
+        X = [X[0],np.zeros(shape=X[0].shape[0:2]+(1,),dtype=np.float32)]
+        
+        return X, X[0]
+
+
 
 class MLPFormatter(AbstractFormatter):
     """

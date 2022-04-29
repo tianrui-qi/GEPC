@@ -5,14 +5,12 @@ Created on Wed Oct 27 14:18:43 2021
 
 @author: jeanbaptiste
 """
+import os
+
 from datetime import datetime
 
-# General stuff:
-package_path='/project/dunlop/shared_python_packages/deepcellcontrol/'
-
-
 # Datasets:
-datasets_path = 'D:/shared_packages/deepcellcontrol/assets/data/'
+datasets_path = os.path.dirname(__file__) + '/../assets/data/'
 datasets = dict(
     experimental_1=(
         datasets_path+'experimental/2021-09-20_Dataset_2/dataset.pkl',
@@ -23,7 +21,7 @@ datasets = dict(
     )
 
 # Models:
-models_path = 'D:/shared_packages/deepcellcontrol/assets/models/'
+models_path = os.path.dirname(__file__) + '/../assets/models/'
 
 # Default LSTM parameters:
 LSTM_params = dict(

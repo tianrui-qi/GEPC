@@ -167,8 +167,8 @@ def evaluate(
         yhat = network.predict(xval,verbose=verbose)
         
         # Compile error metrics:
-        rmse = rmse + np.sqrt(np.mean(np.square(yhat-yval[:,:,0]),axis=0))  # RMSE over prediction horizon
-        mae = mae + np.mean(np.abs(yhat-yval[:,:,0]),axis=0) # MAE over prediction horizon
+        rmse = rmse + np.sqrt(np.mean(np.square(yhat-yval),axis=0))  # RMSE over prediction horizon
+        mae = mae + np.mean(np.abs(yhat-yval),axis=0) # MAE over prediction horizon
     
     rmse/=num_batches
     mae/=num_batches
@@ -181,7 +181,14 @@ def evaluate(
     return dict(rmse=rmse, mae=mae)
 
 
-def batch_train_eval(dataset, network, params, evaluation_dataset = None):
+def batch_train_eval(
+        dataset,
+        network,
+        params,
+        plot_singlecell = True,
+        plot_autoencoding = False,
+        evaluation_dataset = None
+        ):
     """
     Train and evaluate network, and create and save post-training plots
 
@@ -194,6 +201,13 @@ def batch_train_eval(dataset, network, params, evaluation_dataset = None):
     params : dict
         Dict of training parameters as kwargs. See train() and config.py for
         more information.
+    plot_singlecell : bool, optional
+        Plot single-cell fluorescence predictions. The default is True.
+    plot_autoencoding : bool, optional
+        Plot single-cell autoencoder results. The default is False.
+    evaluation_dataset : data.Dataset
+        Dataset to use for evaluation. If None, the test partition of the 
+        training dataset will be used. The default is None.
 
     Returns
     -------
@@ -257,18 +271,32 @@ def batch_train_eval(dataset, network, params, evaluation_dataset = None):
     plt.clf()
     
     # Plot single cell evaluations:
-    os.makedirs(os.path.join(params['save_folder'],'single_cell_evals'))
-    fluos, stims = dataset.batch_reconstruct(eval_d['input'],eval_d['groundtruth'])
-    for eval_num in range(50):
-        utils.evaluationPlot(
-            stims[eval_num],
-            fluos[eval_num,:params['past_steps']],
-            fluos[eval_num,params['past_steps']:],
-            eval_d["prediction"][eval_num],
-            dyn_range=1,
-            savefig = os.path.join(params['save_folder'],'single_cell_evals','sample_%02d'%eval_num),
-            show = False
-            )
+    if plot_singlecell:
+        os.makedirs(os.path.join(params['save_folder'],'single_cell_evals'))
+        fluos, stims = dataset.formatter.reconstruct(eval_d['input'],eval_d['groundtruth'])
+        for eval_num in range(50):
+            utils.evaluationPlot(
+                stims[eval_num],
+                fluos[eval_num,:params['past_steps']],
+                fluos[eval_num,params['past_steps']:],
+                eval_d["prediction"][eval_num],
+                dyn_range=1,
+                savefig = os.path.join(params['save_folder'],'single_cell_evals','sample_%02d'%eval_num),
+                show = False
+                )
+    
+    if plot_autoencoding:
+        os.makedirs(os.path.join(params['save_folder'],'autoencoding_evals'))
+        for eval_num in range(50):
+            utils.plot_autoencoding(
+                eval_d['groundtruth'][eval_num],
+                eval_d["prediction"][eval_num],
+                features_list = dataset.features,
+                savefig = os.path.join(
+                    params['save_folder'],
+                    f'autoencoding_evals/sample_{eval_num:06d}'
+                    )
+                )
     
     # Save relevant training data to pickle file:
     with open(params['save_folder']+'/training_output.pkl','wb') as res_file:

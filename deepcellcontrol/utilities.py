@@ -623,12 +623,14 @@ def controlPlot(fluorescence,
         plt.savefig(savefile,dpi=300)
     plt.show()
 
-def mean_std_plot(objective,
-                  fluorescence,
-                  sampling=5,
-                  savefile=None,
-                  title=None,
-                  dyn_range=4095):
+def mean_std_plot(
+        objective,
+        fluorescence,
+        sampling=5,
+        savefile=None,
+        title=None,
+        dyn_range=4095
+        ):
     '''
     Plot control results (mean and std) for multiple cells.
 
@@ -688,8 +690,27 @@ def mean_std_plot(objective,
     plt.legend(['Objective', 'Mean Fluo', 's.c. RMSE', 'pop. error', 'Std. dev.'],loc='upper right')
     if  savefile is not None:
         plt.savefig(savefile,dpi=300)
-    
+
+
 def control_rmse(fluorescence,objective):
+    """
+    Compute RMSE to control objective
+
+    Parameters
+    ----------
+    fluorescence : TYPE
+        DESCRIPTION.
+    objective : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    sc_rmse : TYPE
+        DESCRIPTION.
+    p_abs_e : TYPE
+        DESCRIPTION.
+
+    """
     
     Error = np.zeros_like(fluorescence)
     for c, fluo in enumerate(fluorescence):
@@ -698,6 +719,46 @@ def control_rmse(fluorescence,objective):
     p_abs_e = np.abs(np.mean(Error,axis=0))
     
     return sc_rmse, p_abs_e
+
+def plot_autoencoding(Y, Yhat, features_list = None, savefig = None, show = False):
+    """
+    Plot autoencoding results
+
+    Parameters
+    ----------
+    Y : 2D numpy array
+        Groundtruth for a single sample. Dimensions are (time, features)
+    Yhat : 2D numpy array
+        Prediction for a single sample. Dimensions are (time, features)
+    features_list : List[str], optional
+        List of features names. The default is None.
+    savefig : str, optional
+        Path to save the plot to. The default is None.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    features_list = features_list or [f"feature #{x}" for x in range(Y.shape[1])]
+    
+    plt.figure(figsize=(6, 2*len(features_list)), dpi=300)
+    for f, feature in enumerate(features_list):
+        
+        ax = plt.subplot(len(features_list),1,f+1)
+        ax.plot(Y[:,f])
+        ax.plot(Yhat[:,f])
+        ax.set_ylabel(feature)
+        
+    if  savefig is not None:
+        plt.savefig(savefig + ".png",dpi=300)
+        plt.savefig(savefig + ".svg",dpi=300)
+        
+    if show:
+        plt.show()
+    else:
+        plt.close()
 
 def sine_objective(period=8*60,
                     offset=1000,
@@ -737,7 +798,9 @@ def sine_objective(period=8*60,
 
     '''
     
-    return np.array([offset + amplitude*np.sin(2*np.pi*(t*sampling-delay)/period - np.pi/2) for t in range(0,int(duration/sampling))])
+    return np.array(
+        [offset + amplitude*np.sin(2*np.pi*(t*sampling-delay)/period - np.pi/2) for t in range(0,int(duration/sampling))]
+        )
 
 def concentric_sines_objectives(gridsize,
                           period=8*60,
