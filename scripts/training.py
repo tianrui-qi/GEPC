@@ -8,12 +8,14 @@ Created on Fri Apr 22 16:16:27 2022
 import copy
 import os
 import time
+import sys
 
+sys.path.insert(0, "/project/dunlop/shared_python_packages/deepcellcontrol")
 import deepcellcontrol as dcc
 
 # import qsub
 params = copy.deepcopy(dcc.config.MLP_params)
-params["training_parameters"]["epochs"]=10
+params["training_parameters"]["epochs"]=10_000
 params["training_parameters"]["steps_per_epoch"]=200
 params["features"] = [
     'fluo1',
@@ -25,9 +27,12 @@ params["features"] = [
     'neighbor_stims',
     'stims'
     ]
-params["save_folder"] = "D:/shared_packages/deepcellcontrol/assets/models/" + time.strftime("%Y-%m-%d_%H-%M-%S")
+params["save_folder"] = (
+    "/projectnb/dunlop/JB/deepcellcontrol/assets/models/" + 
+    time.strftime("%Y-%m-%d_%H-%M-%S")
+    )
 
-sets_folder = "D:/shared_packages/deepcellcontrol/assets/data/experimental/"
+sets_folder = "/projectnb/dunlop/JB/deepcellcontrol/assets/data/"
 training_files = (
     sets_folder + "2022-04-13_TrainingSet2_dataset.pkl",
     sets_folder + "2022-04-19_TrainingSet4_dataset.pkl",

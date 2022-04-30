@@ -854,7 +854,7 @@ def compile_dataset(xpfolder, min_area =  200):
     # Go through positions, re-load delta results, compile set:
     for pos_nb in range(reader.positions):
         
-        print(f"Position {pos_nb}")
+        print(f"Position {pos_nb}",flush=True)
         
         # Compute which series this is:
         _pos_counter = 0
@@ -869,14 +869,14 @@ def compile_dataset(xpfolder, min_area =  200):
         d_pos.load(os.path.join(xpfolder, f"delta_results/Pos{pos_nb:06d}.pkl"))
         
         # Read images for position:
-        print("Reading images")
+        print("Reading images",flush=True)
         trans_frames = reader.getframes(positions=[pos_nb],channels=[0])
-        print("Drift correction")
+        print("Drift correction",flush=True)
         trans_frames, _ = delta.utilities.driftcorr(trans_frames, drift=d_pos.drift_values)
         
         # Go through ROIs:
         for roi in d_pos.rois:
-            print(f"ROI {roi.roi_nb}")
+            print(f"ROI {roi.roi_nb}",flush=True)
             mother_data = dict()
             
             # Init mother/chamber dict:
