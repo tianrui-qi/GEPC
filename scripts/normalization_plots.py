@@ -15,10 +15,12 @@ import matplotlib.pyplot as plt
 import deepcellcontrol as dcc
 
 
-sets_folder = "/home/jeanbaptiste/data/shared_packages/deepcellcontrol/assets/data/experimental/"
+sets_folder = "D:/shared_packages/deepcellcontrol/assets/data/experimental/"
 training_files = (
     sets_folder + "2022-04-13_TrainingSet2_dataset.pkl",
     sets_folder + "2022-04-15_TrainingSet3_dataset.pkl",
+    sets_folder + "2022-04-19_TrainingSet4_dataset.pkl",
+    sets_folder + "2022-04-21_TrainingSet5_dataset.pkl",
     sets_folder + "2022-04-22_TrainingSet6_dataset.pkl",
     sets_folder + "2022-04-23_TrainingSet7_dataset.pkl",
     sets_folder + "2022-04-24_TrainingSet8_dataset.pkl",

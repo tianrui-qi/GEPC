@@ -10,7 +10,7 @@ import tensorflow as tf
 
 import numpy as np
 
-from .models import mlp, lstm
+from .models import mlp, lstm, split
 
 
 class _Controller:
@@ -49,14 +49,10 @@ class _Controller:
 
         Parameters
         ----------
-        inputs : list
-            List containing past observed variables (Fluorescence, cell length
-            etc...) and past control inputs (DMD inputs...).
-            Each list element contains the data for each cell to process in
-            parallel. Each of those elements is a list containing one 2D numpy
-            arrays of size variables -by- past_timepoints for past observed
-            variables and one 1D numpy array of size past_timepoints for past
-            control inputs.
+        inputs : 3D numpy array
+            Past observed variables (Fluorescence, cell length etc...) and past 
+            control inputs (DMD inputs...). Dimensions are 
+            (cells, past_steps, features)
         objectives : list
             List containing control objectives. Each list element contains a 1D
             numpy array of future objective values for each cell to process in
@@ -87,12 +83,6 @@ class _MPC(_Controller):
 
     Attributes
     ----------
-    horizon : int
-        Horizon over which to predict system responses, in # timepoints.
-    past_steps : int or None
-        Number of past steps to feed into the prediction model. If None, the
-        whole history of the cell is fed into the model. Note that some models,
-        for example MLPs, require a fixed number of past steps.
     strategy_optimizer : _optimizer object
         Strategy optimizer object of sub-classes of _optimizer.
 
@@ -110,20 +100,13 @@ class _MPC(_Controller):
     """
 
     def __init__(
-        self, horizon=24, past_steps=None, strategy_optimizer=None, *args, **kwargs
+        self, strategy_optimizer=None, *args, **kwargs
     ):
         """
         Instanciation.
 
         Parameters
         ----------
-        horizon : int, optional
-            Horizon over which to predict system responses, in # timepoints.
-            The default is 12.
-        past_steps : int, optional
-            Number of past steps to feed into the prediction model. If None,
-            the whole history of the cell is fed into the model.
-            The default is None.
         strategy_optimizer : _optimizer object or None, optional
             Strategy optimizer object of sub-classes of _optimizer. If None,
             a null_optimizer object is instanciated.
@@ -135,13 +118,8 @@ class _MPC(_Controller):
 
         """
         super().__init__(*args, **kwargs)
-        self.horizon = horizon
-        self.past_steps = past_steps
         self.model = None
-        if strategy_optimizer is None:  # Default optimizer is null (brute force)
-            self.strategy_optimizer = NullOptimizer(self.horizon)
-        else:
-            self.strategy_optimizer = strategy_optimizer
+        self.strategy_optimizer = strategy_optimizer
 
     def get_strategy(self, inputs, objectives):
         """
@@ -149,14 +127,10 @@ class _MPC(_Controller):
 
         Parameters
         ----------
-        inputs : list
-            List containing past observed variables (Fluorescence, cell length
-            etc...) and past control inputs (DMD inputs...).
-            Each list element contains the data for each cell to process in
-            parallel. Each of those elements is a list containing one 2D numpy
-            arrays of size variables -by- past_timepoints for past observed
-            variables and one 1D numpy array of size past_timepoints for past
-            control inputs.
+        inputs : 3D numpy array
+            Past observed variables (Fluorescence, cell length etc...) and past 
+            control inputs (DMD inputs...). Dimensions are 
+            (cells, past_steps, features)
         objectives : list
             List containing control objectives. Each list element contains a 1D
             numpy array of future objective values for each cell to process in
@@ -176,9 +150,7 @@ class _MPC(_Controller):
         )
 
         # Run optimization:
-        while (
-            self.strategy_optimizer.iterations > 0
-        ):  # Optimizer sets iterations to -1 when stopping condition is met
+        while (self.strategy_optimizer.iterations > 0):  # Optimizer sets iterations to -1 when stopping condition is met
 
             predictions = self.run_strategies(inputs, strategies)
 
@@ -194,14 +166,10 @@ class _MPC(_Controller):
 
         Parameters
         ----------
-        inputs : list
-            List containing past observed variables (Fluorescence, cell length
-            etc...) and past control inputs (DMD inputs...).
-            Each list element contains the data for each cell to process in
-            parallel. Each of those elements is a list containing one 2D numpy
-            arrays of size variables -by- past_timepoints for past observed
-            variables and one 1D numpy array of size past_timepoints for past
-            control inputs.
+        inputs : 3D numpy array
+            Past observed variables (Fluorescence, cell length etc...) and past 
+            control inputs (DMD inputs...). Dimensions are 
+            (cells, past_steps, features)
         strategies : 3D numpy array of bools
             Array containing multiple strategies for each cell to predict the
             response for. Size is cells -by- strategies_per_cell -by- horizon.
@@ -252,24 +220,51 @@ class _MPC(_Controller):
         scores = np.empty(shape=predictions.shape[0:2], dtype=float)
 
         for obj_ind in range(len(objectives)):
-
-            # Reduce objective to dynamic range, cut down to horizon:
-            truncated_horizon = int(min((self.horizon, objectives[obj_ind].shape[0])))
-            reduced_obj = np.array(objectives[obj_ind][:truncated_horizon])
-
+            
             # Repeat objective in numpy array of same size as predictions:
             obj_arr = np.repeat(
-                np.expand_dims(reduced_obj, 0), predictions.shape[1], axis=0
-            )
+                np.expand_dims(objectives[obj_ind], 0),
+                predictions.shape[1],
+                axis=0
+                )
 
             # Compute RMSE:
             scores[obj_ind] = np.sqrt(
                 np.mean(
-                    (predictions[obj_ind, :, :truncated_horizon] - obj_arr) ** 2, axis=1
+                    (predictions[obj_ind] - obj_arr) ** 2, axis=1
                 )
             )
 
         return scores
+    
+    def show_predict(self, inputs, strategies):
+        """
+        Predict cells response based on inputs and strategies.
+        This is only for verification purposes and is not used
+        in the rest of the class.
+
+        Parameters
+        ----------
+        inputs : 3D numpy array of float32
+            Past observed variables (Fluorescence, cell length etc...) and past 
+            control inputs (DMD inputs...). Dimensions are 
+            (cells, past_steps, features)
+        strategies : 2D numpy array of bools
+            Array containing strategies for each cell over the entire
+            prediction horizon. Size is cells -by- horizon.
+
+        Returns
+        -------
+        predictions : 3D numpy array of float32
+            FLuorescence predictions for each control inputs under the 
+            corresponding strategies
+
+        """
+        
+        x = self.compile_x(inputs, strategies[:,np.newaxis,:])
+        predictions = self.model.predict(x)
+        
+        return predictions
 
     def compile_x():
         pass  # To be defined in subclasses
@@ -300,17 +295,8 @@ class MLPMPC(_MPC):
 
         Parameters
         ----------
-        model_file : str or None, optional
-            Filepath to model weights file. If None, the following model file
-            will be used: 'models/mlp/mlp%d_optimized.hdf5' %(self.horizon,)
-            The default is None.
-        hidden_layers : int, optional
-            Number of hidden layers in the MLP model. Must match weights file.
-            The default is 1.
-        features : int, optional
-            Number of observed variables (Fluorescence, cell length...)
-            + control variables (only DMD input sequence).
-            The default is 2.
+        model_file : str
+            Filepath to model weights file.
 
         Returns
         -------
@@ -321,18 +307,8 @@ class MLPMPC(_MPC):
         # Initialize parent properties:
         super().__init__(*args, **kwargs)
 
-        # If no model file provided, load default optimized model
-        if model_file is None:
-            model_file = "models/mlp/mlp%d_optimized.hdf5" % (self.horizon,)
-
         # Initialize model:
-        self.model = mlp(
-            hidden_layers=hidden_layers,
-            features=features,
-            horizon=self.horizon,
-            past_steps=self.past_steps,
-        )
-        self.model.load_weights(model_file)
+        self.model = tf.keras.models.load_model(model_file)
 
     def compile_x(self, inputs, strategies):
         """
@@ -398,7 +374,7 @@ class MLPMPC(_MPC):
 class LSTMMPC(_MPC):
     """
     Model predictive controller based on the LSTM encoder-decoder model.
-    Child class of _mpc.
+    Child class of _MPC.
 
     Attributes
     ----------
@@ -414,24 +390,15 @@ class LSTMMPC(_MPC):
 
     """
 
-    def __init__(self, model_file=None, latent_dim=200, features=2, *args, **kwargs):
+    def __init__(self, model_file=None, *args, **kwargs):
         """
         Instanciation.
 
         Parameters
         ----------
-        model_file : str or None, optional
-            Filepath to model weights file. If None, the following model file
-            will be used: 'models/lstm/lstm%d_optimized.hdf5' %(self.horizon,)
-            The default is None.
-        latent_dim : int, optional
-            Units in the encoder and decoder LSTM layers. Must match weights
-            file.
-            The default is 200.
-        features : int, optional
-            Number of observed variables (Fluorescence, cell length...)
-            + control variables (only DMD input sequence).
-            The default is 2.
+        model_file : str
+            Filepath to model weights file.
+        *args and **kwargs : See _MPC class
 
         Returns
         -------
@@ -442,18 +409,8 @@ class LSTMMPC(_MPC):
         # Initialize parent properties:
         super().__init__(*args, **kwargs)
 
-        # If no model file provided, load default optimized model
-        if model_file is None:
-            model_file = "models/lstm/lstm%d_optimized.hdf5" % (self.horizon,)
-
         # Initialize model:
-        self.model = lstm(
-            latent_dim=latent_dim,
-            horizon=self.horizon,
-            past_steps=self.past_steps,
-            features=features,
-        )
-        self.model.load_weights(model_file)
+        self.model = tf.keras.models.load_model(model_file)
 
     def compile_x(self, inputs, strategies):
         """
@@ -461,14 +418,10 @@ class LSTMMPC(_MPC):
 
         Parameters
         ----------
-        inputs : list
-            List containing past observed variables (Fluorescence, cell length
-            etc...) and past control inputs (DMD inputs...).
-            Each list element contains the data for each cell to process in
-            parallel. Each of those elements is a list containing one 2D numpy
-            arrays of size variables -by- past_timepoints for past observed
-            variables and one 1D numpy array of size past_timepoints for past
-            control inputs.
+        inputs : 3D numpy array
+            Past observed variables (Fluorescence, cell length etc...) and past 
+            control inputs (DMD inputs...). Dimensions are 
+            (cells, past_steps, features)
         strategies : 3D numpy array of bools
             Array containing multiple strategies for each cell to predict the
             response to. Size is cells -by- strategies_per_cell -by- horizon.
@@ -484,50 +437,158 @@ class LSTMMPC(_MPC):
 
         """
 
-        x = []
-        u = []
-        if self.past_steps is None:
-            past = None
-        else:
-            past = -self.past_steps
-
-        for strat_ind in range(strategies.shape[0]):
-            # Flatten inputs together:
-            single_input = np.concatenate(
-                (
-                    np.transpose(inputs[strat_ind][0][:, past:]),
-                    np.expand_dims(np.transpose(inputs[strat_ind][1][past:]), axis=1),
-                ),
-                axis=1,
+        # Compile full array for all strategies:
+        inputs = np.repeat(
+            inputs,
+            strategies.shape[1],
+            axis=0,
+            )
+        strategies = np.reshape(
+            strategies,
+            (strategies.shape[0]*strategies.shape[1], strategies.shape[2], 1)
             )
 
-            # Compile full array for all strategies:
-            x += [
-                np.repeat(
-                    np.expand_dims(single_input, axis=0),
-                    strategies[strat_ind].shape[0],
-                    axis=0,
-                )
-            ]
-            u += [np.expand_dims(strategies[strat_ind], 2)]
-
-        return (np.concatenate(x, axis=0), np.concatenate(u, axis=0))
-
-
-class _RL(_Controller):
-    def __init__(self, horizon=24, past_steps=None, *args, **kwargs):
+        return inputs, strategies
+    
+class SplitLSTMMPC(_MPC):
+    
+    def __init__(self, model_file, *args, **kwargs):
         """
         Instanciation.
 
         Parameters
         ----------
-        horizon : int, optional
-            Horizon over which to predict system responses, in # timepoints.
-            The default is 12.
-        past_steps : int, optional
-            Number of past steps to feed into the prediction model. If None,
-            the whole history of the cell is fed into the model.
-            The default is None.
+        model_file : str
+            Filepath to model weights file.
+        *args and **kwargs : See _MPC class
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Initialize parent properties:
+        super().__init__(*args, **kwargs)
+    
+        # Initialize model:
+        whole_model = tf.keras.models.load_model(model_file)
+        encoder, decoder = split(whole_model)
+        self.encoder = encoder
+        self.model = decoder
+
+    def get_strategy(self, inputs, objectives):
+        """
+        Identify optimal strategies.
+
+        Parameters
+        ----------
+        inputs : 3D numpy array
+            Past observed variables (Fluorescence, cell length etc...) and past 
+            control inputs (DMD inputs...). Dimensions are 
+            (cells, past_steps, features)
+        objectives : list
+            List containing control objectives. Each list element contains a 1D
+            numpy array of future objective values for each cell to process in
+            parallel.
+
+        Returns
+        -------
+        strategies : 2D numpy array of bools
+            Array containing strategies for each cell over the entire
+            prediction horizon. Size is cells -by- horizon.
+
+        """
+        
+        # Here, before moving on with the strategy search, we run the encoder
+        # part of the network:
+        state_h, state_c = self.encoder.predict(inputs)
+        self.state_h = np.repeat(
+            state_h, self.strategy_optimizer.num_particles, axis=0
+            )
+        self.state_c = np.repeat(
+            state_c, self.strategy_optimizer.num_particles, axis=0
+            )
+        
+        # Moving on:
+        return super().get_strategy(inputs, objectives)
+        
+    def compile_x(self, inputs, strategies):
+        """
+        Compile X array to do predictions over, formatted for the LSTM model.
+
+        Parameters
+        ----------
+        inputs : 3D numpy array
+            Past observed variables (Fluorescence, cell length etc...) and past 
+            control inputs (DMD inputs...). Dimensions are 
+            (cells, past_steps, features)
+            Note: In the case of the Split LSTM, the inputs are not actually
+            used in this function, because they are already processed by 
+            get_strategy into the latent states.
+        strategies : 3D numpy array of bools
+            Array containing multiple strategies for each cell to predict the
+            response to. Size is cells -by- strategies_per_cell -by- horizon.
+
+        Returns
+        -------
+        list
+            List of two 2D arrays for LSTM model. First array is past values of
+            observed variables + past control inputs, size is
+            (cell * strategies_per_cell) -by- past_steps -by- features. Second
+            array is future control inputs, size is
+            (cell * strategies_per_cell) -by- horizon -by- 1.
+
+        """
+        
+        strategies = np.reshape(
+            strategies, 
+            (strategies.shape[0]*strategies.shape[1], strategies.shape[2], 1)
+            )
+        
+        return self.state_h, self.state_c, strategies
+    
+    def show_predict(self, inputs, strategies):
+        """
+        Predict cells response based on inputs and strategies.
+        This is only for verification purposes and is not used
+        in the rest of the class.
+
+        Parameters
+        ----------
+        inputs : 3D numpy array of float32
+            Past observed variables (Fluorescence, cell length etc...) and past 
+            control inputs (DMD inputs...). Dimensions are 
+            (cells, past_steps, features)
+        strategies : 2D numpy array of bools
+            Array containing strategies for each cell over the entire
+            prediction horizon. Size is cells -by- horizon.
+
+        Returns
+        -------
+        predictions : 3D numpy array of float32
+            FLuorescence predictions for each control inputs under the 
+            corresponding strategies
+
+        """
+        
+        self.state_h, self.state_c = self.encoder.predict(inputs)
+        x = self.compile_x(None, strategies[:,np.newaxis,:])
+        predictions = self.model.predict(x)
+        
+        return predictions
+        
+
+class _RL(_Controller):
+    def __init__(self, model_file, *args, **kwargs):
+        """
+        Instanciation.
+
+        Parameters
+        ----------
+        model_file : str
+            Filepath to model weights file.
+        *args and **kwargs : See _Controller class
 
         Returns
         -------
@@ -535,8 +596,8 @@ class _RL(_Controller):
 
         """
         super().__init__(*args, **kwargs)
-        self.horizon = horizon
-        self.past_steps = past_steps
+        
+        self.model = tf.keras.models.load_model(model_file)
 
     def get_strategy(self, inputs, objectives):
 
@@ -566,49 +627,6 @@ class MPLRL(_RL):
     compile_x :
         Compile X array to do predictions over, formatted for the LSTM model.
     """
-
-    def __init__(self, model_file=None, hidden_layers=10, features=2, *args, **kwargs):
-        """
-        Instanciation.
-
-        Parameters
-        ----------
-        model_file : str or None, optional
-            Filepath to model weights file. If None, the following model file
-            will be used: 'models/mlp/mlp%d_optimized.hdf5' %(self.horizon,)
-            The default is None.
-        hidden_layers : int, optional
-            Number of hidden layers in the MLP model. Must match weights file.
-            The default is 1.
-        features : int, optional
-            Number of observed variables (Fluorescence, cell length...)
-            + control variables (only DMD input sequence).
-            The default is 2.
-
-        Returns
-        -------
-        None.
-
-        """
-
-        # Initialize parent properties:
-        super().__init__(*args, **kwargs)
-
-        # If no model file provided, load default optimized model
-        if model_file is None:
-            model_file = "models/mlp_strategy_learn/mlp%d_optimized.hdf5" % (
-                self.horizon,
-            )
-
-        # Initialize model:
-        self.model = mlp(
-            hidden_layers=hidden_layers,
-            features=features,
-            horizon=self.horizon,
-            past_steps=self.past_steps,
-            activation="sigmoid",
-        )
-        self.model.load_weights(model_file)
 
     def compile_x(self, inputs, objectives):
         """

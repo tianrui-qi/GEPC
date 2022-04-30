@@ -8,49 +8,153 @@ Created on Fri Aug 14 18:24:45 2020
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Dense, LSTM, Input, Dropout, TimeDistributed
 from tensorflow.keras.optimizers import Adam
-# from tensorflow.autograph.experimental import do_not_convert
-import tensorflow as tf
-from tensorflow import keras
 
-def lstm(
-        past_steps=36, 
-        horizon=24,
-        features_dim=2,
-        latent_dim=200,
-        output_dim = 1,
-        activation='linear',
-        loss='mse',
-        metrics=None,
-        learning_rate=0.001
-        ):
+# Default hyper-parameters:
+default_hyper_parameters = dict(
+    past_steps = 36,
+    features = 2,
+    latent_dim = 16,
+    output_mode = "timedistributed", # or "dense"
+    output_dim=1,
+    loss="mse",
+    learning_rate=0.001,
+    metrics=None
+    )
+
+
+def lstm(hyper_parameters):
     
     # Inputs:
-    past_events = Input((past_steps,features_dim),name='past_inputs') # Past fluo + light inputs
-    future_light = Input((horizon,1),name='future_inputs') # Only future light inputs
+    past_events = Input(
+        (hyper_parameters["past_steps"], hyper_parameters["features"]),
+        name='past_inputs'
+        )
+    future_light = Input((None,1),name='future_inputs')
     
-    # Encoding LSTM: (return internal states to feed into decoder)
-    _, state_h, state_c = LSTM(
-        latent_dim,return_state=True,name='encoder'
-        )(past_events)
+    # Encoder:
+    state_h, state_c = _encoder(past_events, hyper_parameters)
     
-    # Decoding LSTM: (Initialize with decoder states, pass future light inputs)
-    decoder_outputs = LSTM(
-        latent_dim, return_sequences=True, name='decoder',
-        )(future_light,initial_state=[state_h, state_c])
-    
-    # Compile prediction over horizon:
-    prediction = TimeDistributed(
-        Dense(output_dim,activation=activation,name='prediction')
-        )(decoder_outputs)
+    # Decoder:
+    prediction = _decoder(state_h, state_c, future_light, hyper_parameters)
 
     # Finalize model:
     model = Model([past_events, future_light], prediction)
     model.compile(
-        loss=loss, optimizer=Adam(learning_rate=learning_rate),metrics=metrics
+        loss=hyper_parameters["loss"],
+        optimizer = Adam(learning_rate=hyper_parameters["learning_rate"]),
+        metrics = hyper_parameters["metrics"]
         )
     
     return model
+
+def lstm_encoder(hyper_parameters):
+    
+    # Inputs:
+    past_events = Input(
+        (hyper_parameters["past_steps"], hyper_parameters["features"]),
+        name='past_inputs'
+        )
+    
+    # Encoder:
+    state_h, state_c = _encoder(past_events, hyper_parameters)
+
+    # Finalize model:
+    model = Model(past_events, [state_h, state_c])
+    model.compile(
+        loss=hyper_parameters["loss"],
+        optimizer = Adam(learning_rate=hyper_parameters["learning_rate"]),
+        metrics = hyper_parameters["metrics"]
+        )
+    
+    return model
+
+def lstm_decoder(hyper_parameters):
+    
+    # Inputs:
+    state_h = Input((hyper_parameters["latent_dim"],),name='state_h') 
+    state_c = Input((hyper_parameters["latent_dim"],),name='state_c') 
+    future_light = Input((None,1),name='future_inputs')
   
+    # Decoder:
+    prediction = _decoder(state_h, state_c, future_light, hyper_parameters)
+
+    # Finalize model:
+    model = Model([state_h, state_c, future_light], prediction)
+    model.compile(
+        loss=hyper_parameters["loss"],
+        optimizer = Adam(learning_rate=hyper_parameters["learning_rate"]),
+        metrics = hyper_parameters["metrics"]
+        )
+    
+    return model
+
+def _encoder(past_events,hyper_parameters):
+    
+    # Encoding LSTM: (return internal states to feed into decoder)
+    intermediate = LSTM(64,name='encoder_1',return_sequences=True)(past_events)
+    _, state_h, state_c = LSTM(
+        hyper_parameters["latent_dim"],return_state=True,name='encoder_2'
+        )(intermediate)
+    
+    return state_h, state_c
+
+
+def _decoder(state_h, state_c, future_light, hyper_parameters):
+    
+    
+    if hyper_parameters["output_mode"]=="timedistributed":
+        # Decoding LSTM: (Initialize with decoder states, pass future light inputs)
+        decoder_outputs = LSTM(
+            hyper_parameters["latent_dim"],
+            return_sequences=True,
+            name='decoder_1',
+            )(future_light,initial_state=[state_h, state_c])
+        # Compile prediction over horizon:
+        prediction = TimeDistributed(
+            Dense(hyper_parameters["output_dim"],activation="linear"),
+            name="decoder_2"
+            )(decoder_outputs)
+    elif hyper_parameters["output_mode"]=="dense":
+        decoder_outputs = LSTM(
+            hyper_parameters["latent_dim"], name='decoder_1',
+            )(future_light,initial_state=[state_h, state_c])
+        prediction = Dense(
+            hyper_parameters["output_dim"],activation="linear",name="decoder_2"
+            )(decoder_outputs)
+    
+    return prediction
+    
+def split(model):
+    
+    # Collect hyper_parameters:
+    hyper_parameters = dict(
+        past_steps = model.get_layer("past_inputs").output_shape[0][1],
+        features = model.get_layer("past_inputs").output_shape[0][2],
+        latent_dim = model.get_layer("decoder_1").output_shape[-1],
+        output_mode = model.get_layer("decoder_2").__class__.__name__.lower(),
+        output_dim = model.get_layer("decoder_2").output_shape[-1],
+        loss = model.loss,
+        learning_rate = float(model.optimizer.learning_rate),
+        metrics = model.metrics
+        )
+    
+    # Create encoder and transfer weights from model:
+    encoder = lstm_encoder(hyper_parameters)
+    _transfer(model, encoder, "encoder_1")
+    _transfer(model, encoder, "encoder_2")
+    
+    # Create decoder and transfer weights from model:
+    decoder = lstm_decoder(hyper_parameters)
+    _transfer(model, decoder, "decoder_1")
+    _transfer(model, decoder, "decoder_2")
+    
+    return encoder, decoder
+
+
+
+def _transfer(model1, model2, layer_name):
+    weights = model1.get_layer(layer_name).get_weights()
+    model2.get_layer(layer_name).set_weights(weights)
 
 def mlp(
         past_steps=36,

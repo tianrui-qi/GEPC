@@ -7,13 +7,13 @@ Created on Fri Apr 22 16:16:27 2022
 
 import copy
 import os
-import datetime
+import time
 
 import deepcellcontrol as dcc
 
 # import qsub
 params = copy.deepcopy(dcc.config.MLP_params)
-params["training_parameters"]["epochs"]=3
+params["training_parameters"]["epochs"]=10
 params["training_parameters"]["steps_per_epoch"]=200
 params["features"] = [
     'fluo1',
@@ -25,40 +25,47 @@ params["features"] = [
     'neighbor_stims',
     'stims'
     ]
-params["save_folder"] = "/home/jeanbaptiste/data/shared_packages/deepcellcontrol/assets/models/" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+params["save_folder"] = "D:/shared_packages/deepcellcontrol/assets/models/" + time.strftime("%Y-%m-%d_%H-%M-%S")
 
-sets_folder = "/home/jeanbaptiste/data/shared_packages/deepcellcontrol/assets/data/experimental/"
+sets_folder = "D:/shared_packages/deepcellcontrol/assets/data/experimental/"
 training_files = (
     sets_folder + "2022-04-13_TrainingSet2_dataset.pkl",
-    sets_folder + "2022-04-15_TrainingSet3_dataset.pkl",
+    sets_folder + "2022-04-19_TrainingSet4_dataset.pkl",
     sets_folder + "2022-04-22_TrainingSet6_dataset.pkl",
-    sets_folder + "2022-04-23_TrainingSet7_dataset.pkl",
     sets_folder + "2022-04-24_TrainingSet8_dataset.pkl",
     )
-# validation_files = ("D:/shared_packages/deepcellcontrol/assets/data/experimental/2022-04-19_TrainingSet4_dataset.pkl",)
+validation_files = (
+    sets_folder + "2022-04-15_TrainingSet3_dataset.pkl",
+    sets_folder + "2022-04-21_TrainingSet5_dataset.pkl",
+    sets_folder + "2022-04-23_TrainingSet7_dataset.pkl",
+    )
 
-# Load dataset:
+# Load datasets:
 training_set = dcc.data.Datasets(
     training_files,
     features = params["features"],
-    formatter = dcc.data.LSTMAutoencoderFormatter(params["features"])
+    formatter = dcc.data.LSTMFormatter(params["features"])
     )
 training_set.load()
 training_set.normalize()
 training_set.data_type='normalized_dataset'
 
-# Start with autoencoder:
-network = dcc.models.lstm(
-    past_steps=36,
-    horizon=36,
-    features_dim=len(params["features"]),
-    latent_dim=64,
-    output_dim=len(params["features"]),
-    activation='linear',
-    loss='mse',
-    metrics=None,
-    learning_rate=0.001
+validation_set = dcc.data.Datasets(
+    training_files,
+    features = params["features"],
+    formatter = dcc.data.LSTMFormatter(params["features"])
     )
+validation_set.load()
+validation_set.normalize()
+validation_set.data_type='normalized_dataset'
+
+# Init model:
+hyper_parameters = dcc.models.default_hyper_parameters
+hyper_parameters["features"] = len(params["features"])
+hyper_parameters["latent_dim"] = 16
+hyper_parameters["output_mode"] = "timedistributed"
+hyper_parameters["output_dim"] = 1
+network = dcc.models.lstm(hyper_parameters)
 
 # Create save folder:
 if not os.path.exists(params['save_folder']):
@@ -66,9 +73,5 @@ if not os.path.exists(params['save_folder']):
 
 # Train and evaluate:
 network = dcc.timeseries.batch_train_eval(
-    training_set,
-    network,
-    params,
-    plot_autoencoding=True,
-    plot_singlecell= False,
+    training_set, network, params, evaluation_dataset=validation_set
     )

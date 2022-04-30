@@ -395,7 +395,7 @@ class LSTMFormatter(AbstractFormatter):
         
         fluo_ind = [f for f, feature in enumerate(self.features) if feature in ("fluos", "fluo1")][0]
         
-        fluos = np.concatenate((X[0][:,:,fluo_ind], Y[:,:,0]), axis=1)
+        fluos = np.concatenate((X[0][:,:,fluo_ind], np.squeeze(Y[:,:])), axis=1)
         stims = np.concatenate(
             (X[0][:,:,self.features.index("stims")],X[1][:,:,0]),axis=1
             )

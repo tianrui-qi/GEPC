@@ -164,7 +164,9 @@ def evaluate(
         
         # get X and Y data:
         xval, yval = next(dataset)
+        yval = np.squeeze(yval)
         yhat = network.predict(xval,verbose=verbose)
+        yhat = np.squeeze(yhat)
         
         # Compile error metrics:
         rmse = rmse + np.sqrt(np.mean(np.square(yhat-yval),axis=0))  # RMSE over prediction horizon
