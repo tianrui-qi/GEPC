@@ -34,6 +34,8 @@ sets_folder = "D:/shared_packages/deepcellcontrol/assets/data/experimental/"
 training_files = (
     sets_folder + "2022-04-13_TrainingSet2_dataset.pkl",
     sets_folder + "2022-04-15_TrainingSet3_dataset.pkl",
+    sets_folder + "2022-04-19_TrainingSet4_dataset.pkl",
+    sets_folder + "2022-04-21_TrainingSet5_dataset.pkl",
     sets_folder + "2022-04-22_TrainingSet6_dataset.pkl",
     sets_folder + "2022-04-23_TrainingSet7_dataset.pkl",
     sets_folder + "2022-04-24_TrainingSet8_dataset.pkl",
@@ -48,7 +50,7 @@ dataset = dcc.data.Datasets(
 dataset.load()
 dataset.normalize()
 dataset.data_type='normalized_dataset'
-dataset.horizon = 48
+dataset.horizon = 24
 
 # Generate random control "situations"
 inputs = []
@@ -78,13 +80,13 @@ inputs = np.array(inputs)
 #%% Test out controller:
 
 controller = dcc.control.SplitLSTMMPC(
-    model_file = 'D:/shared_packages/deepcellcontrol/assets/models/2022-04-29_13-25-54/model.hdf5',
+    model_file = 'D:/shared_packages/deepcellcontrol/assets/models/2022-04-30_01-31-22/model.hdf5',
     strategy_optimizer=dcc.control.BinaryParticleSwarmOptimizer(
         horizon=dataset.horizon, iterations=10, particles=20
         )
     )
 print("Run time:")
-for _ in range(1):
+for _ in range(10):
     t_start = time.perf_counter()
     controller.feedback(inputs,objectives)
     print(time.perf_counter() - t_start)
@@ -92,6 +94,7 @@ for _ in range(1):
 # outputs:
 strategies = controller.strategy
 predictions = controller.show_predict(inputs, strategies)
+predictions = np.squeeze(predictions)
 
 # Display control & strategy:
 for s in range(20):
@@ -109,7 +112,7 @@ for s in range(20):
         label="past fluo"
         )
     plt.plot(objectives[s],label="objective")
-    plt.plot(predictions[s,:,0], label="prediction")
+    plt.plot(predictions[s,:], label="prediction")
     plt.plot([-0.5,-0.5],[0,1],'k--', linewidth=1)
     plt.ylim(0,1)
     plt.xlim(-dataset.past_steps,dataset.horizon-1)
