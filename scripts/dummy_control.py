@@ -15,48 +15,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import deepcellcontrol as dcc
-# import qsub
 
-# import qsub
-params = copy.deepcopy(dcc.config.MLP_params)
-params["features"] = [
-    'fluo1',
-    'area',
-    'sharpness',
-    'cell_count',
-    'chamber_mean_fluo1',
-    'chamber_std_fluo1',
-    'neighbor_stims',
-    'stims'
-    ]
 
-sets_folder = "D:/shared_packages/deepcellcontrol/assets/data/experimental/"
-training_files = (
-    sets_folder + "2022-04-13_TrainingSet2_dataset.pkl",
-    sets_folder + "2022-04-15_TrainingSet3_dataset.pkl",
-    sets_folder + "2022-04-19_TrainingSet4_dataset.pkl",
-    sets_folder + "2022-04-21_TrainingSet5_dataset.pkl",
-    sets_folder + "2022-04-22_TrainingSet6_dataset.pkl",
-    sets_folder + "2022-04-23_TrainingSet7_dataset.pkl",
-    sets_folder + "2022-04-24_TrainingSet8_dataset.pkl",
-    )
+params = copy.deepcopy(dcc.config.defaults)
+params["training_sets"] += params["eval_sets"]
+params["eval_sets"] = ()
+
 
 # Load dataset:
-dataset = dcc.data.Datasets(
-    training_files,
-    features = params["features"],
-    formatter = dcc.data.LSTMFormatter(params["features"])
-    )
-dataset.load()
-dataset.normalize()
-dataset.data_type='normalized_dataset'
-dataset.horizon = 24
+dataset, _ = dcc.data.load_datasets(params)
 
 # Generate random control "situations"
 inputs = []
 objectives = []
 for _b in range(100):
-    
+     
     # Get random sample:
     sample = dataset.sample()
     
@@ -80,13 +53,13 @@ inputs = np.array(inputs)
 #%% Test out controller:
 
 controller = dcc.control.SplitLSTMMPC(
-    model_file = 'D:/shared_packages/deepcellcontrol/assets/models/2022-04-30_01-31-22/model.hdf5',
+    model_file = params["models_folder"] + '2022-04-30_01-21-16/model.hdf5',
     strategy_optimizer=dcc.control.BinaryParticleSwarmOptimizer(
         horizon=dataset.horizon, iterations=10, particles=20
         )
     )
 print("Run time:")
-for _ in range(10):
+for _ in range(1):
     t_start = time.perf_counter()
     controller.feedback(inputs,objectives)
     print(time.perf_counter() - t_start)

@@ -793,6 +793,66 @@ class Datasets(Generator):
         raise StopIteration
 
 
+def load_datasets(parameters):
+    """
+    Load and return training set and evaluation set
+
+    Parameters
+    ----------
+    parameters : dict
+        Datasets parameters. Typically config.defaults
+
+    Returns
+    -------
+    training_set : Datasets object
+        Training datasets object.
+    evaluation_set : Datasets object
+        Evaluation datasets object.
+
+    """
+    
+    training_set = evaluation_set = None
+    
+    # Load and set up training set:
+    if len(parameters["training_sets"]):
+        training_files = [
+            parameters["datasets_folder"] + x for x in parameters["training_sets"]
+            ]
+        training_set = Datasets(
+            training_files,
+            features = parameters["features"],
+            formatter = LSTMFormatter(parameters["features"])
+            )
+        training_set.test_ratio = 0
+        training_set.horizon = parameters["horizon"]
+        training_set.past_steps = parameters["past_steps"]
+        training_set.batch_size = parameters["batch_size"]
+        training_set.mode = "training"
+        training_set.load()
+        training_set.normalize()
+        training_set.data_type='normalized_dataset'
+    
+    # Load and set up evaluation set:
+    if len(parameters["eval_sets"]):
+        evaluation_files = [
+            parameters["datasets_folder"] + x for x in parameters["eval_sets"]
+            ]
+        evaluation_set = Datasets(
+            evaluation_files,
+            features = parameters["features"],
+            formatter = LSTMFormatter(parameters["features"])
+            )
+        evaluation_set.test_ratio = 1
+        evaluation_set.horizon = parameters["horizon"]
+        evaluation_set.past_steps = parameters["past_steps"]
+        training_set.batch_size = parameters["batch_size"]
+        training_set.mode = "evaluation"
+        evaluation_set.load()
+        evaluation_set.normalize()
+        evaluation_set.data_type='normalized_dataset'
+    
+    return training_set, evaluation_set
+
 def compile_dataset(xpfolder, min_area =  200):
     """
     Compile a dataset from the pickle files of a full DeLTA pipeline run

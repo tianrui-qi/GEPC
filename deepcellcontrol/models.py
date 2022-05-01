@@ -9,24 +9,11 @@ from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Dense, LSTM, Input, Dropout, TimeDistributed
 from tensorflow.keras.optimizers import Adam
 
-# Default hyper-parameters:
-default_hyper_parameters = dict(
-    past_steps = 36,
-    features = 2,
-    latent_dim = 16,
-    output_mode = "timedistributed", # or "dense"
-    output_dim=1,
-    loss="mse",
-    learning_rate=0.001,
-    metrics=None
-    )
-
-
 def lstm(hyper_parameters):
     
     # Inputs:
     past_events = Input(
-        (hyper_parameters["past_steps"], hyper_parameters["features"]),
+        (hyper_parameters["past_steps"], len(hyper_parameters["features"])),
         name='past_inputs'
         )
     future_light = Input((None,1),name='future_inputs')
@@ -41,8 +28,9 @@ def lstm(hyper_parameters):
     model = Model([past_events, future_light], prediction)
     model.compile(
         loss=hyper_parameters["loss"],
-        optimizer = Adam(learning_rate=hyper_parameters["learning_rate"]),
-        metrics = hyper_parameters["metrics"]
+        optimizer = Adam(
+            learning_rate=hyper_parameters["learning_rate"]
+            )
         )
     
     return model
@@ -51,7 +39,7 @@ def lstm_encoder(hyper_parameters):
     
     # Inputs:
     past_events = Input(
-        (hyper_parameters["past_steps"], hyper_parameters["features"]),
+        (hyper_parameters["past_steps"], len(hyper_parameters["features"])),
         name='past_inputs'
         )
     
@@ -62,8 +50,9 @@ def lstm_encoder(hyper_parameters):
     model = Model(past_events, [state_h, state_c])
     model.compile(
         loss=hyper_parameters["loss"],
-        optimizer = Adam(learning_rate=hyper_parameters["learning_rate"]),
-        metrics = hyper_parameters["metrics"]
+        optimizer = Adam(
+            learning_rate=hyper_parameters["learning_rate"]
+            )
         )
     
     return model
@@ -82,8 +71,9 @@ def lstm_decoder(hyper_parameters):
     model = Model([state_h, state_c, future_light], prediction)
     model.compile(
         loss=hyper_parameters["loss"],
-        optimizer = Adam(learning_rate=hyper_parameters["learning_rate"]),
-        metrics = hyper_parameters["metrics"]
+        optimizer = Adam(
+            learning_rate=hyper_parameters["learning_rate"]
+            )
         )
     
     return model
@@ -124,18 +114,18 @@ def _decoder(state_h, state_c, future_light, hyper_parameters):
     
     return prediction
     
+
 def split(model):
     
     # Collect hyper_parameters:
     hyper_parameters = dict(
         past_steps = model.get_layer("past_inputs").output_shape[0][1],
-        features = model.get_layer("past_inputs").output_shape[0][2],
+        features = ["" for _ in range(model.get_layer("past_inputs").output_shape[0][2])], # dummy list to for the len() call
         latent_dim = model.get_layer("decoder_1").output_shape[-1],
         output_mode = model.get_layer("decoder_2").__class__.__name__.lower(),
         output_dim = model.get_layer("decoder_2").output_shape[-1],
-        loss = model.loss,
-        learning_rate = float(model.optimizer.learning_rate),
-        metrics = model.metrics
+        loss = model.loss, # These aren' really useful
+        learning_rate = float(model.optimizer.learning_rate), # These aren' really useful
         )
     
     # Create encoder and transfer weights from model:
@@ -151,11 +141,11 @@ def split(model):
     return encoder, decoder
 
 
-
 def _transfer(model1, model2, layer_name):
     weights = model1.get_layer(layer_name).get_weights()
     model2.get_layer(layer_name).set_weights(weights)
 
+# TODO remove?
 def mlp(
         past_steps=36,
         features=2,

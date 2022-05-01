@@ -9,14 +9,12 @@ import os
 import json
 import pickle
 import csv
-from datetime import datetime
 
 import numpy as np
 from tensorflow.keras.callbacks import Callback, ModelCheckpoint, EarlyStopping
 import matplotlib.pyplot as plt
 
 from . import utilities as utils
-from . import config as cfg
 
 def train(
         dataset,
@@ -217,22 +215,25 @@ def batch_train_eval(
         The trained network.
 
     """
+    
+    save_folder = params["models_folder"] + params["save_folder"]
+    os.makedirs(save_folder, exist_ok = True)
 
     # Write training parameters to disk:
-    with open(params['save_folder']+'/training_parameters.json','w') as params_file:
-        json.dump(params, params_file, sort_keys=True, indent=4)
+    with open(save_folder+'/training_parameters.json','w') as params_file:
+        json.dump(params, params_file, indent=4)
 
     # Update dataset's features:
     dataset.features = params['features']
     dataset.past_steps = params['past_steps']
     dataset.horizon = params['horizon']
-    dataset.save_state(params['save_folder']+'/dataset_state.pkl')
+    dataset.save_state(save_folder+'/dataset_state.pkl')
     
     # Train:
     network, history = train(
         dataset, 
         network,
-        save_folder = params['save_folder'],
+        save_folder = save_folder,
         evaluation_dataset=evaluation_dataset,
         **params['training_parameters']
         )
@@ -248,8 +249,8 @@ def batch_train_eval(
     plt.ylabel('loss')
     plt.title('Loss and validation')
     plt.legend()
-    plt.savefig(os.path.join(params['save_folder'],'training_loss.png'),dpi=300)
-    plt.savefig(os.path.join(params['save_folder'],'training_loss.svg'),dpi=300)
+    plt.savefig(os.path.join(save_folder,'training_loss.png'),dpi=300)
+    plt.savefig(os.path.join(save_folder,'training_loss.svg'),dpi=300)
     # plt.show()
     plt.clf()
     
@@ -267,14 +268,14 @@ def batch_train_eval(
     plt.ylabel('error (a.u.)')
     plt.title('evaluation MAE & RMSE')
     plt.legend(('MAE','RMSE'))
-    plt.savefig(os.path.join(params['save_folder'],'evaluation_error.png'),dpi=300)
-    plt.savefig(os.path.join(params['save_folder'],'evaluation_error.svg'),dpi=300)
+    plt.savefig(os.path.join(save_folder,'evaluation_error.png'),dpi=300)
+    plt.savefig(os.path.join(save_folder,'evaluation_error.svg'),dpi=300)
     # plt.show()
     plt.clf()
     
     # Plot single cell evaluations:
     if plot_singlecell:
-        os.makedirs(os.path.join(params['save_folder'],'single_cell_evals'))
+        os.makedirs(os.path.join(save_folder,'single_cell_evals'))
         fluos, stims = dataset.formatter.reconstruct(eval_d['input'],eval_d['groundtruth'])
         for eval_num in range(50):
             utils.evaluationPlot(
@@ -283,25 +284,25 @@ def batch_train_eval(
                 fluos[eval_num,params['past_steps']:],
                 eval_d["prediction"][eval_num],
                 dyn_range=1,
-                savefig = os.path.join(params['save_folder'],'single_cell_evals','sample_%02d'%eval_num),
+                savefig = os.path.join(save_folder,'single_cell_evals','sample_%02d'%eval_num),
                 show = False
                 )
     
     if plot_autoencoding:
-        os.makedirs(os.path.join(params['save_folder'],'autoencoding_evals'))
+        os.makedirs(os.path.join(save_folder,'autoencoding_evals'))
         for eval_num in range(50):
             utils.plot_autoencoding(
                 eval_d['groundtruth'][eval_num],
                 eval_d["prediction"][eval_num],
                 features_list = dataset.features,
                 savefig = os.path.join(
-                    params['save_folder'],
+                    save_folder,
                     f'autoencoding_evals/sample_{eval_num:06d}'
                     )
                 )
     
     # Save relevant training data to pickle file:
-    with open(params['save_folder']+'/training_output.pkl','wb') as res_file:
+    with open(save_folder+'/training_output.pkl','wb') as res_file:
         pickle.dump(
             dict(
                 params=history.params, 
@@ -315,7 +316,7 @@ def batch_train_eval(
     csv_log_training(
         params['logfile'],
         dict(
-            folder=params['save_folder'],
+            folder=save_folder,
             parameters=str(params),
             epochs=history.epoch[-1],
             loss=min(history.history['loss']),
@@ -359,25 +360,3 @@ class EvaluationCallback(Callback):
         # Re-set dataset to training parameters:
         self._dataset.batch_size = batch_size
         self._dataset.mode = 'training'
-
-def _inputs_processor(kwargs):
-    
-    import copy
-    params = copy.deepcopy(cfg.LSTM_params)
-    
-    for k, v in kwargs.items():
-        
-        if k=='parameters':
-            with open(v,'rb') as f:
-                params=pickle.load(f)
-        
-        if k in ('features', 'datasets'):
-            params[k] = tuple(v.split(','))
-            
-        if k in ('save_folder','logfile'):
-            params[k] = v
-    
-        if k in ('past_steps', 'horizon', 'latent_dim'):
-            params[k] = int(v)
-    
-    return params

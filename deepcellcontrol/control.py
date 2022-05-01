@@ -10,7 +10,7 @@ import tensorflow as tf
 
 import numpy as np
 
-from .models import mlp, lstm, split
+from .models import split
 
 
 class _Controller:

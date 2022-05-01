@@ -6,56 +6,46 @@ Created on Wed Oct 27 14:18:43 2021
 @author: jeanbaptiste
 """
 import os
-
-from datetime import datetime
-
-# Datasets:
-datasets_path = os.path.dirname(__file__) + '/../assets/data/'
-datasets = dict(
-    experimental_1=(
-        datasets_path+'experimental/2021-09-20_Dataset_2/dataset.pkl',
-        datasets_path+'experimental/2021-09-23_Dataset_3/dataset.pkl',
-        datasets_path+'experimental/2021-09-28_Dataset_4/dataset.pkl',
-        datasets_path+'experimental/2021-09-30_Dataset_5/dataset.pkl',
-        )
-    )
-
-# Models:
-models_path = os.path.dirname(__file__) + '/../assets/models/'
+import time
 
 # Default LSTM parameters:
-LSTM_params = dict(
-    datasets=datasets['experimental_1'],
-    features=('fluos','stims'),
+defaults = dict(
+    datasets_folder = os.path.dirname(__file__) + '/../assets/data/experimental/',
+    training_sets=(
+        "2022-04-13_TrainingSet2_dataset.pkl",
+        "2022-04-19_TrainingSet4_dataset.pkl",
+        "2022-04-22_TrainingSet6_dataset.pkl",
+        "2022-04-24_TrainingSet8_dataset.pkl",
+        ),
+    eval_sets=(
+        "2022-04-15_TrainingSet3_dataset.pkl",
+        "2022-04-21_TrainingSet5_dataset.pkl",
+        "2022-04-23_TrainingSet7_dataset.pkl",
+        ),
+    models_folder = os.path.dirname(__file__) + '/../assets/models/',
+    features=(
+        'fluo1',
+        'area',
+        'sharpness',
+        'cell_count',
+        'chamber_mean_fluo1',
+        'chamber_std_fluo1',
+        'neighbor_stims',
+        'stims'
+        ),
     past_steps=36,
     horizon = 24,
     latent_dim=16,
+    output_mode = "timedistributed", # or "dense"
+    output_dim=1,
+    batch_size=100,
+    loss = "mse",
+    learning_rate=1e-3,
     training_parameters = dict(
-        learning_rate=1e-4,
-        patience = 500,
         steps_per_epoch = 200,
-        epochs=2000
+        epochs=1000
         ),
-    save_folder=models_path+datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
-    logfile=None
-    )
-
-# Default MLP parameters:
-MLP_params = dict(
-    datasets=datasets['experimental_1'],
-    features=('fluos','stims'),
-    past_steps=36,
-    horizon=24,
-    hidden_layers=10, 
-    hidden_dim=16,
-    dropout=0,
-    training_parameters = dict(
-        learning_rate=1e-3,
-        patience = 500,
-        steps_per_epoch = 200,
-        epochs=2000
-        ),
-    save_folder=models_path+datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+    save_folder=time.strftime("%Y-%m-%d_%H-%M-%S"),
     logfile=None
     )
 
