@@ -6,13 +6,14 @@ import os
 
 import qsub
 
-dcc_path = "/projectnb/dunlop/JB/deepcellcontrol/"
+dcc_data_path = "/projectnb/dunlop/JB/deepcellcontrol/"
+dcc_repo_path = "/project/dunlop/shared_python_packages/deepcellcontrol/"
 
 def params_change(params):
     
     _params = dict(
-        datasets_folder = dcc_path + "assets/data/",
-        models_folder = dcc_path + "assets/models/",
+        datasets_folder = dcc_data_path + "assets/data/",
+        models_folder = dcc_data_path + "assets/models/",
         )
     
     _params.update(params)
@@ -35,7 +36,7 @@ saved_config = params_change(
         )
     )
 job_id = qsub.submit(
-    dcc_path + "scripts/training.py",
+    dcc_repo_path + "scripts/training.py",
     args = [saved_config],
     conda_env="delta_env",
     hardware_requirements = dict(
@@ -55,7 +56,7 @@ configs.append([params_change(dict(latent_dim = 32))])
 configs.append([params_change(dict(horizon = 48))])
 
 job_id = qsub.submit(
-    dcc_path + "scripts/training.py",
+    dcc_repo_path + "scripts/training.py",
     job_array = True,
     args = configs,
     kwargs = [{}] * len(configs),
