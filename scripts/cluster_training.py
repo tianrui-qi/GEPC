@@ -22,9 +22,10 @@ def params_change(params):
     subfolders = [ f.path for f in os.scandir(assets) if f.is_dir() ]
     foldername = assets + time.strftime("%Y-%m-%d_%H-%M-%S") + f"_submission_{len(subfolders)}/"
     os.makedirs(foldername)
+    print(foldername)
     
     with open(foldername+"parameters.json","w") as f:
-        json.dump(_params,f)
+        json.dump(_params,f, indent=4)
     
     return foldername+"parameters.json"
 
@@ -32,7 +33,7 @@ def params_change(params):
 
 saved_config = params_change(
     dict(
-        training_parameters = dict(epoch = 10_000)
+        training_parameters = dict(epochs = 10_000)
         )
     )
 job_id = qsub.submit(

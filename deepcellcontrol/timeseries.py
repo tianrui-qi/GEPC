@@ -22,7 +22,7 @@ def train(
         batch_size=400,
         epochs=2000,
         steps_per_epoch=250,
-        patience=50,
+        patience=1000,
         learning_rate=1e-3,
         save_folder='./',
         evaluation_dataset = None
