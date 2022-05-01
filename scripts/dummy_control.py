@@ -59,7 +59,7 @@ controller = dcc.control.SplitLSTMMPC(
         )
     )
 print("Run time:")
-for _ in range(1):
+for _ in range(10):
     t_start = time.perf_counter()
     controller.feedback(inputs,objectives)
     print(time.perf_counter() - t_start)
@@ -94,3 +94,4 @@ for s in range(20):
     plt.ylabel("Fluorescence (a.u.)")
     plt.legend()
     plt.show()
+

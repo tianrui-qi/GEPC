@@ -43,7 +43,7 @@ defaults = dict(
     learning_rate=1e-3,
     training_parameters = dict(
         steps_per_epoch = 200,
-        epochs=1000
+        epochs=200
         ),
     save_folder=time.strftime("%Y-%m-%d_%H-%M-%S"),
     logfile=None

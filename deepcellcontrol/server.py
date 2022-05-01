@@ -56,6 +56,10 @@ class Server(Thread):
         to be done when we could be doing other operations"""
         self._stop_flag = False
         "Flag to trigger the daemon to stop, for debugging mostly"
+        self.verbose = True
+        "Whether to print messages to console"
+        self.name = ""
+        "Server name for printing"
     
     def run(self):
         """
@@ -84,6 +88,12 @@ class Server(Thread):
         
         # Reset flag
         self._stop_flag = False
+    
+    def _msg(self, msg):
+        
+        if self.verbose:
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - server {self.name} - {msg}")
+            
     
     def _run(self):
         """
@@ -197,15 +207,20 @@ class Server(Thread):
         if len(feedback_inputs) == 0:
             return []
         
-        # Compile inputs array:
+        # Compile inputs & objectives arrays:
         inputs = np.concatenate([x[0] for x in feedback_inputs],axis=0)
-        
-        # Compile objectives array:
         objectives = np.concatenate([x[1] for x in feedback_inputs],axis=0)
+        
+        
+        t_start = time.perf_counter()
         
         # Run feedback control:
         with tf.device(self.device):
             strategies = self.controller.feedback(inputs, objectives)
+        
+        self._msg(
+            "{objectives.shape[0]} inputs processed ({time.perf_counter() -t_start:.2f}s)"
+            )
         
         # Split strategies back to inputs dimensions:
         strategies = np.split(
