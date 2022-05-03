@@ -219,7 +219,7 @@ class Server(Thread):
             strategies = self.controller.feedback(inputs, objectives)
         
         self._msg(
-            "{objectives.shape[0]} inputs processed ({time.perf_counter() -t_start:.2f}s)"
+            f"{objectives.shape[0]} inputs processed ({time.perf_counter() -t_start:.2f}s)"
             )
         
         # Split strategies back to inputs dimensions:
