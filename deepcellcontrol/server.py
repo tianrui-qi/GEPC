@@ -8,6 +8,7 @@ Created on Mon Dec  6 14:20:34 2021
 import time
 from threading import Thread
 from queue import Queue
+import gc
 
 import numpy as np
 import tensorflow as tf
@@ -119,6 +120,12 @@ class Server(Thread):
         
         # Dispatch:
         self.dispatch(control_outputs, metadata, output_dispatchers)
+        
+        del feedback_inputs
+        del control_outputs
+        del metadata
+        del output_dispatchers
+        gc.collect()
     
     def get_inputs(self):
         """

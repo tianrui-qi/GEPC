@@ -5,9 +5,9 @@ Created on Mon Oct 26 12:56:30 2020
 
 @author: jeanbaptiste
 """
+import gc
 
 import tensorflow as tf
-
 import numpy as np
 
 from .models import split
@@ -67,7 +67,7 @@ class _Controller:
         """
 
         # Get best strategy:
-        self.strategy = self.get_strategy(inputs, objectives)
+        self.get_strategy(inputs, objectives)
 
         # Return only next timepoint control inputs:
         return self.strategy[:, 0]
@@ -157,8 +157,14 @@ class _MPC(_Controller):
             scores = self.compute_scores(predictions, objectives)
 
             strategies = self.strategy_optimizer.iterate(scores)
-
-        return strategies
+        
+        self.strategy = strategies
+        
+        del predictions
+        del scores
+        del inputs
+        del strategies
+        gc.collect()
 
     def run_strategies(self, inputs, strategies):
         """
