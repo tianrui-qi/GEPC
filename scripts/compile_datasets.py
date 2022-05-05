@@ -58,9 +58,30 @@ for cell_nb in np.random.choice(raw_dataset["stims"].shape[0], 100, replace = Fa
 #                 plt.title((k,c))
 #                 plt.show()
 
-# k = "sharpness"
-# c = 1
-# print(otd[k][c]-dataset[k][c])
-# print(otd[k][c]-dataset[k][c] > 1e-3)
-# plt.plot(otd[k][c])
-# plt.plot(dataset[k][c])
+# training_sets=(
+#     "2022-04-13_TrainingSet2_dataset.pkl",
+#     "2022-04-19_TrainingSet4_dataset.pkl",
+#     "2022-04-22_TrainingSet6_dataset.pkl",
+#     "2022-04-24_TrainingSet8_dataset.pkl",
+#     "2022-04-15_TrainingSet3_dataset.pkl",
+#     "2022-04-21_TrainingSet5_dataset.pkl",
+#     "2022-04-23_TrainingSet7_dataset.pkl",
+#     )
+
+# for ts in training_sets:
+#     with open("D:/shared_packages/deepcellcontrol/assets/data/experimental/before_stims_shift/"+ts, "rb") as f:
+#         dataset = pickle.load(f)
+        
+#     stims = dataset["raw_dataset"]["stims"]
+    
+#     stims = np.roll(stims,1, axis=1)
+    
+#     stims[:,0,:] = 0
+    
+#     dataset["raw_dataset"]["stims"] = stims
+    
+#     with open("D:/shared_packages/deepcellcontrol/assets/data/experimental/"+ts, "wb") as f:
+#         pickle.dump(dataset,f)
+    
+    
+    

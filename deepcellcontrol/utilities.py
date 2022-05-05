@@ -1134,3 +1134,35 @@ def plot_grid_results(objectives,
             cv2.imwrite(os.path.join(save_folder,'img_%06d.tif' %(timepoint,)),(255*assemble[:,:,::-1]).astype(np.uint8))
         if verbose:
             print('Movie frame %d/%d'%(timepoint,fluorescence.shape[1]))
+
+
+def plotq(fluo,q = .5, color="b"):
+    """
+    Quantile plot
+
+    Parameters
+    ----------
+    fluo : 2D numpy array
+        Fluorescence levels. Dimensions are (Cells, time)
+    q : float, optional
+        The quantile to plot around the median. e.g. if q=0.5, the region
+        between 0.25 and 0.75 is shown in shaded fill
+        The default is .5.
+    color : str, optional
+        Color to plot the results as. The default is "b".
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    x = np.arange(0,len(fluo[0]),1)/12
+    plt.plot(x,np.median(fluo,axis=0), color=color)
+    plt.fill_between(
+        x,
+        np.quantile(fluo,.5-q/2,axis=0),
+        np.quantile(fluo,.5+q/2,axis=0),
+        color=color,
+        alpha=.2,
+        )

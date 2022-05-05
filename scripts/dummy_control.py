@@ -49,17 +49,18 @@ for _b in range(100):
     objectives += [objective]
 
 inputs = np.array(inputs)
+objectives = np.array(objectives)
 
 #%% Test out controller:
 
 controller = dcc.control.SplitLSTMMPC(
-    model_file = params["models_folder"] + '2022-04-30_01-21-16/model.hdf5',
+    model_file = params["models_folder"] + '2022-05-01_21-53-02_9c02d092-97be-4378-82e3-d36e9b0509af/model.hdf5',
     strategy_optimizer=dcc.control.BinaryParticleSwarmOptimizer(
-        horizon=dataset.horizon, iterations=10, particles=20
+        horizon=dataset.horizon, iterations=20, particles=20
         )
     )
 print("Run time:")
-for _ in range(1):
+for _ in range(10):
     t_start = time.perf_counter()
     controller.feedback(inputs,objectives)
     print(time.perf_counter() - t_start)
@@ -94,3 +95,24 @@ for s in range(20):
     plt.ylabel("Fluorescence (a.u.)")
     plt.legend()
     plt.show()
+
+#%% Test as part of control server:
+
+dummy_dispatcher = lambda output, meta: print(f"{meta['index']} dispatched")
+
+server = dcc.server.Server(controller, device = "CPU")
+server.start()
+
+for index in range(25):
+    sub_selection = np.random.choice(inputs.shape[0],size=27,replace=False)
+    server.queue.put(
+        (
+            (inputs[sub_selection],objectives[sub_selection]),
+            dict(index=index),
+            dummy_dispatcher
+            )
+        )
+    time.sleep(1)
+print("Done sending")
+            
+    
