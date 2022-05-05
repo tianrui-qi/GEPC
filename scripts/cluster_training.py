@@ -3,11 +3,15 @@
 import json
 import time
 import os
+import sys
 
 import qsub
 
 dcc_data_path = "/projectnb/dunlop/JB/deepcellcontrol/"
 dcc_repo_path = "/project/dunlop/shared_python_packages/deepcellcontrol/"
+
+sys.path.insert(0,dcc_repo_path)
+import deepcellcontrol as dcc
 
 def params_change(params):
     
@@ -33,7 +37,11 @@ def params_change(params):
 
 saved_config = params_change(
     dict(
-        training_parameters = dict(epochs = 10_000)
+        training_parameters = dict(
+            epochs = 200,
+            ),
+        training_sets = dcc.config.defaults["training_sets"] + dcc.config.defaults["eval_sets"],
+        eval_sets = ()
         )
     )
 job_id = qsub.submit(
@@ -41,7 +49,7 @@ job_id = qsub.submit(
     args = [saved_config],
     conda_env="delta_env",
     hardware_requirements = dict(
-        time_limit = 16,
+        time_limit = 1,
         cores=4,
         gpus=1,
         mem_per_core=4,

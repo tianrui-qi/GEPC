@@ -92,10 +92,10 @@ def train(
             raise ValueError(
                 "Evaluation dataset test ratio must be greater than 0"
                 )
-        evaluation_clbk = EvaluationCallback(evaluation_dataset)
+        evaluation_clbk = EvaluationCallback(evaluation_dataset, save_folder+'/model_besteval.hdf5')
         callbacks.append(evaluation_clbk)
     elif dataset.test_ratio > 0:
-        evaluation_clbk = EvaluationCallback(dataset)
+        evaluation_clbk = EvaluationCallback(dataset, save_folder+'/model_besteval.hdf5')
         callbacks.append(evaluation_clbk)
     else:
         evaluation_clbk = None
@@ -343,10 +343,12 @@ def csv_log_training(logfile, row):
 
 class EvaluationCallback(Callback):
     
-    def __init__(self, dataset):
+    def __init__(self, dataset, savefile=None):
         super(Callback, self).__init__()
         self._dataset = dataset
         self.metrics = []
+        self.savefile = savefile
+        self._best = np.inf
     
     def on_epoch_end(self, epoch, logs=None):
         
@@ -354,9 +356,26 @@ class EvaluationCallback(Callback):
         batch_size = self._dataset.batch_size
         
         # Evaluate RMSE and MAE and record:
-        print('Evaluation: ',end='')
         self.metrics += [evaluate(self._dataset, self.model, num_batches=1)]
         
         # Re-set dataset to training parameters:
         self._dataset.batch_size = batch_size
         self._dataset.mode = 'training'
+        
+        self.save_best()
+
+    def save_best(self):
+        
+        if self.savefile is None:
+            return
+        
+        rmse = np.mean(self.metrics[-1]["rmse"])
+        if self._best > rmse:
+            print(
+                f"Evaluation rmse improved from {self._best} to {rmse}, saving to {self.savefile}"
+                )
+            self._best = rmse
+            self.model.save(self.savefile)
+        else:
+            print("Evaluation rmse did not improve from {self._best}")
+            
