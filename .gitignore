@@ -142,3 +142,6 @@ assets/
 
 # Do not touch local config file:
 config.py
+
+# Vi swap files:
+*.py.swp
