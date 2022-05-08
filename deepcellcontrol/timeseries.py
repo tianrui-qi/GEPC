@@ -372,10 +372,10 @@ class EvaluationCallback(Callback):
         rmse = np.mean(self.metrics[-1]["rmse"])
         if self._best > rmse:
             print(
-                f"Evaluation rmse improved from {self._best} to {rmse}, saving to {self.savefile}"
+                f"Evaluation rmse improved from {self._best:.4g} to {rmse:.4g}, saving to {self.savefile}"
                 )
             self._best = rmse
             self.model.save(self.savefile)
         else:
-            print("Evaluation rmse did not improve from {self._best}")
+            print(f"Evaluation rmse did not improve from {self._best:.4g}")
             

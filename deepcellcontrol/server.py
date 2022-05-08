@@ -222,8 +222,7 @@ class Server(Thread):
         t_start = time.perf_counter()
         
         # Run feedback control:
-        with tf.device(self.device):
-            strategies = self.controller.feedback(inputs, objectives)
+        strategies = self.controller.feedback(inputs, objectives)
         
         self._msg(
             f"{objectives.shape[0]} inputs processed ({time.perf_counter() -t_start:.2f}s)"

@@ -344,7 +344,7 @@ class LSTMFormatter(AbstractFormatter):
 
         """
         
-        X = [self.control(past), future[:, :, [feature == "stims" for feature in self.features]]]
+        X = [self.control(past), future[:, :, self.features.index("stims")]]
         Y = future[:, :, [feature in ("fluos", "fluo1") for feature in self.features]]
         
         return X, Y
@@ -397,7 +397,7 @@ class LSTMFormatter(AbstractFormatter):
         
         fluos = np.concatenate((X[0][:,:,fluo_ind], np.squeeze(Y[:,:])), axis=1)
         stims = np.concatenate(
-            (X[0][:,:,self.features.index("stims")],X[1][:,:,0]),axis=1
+            (X[0][:,:,self.features.index("stims")],X[1]),axis=1
             )
         
         return fluos, stims
@@ -718,6 +718,11 @@ class Datasets(Generator):
 
         """
         
+        if isinstance(self.past_steps, (list, tuple)):
+            min_steps, max_steps = self.past_steps
+        else:
+            min_steps = max_steps = self.past_steps
+        
         # Get random cell from proper partition:
         if self.mode == "training":
             cell_nb = np.random.choice(self._training_set)
@@ -736,17 +741,23 @@ class Datasets(Generator):
         
         # Random time point:
         timepoint = np.random.randint(
-            self.past_steps, dataset["stims"].shape[1] - self.horizon
+            min_steps, dataset["stims"].shape[1] - self.horizon
         )
+        if min_steps == max_steps:
+            past_point = timepoint-max_steps
+        else:
+            past_point = np.random.randint(timepoint-max_steps, timepoint-min_steps)
+        past_point = max(past_point, 0)
         
         # Init sample:
-        past = np.empty((self.past_steps, len(self.features)), dtype=np.float32)
+        past = np.zeros((max_steps, len(self.features)), dtype=np.float32)
         future = np.empty((self.horizon, len(self.features)), dtype=np.float32)
         
         # Run through features, compile sample:
+        
         for f, feature in enumerate(self.features):
-            past[:,f] = dataset[feature][
-                cell_nb, timepoint - self.past_steps : timepoint, 0
+            past[past_point-timepoint:,f] = dataset[feature][
+                cell_nb, past_point:timepoint, 0
                 ]
             future[:,f] = dataset[feature][
                 cell_nb, timepoint : timepoint + self.horizon, 0
@@ -766,9 +777,14 @@ class Datasets(Generator):
             Input batch, formatted as required by the trained model.
 
         """
+        
+        if isinstance(self.past_steps, (list, tuple)):
+            past_steps = self.past_steps[1]
+        else:
+            past_steps = self.past_steps
 
         past = np.empty(
-            (self.batch_size, self.past_steps, len(self.features)), dtype=np.float32
+            (self.batch_size, past_steps, len(self.features)), dtype=np.float32
         )
         future = np.empty(
             (self.batch_size, self.horizon, len(self.features)), dtype=np.float32

@@ -19,18 +19,19 @@ import deepcellcontrol as dcc
 params = copy.deepcopy(dcc.config.defaults)
 
 # If path to parameters JSON file passed as argument:
-if len(sys.argv) > 0:
+if len(sys.argv) > 1:
     with open(sys.argv[-1], "r") as f:
         params.update(json.load(f))
 
 # Save folder:
 params["save_folder"] = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{uuid.uuid4()}"
+params["past_steps"] = [36, 144]
 
 # Load datasets:
 training_set, evaluation_set = dcc.data.load_datasets(params)
 
 # Init model:
-network = dcc.models.lstm(params)
+network = dcc.models.lstm_mlp(params)
 
 # Train and evaluate:
 network = dcc.timeseries.batch_train_eval(

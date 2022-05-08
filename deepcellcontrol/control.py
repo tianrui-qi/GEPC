@@ -192,7 +192,8 @@ class _MPC(_Controller):
         x = self.compile_x(inputs, strategies)
 
         # Predict:
-        yhat = self.model.predict(x)
+        with tf.device("GPU"):
+            yhat = self.model.predict(x)
 
         # Format yhat into list similar to strategies:
         # yhat = np.split(yhat,np.cumsum([i.shape[0] for i in strategies]),axis=0)[:-1]
@@ -322,14 +323,10 @@ class MLPMPC(_MPC):
 
         Parameters
         ----------
-        inputs : list
-            List containing past observed variables (Fluorescence, cell length
-            etc...) and past control inputs (DMD inputs...).
-            Each list element contains the data for each cell to process in
-            parallel. Each of those elements is a list containing one 2D numpy
-            arrays of size variables -by- past_timepoints for past observed
-            variables and one 1D numpy array of size past_timepoints for past
-            control inputs.
+        inputs : 3D numpy array
+            Past observed variables (Fluorescence, cell length etc...) and past 
+            control inputs (DMD inputs...). Dimensions are 
+            (cells, past_steps, features)
         strategies : 3D numpy array of bools
             Array containing multiple strategies for each cell to predict the
             response to. Size is cells -by- strategies_per_cell -by- horizon.
@@ -344,35 +341,19 @@ class MLPMPC(_MPC):
         """
 
         # Flatten inputs together:
-        x = np.empty(
+        inputs_reshape = (inputs.shape[0],inputs.shape[1]*inputs.shape[2])
+        strategies_reshape = (strategies.shape[0]*strategies.shape[1], strategies.shape[2])
+        x = np.concatenate(
             (
-                strategies.shape[0] * strategies.shape[1],
-                inputs[0][0].shape[0] * self.past_steps
-                + self.past_steps
-                + strategies.shape[2],
-            ),
-            dtype=float,
-        )
-        for strat_ind in range(strategies.shape[0]):
-            single_input = np.concatenate(
-                (
-                    inputs[strat_ind][0][:, -self.past_steps :].flatten(),
-                    inputs[strat_ind][1][-self.past_steps :].flatten(),
+                np.repeat(
+                    np.reshape(inputs,inputs_reshape),
+                    strategies.shape[1],
+                    axis=0
+                    ),
+                np.reshape(strategies, strategies_reshape)
                 ),
-                axis=0,
+            axis = 1
             )
-
-            # Compile full array for all strategies:
-            x[
-                strat_ind * strategies.shape[1] : (strat_ind + 1) * strategies.shape[1],
-                : -strategies.shape[2],
-            ] = np.repeat(
-                np.expand_dims(single_input, axis=0), strategies.shape[1], axis=0
-            )
-            x[
-                strat_ind * strategies.shape[1] : (strat_ind + 1) * strategies.shape[1],
-                -strategies.shape[2] :,
-            ] = strategies[strat_ind]
 
         return x
 
@@ -451,7 +432,7 @@ class LSTMMPC(_MPC):
             )
         strategies = np.reshape(
             strategies,
-            (strategies.shape[0]*strategies.shape[1], strategies.shape[2], 1)
+            (strategies.shape[0]*strategies.shape[1], strategies.shape[2])
             )
 
         return inputs, strategies
@@ -508,7 +489,8 @@ class SplitLSTMMPC(_MPC):
         
         # Here, before moving on with the strategy search, we run the encoder
         # part of the network:
-        state_h, state_c = self.encoder.predict(inputs)
+        with tf.device("CPU"):
+            state_h, state_c = self.encoder.predict(inputs)
         self.state_h = np.repeat(
             state_h, self.strategy_optimizer.num_particles, axis=0
             )
@@ -549,7 +531,7 @@ class SplitLSTMMPC(_MPC):
         
         strategies = np.reshape(
             strategies, 
-            (strategies.shape[0]*strategies.shape[1], strategies.shape[2], 1)
+            (strategies.shape[0]*strategies.shape[1], strategies.shape[2])
             )
         
         return self.state_h, self.state_c, strategies
