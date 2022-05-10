@@ -299,6 +299,7 @@ class ClientConnection(Thread):
     
     def recv(self):
         
+        countdown = 50
         ultimate_buffer=b''
         while True:
             
@@ -310,16 +311,19 @@ class ClientConnection(Thread):
             except Exception as e:
                 ex_type, ex_value, ex_traceback = sys.exc_info()
                 if ex_type.__name__ == "BlockingIOError":
+                    time.sleep(.01)
                     if len(ultimate_buffer)>0:
-                        break
-                    else: # No data received yet
-                        time.sleep(.01)
-                        continue
+                        countdown-=1
+                        if countdown<=0:
+                            break
+                    continue
             
             # Check if we have reached end of data:
             if len(receiving_buffer)==0:
                 if len(ultimate_buffer)>0:
-                    break
+                    countdown-=1
+                    if countdown<=0:
+                        break
                 else: # No data received yet
                     time.sleep(.01)
                     continue
@@ -418,6 +422,7 @@ class DistantServer(Thread):
         # Set non-blocking so we can return None if not done:
         connection.setblocking(0)
         ultimate_buffer=b''
+        countdown = 50
         while True:
             
             # Retrieve data to temporary buffer:
@@ -429,7 +434,10 @@ class DistantServer(Thread):
                 ex_type, ex_value, ex_traceback = sys.exc_info()
                 if ex_type.__name__ == "BlockingIOError" :
                     if len(ultimate_buffer)>0:
-                        break
+                        time.sleep(.01)
+                        countdown-=1
+                        if countdown<=0:
+                            break
                     else: # No data received yet
                         return None
                 else:
@@ -438,7 +446,10 @@ class DistantServer(Thread):
             # Check if we have reached end of data:
             if len(receiving_buffer)==0:
                 if len(ultimate_buffer)>0:
-                    break
+                    time.sleep(.01)
+                    countdown-=1
+                    if countdown<=0:
+                        break
                 else: # No data received yet
                     return None
             
