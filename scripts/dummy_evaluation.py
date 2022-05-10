@@ -131,7 +131,7 @@ controller = dcc.control.SplitLSTMMPC(
 print("Run time:")
 for _ in range(10):
     t_start = time.perf_counter()
-    controller.feedback(inputs,objectives)
+    im_strat = controller.feedback(inputs,objectives)
     print(time.perf_counter() - t_start)
 
 # outputs:
@@ -169,17 +169,28 @@ for s in range(20):
 
 #%% Test as part of control server:
 
-dummy_dispatcher = lambda output, meta: print(f"{meta['index']} dispatched")
+# dummy_dispatcher = lambda output, meta: print(f"{meta['index']} dispatched")
+def dummy_dispatcher(output, meta):
+    
+    similarity = np.logical_xor(output, im_strat[meta["selection"]])
+    
+    similarity = 1-np.mean(similarity)
+    
+    print(f"{meta['index']} dispatched, similarity: {100*similarity:.1g}%%")
 
-server = dcc.server.Server(controller, device = "GPU")
+
+# server = dcc.server.Server(controller, device = "GPU")
+# server.start()
+
+server = dcc.server.DistantServer("DESKTOP-A5D6QR1")
 server.start()
 
-for index in range(25):
+for index in range(100_000):
     sub_selection = np.random.choice(inputs.shape[0],size=27,replace=False)
     server.queue.put(
         (
             (inputs[sub_selection],objectives[sub_selection]),
-            dict(index=index),
+            dict(index=index, selection = sub_selection),
             dummy_dispatcher
             )
         )

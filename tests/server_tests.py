@@ -32,7 +32,7 @@ dummy_dispatcher = lambda output, meta: print(
     f"{time.strftime('%Y-%m-%d %H:%M:%S')} - index {meta['index']} received: {np.array(output, dtype=np.uint8)}"
     )
 
-server = dcc.server.DistantServer("127.0.0.1")
+server = dcc.server.DistantServer("DESKTOP-A5D6QR1")
 server.start()
 
 for index in range(100_000):
