@@ -20,8 +20,8 @@ import tensorflow as tf
 import deepcellcontrol as dcc
 
 # %% Import parameters and model from training folder:
-# res_folder = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-05_18-01-32_7fc61802-b5f4-4c22-badb-ec0a2171b59e"
-res_folder = "D:/shared_packages/deepcellcontrol/assets/models/2022-05-07_18-16-47_66539337-00a1-4b86-8fa2-48448c35d386"
+res_folder = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_21-52-16_f651d065-2d7b-4f55-8dee-10e48d6e79b2"
+# res_folder = "D:/shared_packages/deepcellcontrol/assets/models/2022-05-07_18-16-47_66539337-00a1-4b86-8fa2-48448c35d386"
 
 with open(res_folder + "/training_parameters.json","r") as f:
     params = json.load(f)
@@ -122,14 +122,14 @@ objectives = np.array(objectives)
 os.makedirs(res_folder+'/dummy_control', exist_ok = True)
 
 controller = dcc.control.SplitLSTMMPC(
-    model_file = res_folder + '/model_besteval.hdf5',
+    model_file = res_folder + '/model.hdf5',
     strategy_optimizer=dcc.control.BinaryParticleSwarmOptimizer(
         horizon=dataset.horizon, iterations=20, particles=20
         )
     )
 
 print("Run time:")
-for _ in range(10):
+for _ in range(1):
     t_start = time.perf_counter()
     im_strat = controller.feedback(inputs,objectives)
     print(time.perf_counter() - t_start)
@@ -176,13 +176,14 @@ def dummy_dispatcher(output, meta):
     
     similarity = 1-np.mean(similarity)
     
-    print(f"{meta['index']} dispatched, similarity: {100*similarity:.1g}%%")
+    print(f"{meta['index']} dispatched, similarity: {100*similarity:.3f} %")
 
 
 # server = dcc.server.Server(controller, device = "GPU")
 # server.start()
 
-server = dcc.server.DistantServer("DESKTOP-A5D6QR1")
+# server = dcc.server.DistantServer("DESKTOP-A5D6QR1")
+server = dcc.server.DistantServer("127.0.0.1")
 server.start()
 
 for index in range(100_000):

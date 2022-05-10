@@ -12,6 +12,8 @@ import gc
 import socket
 import pickle
 import sys
+import os
+import traceback
 
 import numpy as np
 import tensorflow as tf
@@ -242,7 +244,7 @@ class Server(Thread):
 
 class SocketServer(Thread):
     
-    def __init__(self, control_server):
+    def __init__(self, control_server, port = 7555, savelog = None, name = "SocketServer_1"):
         """
         Instanciate
 
@@ -257,24 +259,61 @@ class SocketServer(Thread):
 
         """
         
+        # Init Thread:
         super().__init__(daemon=True)
         
-        self.port = 7555
+        # Copy Server ref:
         self.control_server = control_server
         
+        # Start online server:
+        self.port = port
         self.server_socket = socket.socket() 
         self.server_socket.bind(('',self.port))
         self.server_socket.listen(1)
+        
+        # Logging:
+        self.name = name
+        self.savelog = savelog
+        if self.savelog is not None:
+            os.makedirs(self.savelog, exist_ok=True)
+            # self.logger = Logger(os.path.join(self.savelog,"stdout.log"))
+        
+        # Misc:
+        self._stop_flag = False
+        
+        # Print init message:
+        msg = f"""Initialized server
+            hostname: {socket.gethostname()}
+            IP adress: {socket.gethostbyname(socket.gethostname())}
+            Port: {self.port}
+            log folder: {self.savelog}
+            
+            """
+        self._msg(msg)
+    
+    def _msg(self, msg):
+        print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {self.name}: {msg}")
     
     def run(self):
         
-        while True:
+        self._msg("Started online server")
+        
+        while not self._stop_flag:
             time.sleep(.05)
             # Check if new client connection:
             client_connection,client_address=self.server_socket.accept()
-            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} New Connection: {client_address}")
+            self._msg(f" New Connection: {client_address}")
             cc = ClientConnection(client_connection, self.control_server)
             cc.start()
+        
+        self.server_socket.close()
+        self._msg("Stopped online server")
+        if self.logger is not None:
+            time.sleep(1) # probably not necessary
+            self.logger.close()
+    
+    def stop(self):
+        self._stop_flag = True
 
 class ClientConnection(Thread):
     
@@ -344,7 +383,7 @@ class ClientConnection(Thread):
 
 class DistantServer(Thread):
     
-    def __init__(self, server_address, port = 7555):
+    def __init__(self, server_address, port = 7555, fallback_server = None):
          
         super().__init__(daemon=True)
         
@@ -356,6 +395,8 @@ class DistantServer(Thread):
         "List of currently open sockets"
         self.queue = Queue()
         "Queue to receive control inputs"
+        self.fallback = fallback_server
+        "Local or remote fallback server in case connection fails with this one"
     
     def run(self):
         
@@ -379,37 +420,90 @@ class DistantServer(Thread):
             feedback_inputs, metadata, output_dispatcher = self.queue.get()
                 
             # Send out to controller
-            connection = self.send(feedback_inputs, metadata)
+            try:
+                connection = self.send(feedback_inputs, metadata, output_dispatcher)
+            except:
+                time.sleep(.5)
+                try:
+                    # Try once more:
+                    connection = self.send(
+                        feedback_inputs, metadata, output_dispatcher
+                        )
+                except Exception as e:
+                    if self.fallback is not None:
+                        print("Caught Exception below trying to send, falling back...")
+                        traceback.print_exc()
+                        self.fallback.queue.put(
+                            (feedback_inputs, metadata, output_dispatcher)
+                            )
+                    else:
+                        print("Caught Exception below trying to send, dispatching Falses...")
+                        traceback.print_exc()
+                        output_dispatcher([False]*len(feedback_inputs[0]), metadata)
+                    continue
             
             # Add to open sockets list:
-            self.open_sockets.append((connection, metadata, output_dispatcher))
+            self.open_sockets.append([connection, feedback_inputs, metadata, output_dispatcher])
         
-        # Run through open sockets:
+        # Run through open sockets and see if they have data available :
         for sock in self.open_sockets:
             
-            s, _, disp = sock
+            # Expand:
+            connection, feedback_input, metadata, output_dispatcher = sock
             
-            if s._closed:
+            # Socket has already been closed (by remote?)
+            if connection._closed:
                 continue
             
             # See if control data has been returned:
-            output = self.recv(s)
+            try:
+                output = self.recv(connection)
+            except Exception as e:
+                if self.fallback is not None:
+                    print("Caught Exception below trying to recv, falling back...")
+                    traceback.print_exc()
+                    self.fallback.queue.put(
+                        feedback_input, metadata, output_dispatcher
+                        )
+                    sock[0] = FakeSocket()
+                    continue
+                else:
+                    print("Caught Exception below trying to recv, dispatching Falses...")
+                    traceback.print_exc()
+                    output = ([False]*len(feedback_input[0]), metadata)
             
+            # Data has not been returned yet
             if output is None:
                 continue
         
             # Dispatch:
-            disp(*output)
+            output_dispatcher(*output)
         
         # Get rid of closed sockets:
         self.open_sockets = [s for s in self.open_sockets if not s[0]._closed]
         
     
-    def send(self, feedback_inputs, metadata):
+    def send(self, feedback_inputs, metadata, output_dispatcher):
         
         # Create new connection to server:
-        client_socket=socket.socket()
-        client_socket.connect((self.server_address, self.port))
+        try:
+            client_socket=socket.socket()
+            client_socket.connect((self.server_address, self.port))
+        except Exception:
+            time.sleep(.5)
+            try: # Try once more:
+                print("Caught Exception below, trying connect once more...")
+                traceback.print_exc()
+                client_socket=socket.socket()
+                client_socket.connect((self.server_address, self.port))
+            except Exception:
+                if self.fallback is not None:
+                    print("Caught exception again, falling back to local server")
+                    traceback.print_exc()
+                    self.fallback.queue.put(
+                        (feedback_inputs, metadata, output_dispatcher)
+                        )
+                    return FakeSocket()
         
         # Serialize data and send it:
         data_b = pickle.dumps([feedback_inputs, metadata])
@@ -456,12 +550,36 @@ class DistantServer(Thread):
             # Append to larger buffer:
             ultimate_buffer+= receiving_buffer
         
+        # De-serialize data:
+        control_output, metadata = pickle.loads(ultimate_buffer)
+        
         # Make sure socket is deallocated and closed:
         connection.shutdown(socket.SHUT_RDWR)
         connection.close()
         
-        # De-serialize data:
-        control_output, metadata = pickle.loads(ultimate_buffer)
-        
         return control_output, metadata
+
+class FakeSocket():
+    _closed = True
+
+
+class Logger(object):
+    # https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
+    def __init__(self, logfile):
+        self.terminal = sys.stdout
+        self.log = open(logfile, "w")
+        sys.stdout = self
+   
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
     
+    def close(self):
+        sys.stdout = self.terminal
+        self.log.close()
+
+    def flush(self):
+        # this flush method is needed for python 3 compatibility.
+        # this handles the flush command by doing nothing.
+        # you might want to specify some extra behavior here.
+        pass    
