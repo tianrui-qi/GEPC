@@ -193,7 +193,7 @@ class _MPC(_Controller):
 
         # Predict:
         with tf.device("GPU"):
-            yhat = self.model.predict(x)
+            yhat = self.model.predict(x, batch_size=1000)
 
         # Format yhat into list similar to strategies:
         # yhat = np.split(yhat,np.cumsum([i.shape[0] for i in strategies]),axis=0)[:-1]
