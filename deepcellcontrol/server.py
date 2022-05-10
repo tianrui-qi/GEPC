@@ -422,7 +422,7 @@ class DistantServer(Thread):
         # Set non-blocking so we can return None if not done:
         connection.setblocking(0)
         ultimate_buffer=b''
-        countdown = 50
+        countdown = 10
         while True:
             
             # Retrieve data to temporary buffer:
