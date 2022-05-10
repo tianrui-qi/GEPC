@@ -9,6 +9,9 @@ import time
 from threading import Thread
 from queue import Queue
 import gc
+import socket
+import pickle
+import sys
 
 import numpy as np
 import tensorflow as tf
@@ -236,3 +239,218 @@ class Server(Thread):
             )
         
         return strategies
+
+class SocketServer(Thread):
+    
+    def __init__(self, control_server):
+        """
+        Instanciate
+
+        Parameters
+        ----------
+        control_server : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        super().__init__(daemon=True)
+        
+        self.port = 7555
+        self.control_server = control_server
+        
+        self.server_socket = socket.socket() 
+        self.server_socket.bind(('',self.port))
+        self.server_socket.listen(1)
+    
+    def run(self):
+        
+        while True:
+            time.sleep(.05)
+            # Check if new client connection:
+            client_connection,client_address=self.server_socket.accept()
+            print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} New Connection: {client_address}")
+            cc = ClientConnection(client_connection, self.control_server)
+            cc.start()
+
+class ClientConnection(Thread):
+    
+    def __init__(self, connection, control_server):
+        
+        super().__init__(daemon=True)
+        
+        self.connection = connection
+        self.connection.setblocking(0)
+        self.control_server = control_server
+    
+    def run(self):
+        
+        # Wait to receive data:
+        inputs, meta = self.recv()
+        print(meta)
+        
+        # Send to controller queue:
+        self.control_server.queue.put(
+            (inputs, meta, self.dispatch)
+            )
+    
+    def recv(self):
+        
+        ultimate_buffer=b''
+        while True:
+            
+            # Retrieve data to temporary buffer:
+            try:
+                receiving_buffer = self.connection.recv(1024)
+            
+            # In some cases, this is raised when no data is available:
+            except Exception as e:
+                ex_type, ex_value, ex_traceback = sys.exc_info()
+                if ex_type.__name__ == "BlockingIOError":
+                    if len(ultimate_buffer)>0:
+                        break
+                    else: # No data received yet
+                        time.sleep(.01)
+                        continue
+            
+            # Check if we have reached end of data:
+            if len(receiving_buffer)==0:
+                if len(ultimate_buffer)>0:
+                    break
+                else: # No data received yet
+                    time.sleep(.01)
+                    continue
+            
+            ultimate_buffer+= receiving_buffer
+
+        # De-serialize:
+        inputs, meta = pickle.loads(ultimate_buffer)
+        
+        return inputs, meta
+    
+    def dispatch(self, output, meta):
+        
+        # Serialize and send:
+        sendback = pickle.dumps([output, meta])
+        self.connection.sendall(sendback)
+        self.connection.close()
+
+class DistantServer(Thread):
+    
+    def __init__(self, server_address, port = 7555):
+         
+        super().__init__(daemon=True)
+        
+        self.server_address = server_address
+        "Address of the remote server (SocketServer)"
+        self.port = port
+        "Port the SocketServer is listening to"
+        self.open_sockets = []
+        "List of currently open sockets"
+        self.queue = Queue()
+        "Queue to receive control inputs"
+    
+    def run(self):
+        
+        while True:
+            time.sleep(.1)
+            self._run()
+
+    def _run(self):
+        """
+        Function that performs the actual run operations.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        
+        # Retrieve inputs from queue:
+        while not self.queue.empty():
+            feedback_inputs, metadata, output_dispatcher = self.queue.get()
+                
+            # Send out to controller
+            connection = self.send(feedback_inputs, metadata)
+            
+            # Add to open sockets list:
+            self.open_sockets.append((connection, metadata, output_dispatcher))
+        
+        # Run through open sockets:
+        for sock in self.open_sockets:
+            
+            s, _, disp = sock
+            
+            if s._closed:
+                continue
+            
+            # See if control data has been returned:
+            output = self.recv(s)
+            
+            if output is None:
+                continue
+        
+            # Dispatch:
+            disp(*output)
+        
+        # Get rid of closed sockets:
+        self.open_sockets = [s for s in self.open_sockets if not s[0]._closed]
+        
+    
+    def send(self, feedback_inputs, metadata):
+        
+        # Create new connection to server:
+        client_socket=socket.socket()
+        client_socket.connect((self.server_address, self.port))
+        
+        # Serialize data and send it:
+        data_b = pickle.dumps([feedback_inputs, metadata])
+        client_socket.sendall(data_b)
+        
+        return client_socket
+    
+    def recv(self, connection):
+        
+        # Set non-blocking so we can return None if not done:
+        connection.setblocking(0)
+        ultimate_buffer=b''
+        while True:
+            
+            # Retrieve data to temporary buffer:
+            try:
+                receiving_buffer = connection.recv(1024)
+            
+            # In some cases, this is raised when no data is available:
+            except Exception as e:
+                ex_type, ex_value, ex_traceback = sys.exc_info()
+                if ex_type.__name__ == "BlockingIOError" :
+                    if len(ultimate_buffer)>0:
+                        break
+                    else: # No data received yet
+                        return None
+                else:
+                    raise e
+            
+            # Check if we have reached end of data:
+            if len(receiving_buffer)==0:
+                if len(ultimate_buffer)>0:
+                    break
+                else: # No data received yet
+                    return None
+            
+            # Append to larger buffer:
+            ultimate_buffer+= receiving_buffer
+        
+        # Make sure socket is deallocated and closed:
+        connection.shutdown(socket.SHUT_RDWR)
+        connection.close()
+        
+        # De-serialize data:
+        control_output, metadata = pickle.loads(ultimate_buffer)
+        
+        return control_output, metadata
+    
