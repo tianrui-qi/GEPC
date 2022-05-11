@@ -282,15 +282,13 @@ class SocketServer(Thread):
         self._stop_flag = False
         
         # Print init message:
-        msg = f"""Initialized server
-            hostname: {socket.gethostname()}
-            IP adress: {socket.gethostbyname(socket.gethostname())}
-            Port: {self.port}
-            log folder: {self.savelog}
-            
-            """
-        self._msg(msg)
-    
+        self._msg(_serversocketinit.format(
+            hostname = socket.gethostname(),
+            ip_addr = socket.gethostbyname(socket.gethostname()),
+            port = self.port,
+            log = self.savelog
+            ))
+
     def _msg(self, msg):
         print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {self.name}: {msg}")
     
@@ -431,13 +429,13 @@ class DistantServer(Thread):
                         )
                 except Exception as e:
                     if self.fallback is not None:
-                        print("Caught Exception below trying to send, falling back...")
+                        print(f"{metadata} Caught Exception below trying to send, falling back...")
                         traceback.print_exc()
                         self.fallback.queue.put(
                             (feedback_inputs, metadata, output_dispatcher)
                             )
                     else:
-                        print("Caught Exception below trying to send, dispatching Falses...")
+                        print(f"{metadata} Caught Exception below trying to send, dispatching Falses...")
                         traceback.print_exc()
                         output_dispatcher([False]*len(feedback_inputs[0]), metadata)
                     continue
@@ -458,9 +456,10 @@ class DistantServer(Thread):
             # See if control data has been returned:
             try:
                 output = self.recv(connection)
+            
             except Exception as e:
                 if self.fallback is not None:
-                    print("Caught Exception below trying to recv, falling back...")
+                    print(f"{metadata} Caught Exception below trying to recv, falling back...")
                     traceback.print_exc()
                     self.fallback.queue.put(
                         feedback_input, metadata, output_dispatcher
@@ -468,9 +467,10 @@ class DistantServer(Thread):
                     sock[0] = FakeSocket()
                     continue
                 else:
-                    print("Caught Exception below trying to recv, dispatching Falses...")
+                    print(f"{metadata} Caught Exception below trying to recv, dispatching Falses...")
                     traceback.print_exc()
                     output = ([False]*len(feedback_input[0]), metadata)
+                    sock[0] = FakeSocket()
             
             # Data has not been returned yet
             if output is None:
@@ -492,13 +492,13 @@ class DistantServer(Thread):
         except Exception:
             time.sleep(.5)
             try: # Try once more:
-                print("Caught Exception below, trying connect once more...")
+                print(f"{metadata} Caught Exception below, trying connect once more...")
                 traceback.print_exc()
                 client_socket=socket.socket()
                 client_socket.connect((self.server_address, self.port))
             except Exception:
                 if self.fallback is not None:
-                    print("Caught exception again, falling back to local server")
+                    print(f"{metadata} Caught exception again, falling back to local server")
                     traceback.print_exc()
                     self.fallback.queue.put(
                         (feedback_inputs, metadata, output_dispatcher)
@@ -558,6 +558,16 @@ class DistantServer(Thread):
         connection.close()
         
         return control_output, metadata
+
+#%% Utilities
+
+_serversocketinit = """Initialized server
+hostname: {hostname}
+IP adress: {ip_addr}
+Port: {port}
+log folder: {log}
++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+"""
 
 class FakeSocket():
     _closed = True
