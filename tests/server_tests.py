@@ -51,19 +51,19 @@ dummy_dispatcher = lambda output, meta: print(
     f"{time.strftime('%Y-%m-%d %H:%M:%S')} - index {meta['index']} received: {np.array(output, dtype=np.uint8)}"
     )
 
-# Set up local fallback server:
-res_folder = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_21-52-16_f651d065-2d7b-4f55-8dee-10e48d6e79b2"
-controller = dcc.control.SplitLSTMMPC(
-    model_file = res_folder + '/model.hdf5',
-    strategy_optimizer=dcc.control.BinaryParticleSwarmOptimizer(
-        horizon=24, iterations=25, particles=40
-        )
-    )
-fallback_server = dcc.server.Server(controller, device = "GPU")
-fallback_server.start()
+# # Set up local fallback server:
+# res_folder = "C:/Users/System 6/Documents/deepcellcontrol/assets/models/2022-05-07_21-52-16_f651d065-2d7b-4f55-8dee-10e48d6e79b2"
+# controller = dcc.control.SplitLSTMMPC(
+#     model_file = res_folder + '/model.hdf5',
+#     strategy_optimizer=dcc.control.BinaryParticleSwarmOptimizer(
+#         horizon=24, iterations=25, particles=40
+#         )
+#     )
+# fallback_server = dcc.server.Server(controller, device = "GPU")
+# fallback_server.start()
 
 # To test without it:
-# fallback_server = None
+fallback_server = None
 
 # Set up client:
 client = dcc.server.DistantServer("DESKTOP-A5D6QR1", fallback_server=fallback_server)

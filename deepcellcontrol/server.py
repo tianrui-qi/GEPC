@@ -486,15 +486,15 @@ class DistantServer(Thread):
     def send(self, feedback_inputs, metadata, output_dispatcher):
         
         # Create new connection to server:
+        client_socket=socket.socket()
+        client_socket.settimeout(2)
         try:
-            client_socket=socket.socket()
             client_socket.connect((self.server_address, self.port))
         except Exception:
             time.sleep(.5)
             try: # Try once more:
                 print(f"{metadata} Caught Exception below, trying connect once more...")
                 traceback.print_exc()
-                client_socket=socket.socket()
                 client_socket.connect((self.server_address, self.port))
             except Exception:
                 if self.fallback is not None:
