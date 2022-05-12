@@ -299,10 +299,13 @@ class SocketServer(Thread):
         while not self._stop_flag:
             time.sleep(.05)
             # Check if new client connection:
-            client_connection,client_address=self.server_socket.accept()
-            self._msg(f" New Connection: {client_address}")
-            cc = ClientConnection(client_connection, self.control_server)
-            cc.start()
+            try:
+                client_connection,client_address=self.server_socket.accept()
+                self._msg(f" New Connection: {client_address}")
+                cc = ClientConnection(client_connection, self.control_server)
+                cc.start()
+            except Exception as e:
+                traceback.print_exc()
         
         self.server_socket.close()
         self._msg("Stopped online server")
