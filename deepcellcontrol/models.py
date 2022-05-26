@@ -268,3 +268,33 @@ def _mlpdecoder(state_h, state_c, future_light, hyper_parameters):
             )(hidden)
     
     return prediction
+
+def mlp_nopast(hyper_parameters):
+    
+    future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
+    
+    # Hidden layers:
+    for l in range(hyper_parameters["mlp_layers"]):
+        hidden = Dense(
+            hyper_parameters["mlp_dim"],
+            activation='relu',
+            name=f"decoder_{l}"
+            )(future_light)
+    
+    # Output layer:
+    prediction = Dense(
+            hyper_parameters["horizon"],
+            activation="linear",
+            name=f"decoder_{l+1}"
+            )(hidden)
+
+    # Finalize model:
+    model = Model(future_light, prediction)
+    model.compile(
+        loss=hyper_parameters["loss"],
+        optimizer = Adam(
+            learning_rate=hyper_parameters["learning_rate"]
+            )
+        )
+    
+    return model
