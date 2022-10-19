@@ -8,7 +8,6 @@ Functions related to training and evaluating time-series forecasting networks
 import os
 import json
 import pickle
-import csv
 
 import numpy as np
 from tensorflow.keras.callbacks import Callback, ModelCheckpoint, EarlyStopping
@@ -312,38 +311,35 @@ def batch_train_eval(
             res_file
             )
     
-    # Append information to CSV log file:
-    csv_log_training(
-        params['logfile'],
-        dict(
-            folder=save_folder,
-            parameters=str(params),
-            epochs=history.epoch[-1],
-            loss=min(history.history['loss']),
-            rmse=np.mean(metrics['rmse']),
-            mae=np.mean(metrics['mae'])
-            )
-        )
-    
     return network
 
 
-def csv_log_training(logfile, row):
-    
-    if logfile is not None:
-        if not os.path.exists(logfile):
-            # Init CSV file:
-            with open(logfile, 'w', newline='') as filehandle:
-                logger = csv.DictWriter(filehandle, fieldnames=list(row.keys()))
-                logger.writeheader()
-        with open(logfile, 'a', newline='') as filehandle:
-            logger = csv.DictWriter(filehandle,fieldnames=list(row.keys()))
-            logger.writerow(row)
-
-
 class EvaluationCallback(Callback):
+    """
+    Callback object for keras training.
+    This custom Callback runs the evaluate() function in this module at the
+    end of each epoch.
+    
+    See https://www.tensorflow.org/guide/keras/custom_callback
+    """
     
     def __init__(self, dataset, savefile=None):
+        """
+        Instanciate
+
+        Parameters
+        ----------
+        dataset : data.Dataset
+            Dataset to use for evaluation.
+        savefile : str, optional
+            Path to save the model that had the best evaluation result so far.
+            The default is None.
+
+        Returns
+        -------
+        None.
+
+        """
         super(Callback, self).__init__()
         self._dataset = dataset
         self.metrics = []
@@ -351,6 +347,21 @@ class EvaluationCallback(Callback):
         self._best = np.inf
     
     def on_epoch_end(self, epoch, logs=None):
+        """
+        Evaluate predictions RMSE on epoch end
+
+        Parameters
+        ----------
+        epoch : int
+            Index of epoch.
+        logs : Dict, optional
+            see tf.keras.callbacks.Callback
+
+        Returns
+        -------
+        None.
+
+        """
         
         # Record dataset batch size:
         batch_size = self._dataset.batch_size
@@ -365,6 +376,14 @@ class EvaluationCallback(Callback):
         self.save_best()
 
     def save_best(self):
+        """
+        Save current model if evaluation was better than previous epochs.
+
+        Returns
+        -------
+        None.
+
+        """
         
         if self.savefile is None:
             return
