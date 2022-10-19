@@ -5,9 +5,19 @@ Created on Thu Sep 10 16:14:23 2020
 
 @author: jeanbaptiste
 """
+import os
+
 import numpy as np
+from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
-import os, cv2
+import cv2
+
+# Movies etc colormap:
+gfpmap = np.zeros(shape=(256,4))
+gfpmap[:,3]= 1
+gfpmap[:,1] = np.arange(0,1,step=1/256)
+gfpmap[:,2] = np.arange(0,.5,step=.5/256)
+gfpmap = ListedColormap(gfpmap)
 
 def getRandomStimulations(totalchambers, timepoints, upper_limit=1, lower_limit=-2):
     '''
@@ -1166,3 +1176,10 @@ def plotq(fluo,q = .5, color="b"):
         color=color,
         alpha=.2,
         )
+
+def color_img(I, vmin=0.1, vmax=0.7, cmap=gfpmap):
+    
+    I = ((I.astype(np.float64)/4095)-vmin)/(vmax-vmin)
+    I = cmap(I)[:,:,:3]
+    
+    return I
