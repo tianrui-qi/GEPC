@@ -1158,11 +1158,11 @@ def plotq(fluo,q = .5, color="b"):
     """
     
     x = np.arange(0,len(fluo[0]),1)/12
-    plt.plot(x,np.median(fluo,axis=0), color=color)
+    plt.plot(x,np.nanmedian(fluo,axis=0), color=color)
     plt.fill_between(
         x,
-        np.quantile(fluo,.5-q/2,axis=0),
-        np.quantile(fluo,.5+q/2,axis=0),
+        np.nanquantile(fluo,.5-q/2,axis=0),
+        np.nanquantile(fluo,.5+q/2,axis=0),
         color=color,
         alpha=.2,
         )
