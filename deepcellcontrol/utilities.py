@@ -12,12 +12,18 @@ from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import cv2
 
-# Movies etc colormap:
+# Movies etc colormaps:
 gfpmap = np.zeros(shape=(256,4))
 gfpmap[:,3]= 1
 gfpmap[:,1] = np.arange(0,1,step=1/256)
 gfpmap[:,2] = np.arange(0,.5,step=.5/256)
 gfpmap = ListedColormap(gfpmap)
+
+graymap = np.zeros(shape=(256,4))
+graymap[:,3]= 1
+graymap[:,:3] = np.repeat(np.arange(0,1,step=1/256)[:,np.newaxis],3,axis=-1)
+graymap = ListedColormap(graymap)
+
 
 def getRandomStimulations(totalchambers, timepoints, upper_limit=1, lower_limit=-2):
     '''
@@ -58,6 +64,7 @@ def getRandomStimulations(totalchambers, timepoints, upper_limit=1, lower_limit=
     
     # Run over timepoints:
     for t in range(timepoints-1):
+        print((sum_arr[:,t], flips[:,t]))
         sum_arr[:,t+1] = sum_arr[:,t] + flips[:,t] # Add timepoints sequentially
         sum_arr = sum_arr.clip(lower_limit,upper_limit) # Apply lower and upper limits
         
