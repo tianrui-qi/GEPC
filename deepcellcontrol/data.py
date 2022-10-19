@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+This module is dedicated to loading, formatting, and feeding data for 
+training the encoder-decoder network. The Normalization object is also 
+used during experiments to normalize data on the fly.
+
 Created on Sun Sep 26 19:46:40 2021
 
 @author: jeanbaptiste
@@ -402,120 +406,6 @@ class LSTMFormatter(AbstractFormatter):
         
         return fluos, stims
 
-class LSTMAutoencoderFormatter(LSTMFormatter):
-    
-    def training(self, past, future):
-        
-        X, _ = super().training(past, future)
-        
-        X = [X[0],np.zeros(shape=X[0].shape[0:2]+(1,),dtype=np.float32)]
-        
-        return X, X[0]
-
-
-
-class MLPFormatter(AbstractFormatter):
-    """
-    Formatter for the MLP prediction network
-    """
-    
-    def training(self, past, future):
-        """
-        Formatting method when in training or evaluation mode
-
-        Parameters
-        ----------
-        past : 3D numpy array
-            Past datapoints. Dimensions are (cells, past_steps, features)
-        future : 3D numpy array
-            Future datapoints. Dimensions are (cells, horizon, features)
-
-        Returns
-        -------
-        X : 2D numpy array
-            The inputs to the MLP network. Dimensions are 
-            (cells, past_steps * features + horizon * 1)
-        Y : 3D numpy array
-            The groundtruth for the MLP network. Dimensions are
-            (cells, horizon, 1)
-
-        """
-        
-        X = np.concatenate(
-            (self.control(past), future[:, :, self.features.index("stims")]),
-            axis=1
-            )
-        Y = future[:, :, [feature in ("fluos", "fluo1") for feature in self.features]]
-
-        return X, Y
-    
-    def control(self, past):
-        """
-        Formatting method when in control mode
-        
-        Parameters
-        ----------
-        past : 3D numpy array
-            Past datapoints. Dimensions are (cells, past_steps, features)
-
-        Returns
-        -------
-        X : 3D numpy array
-            The inputs to an MLPMPC controller. Dimensions are
-            (cells, past_steps * features)
-
-        """
-        
-        X = np.reshape(
-            past,
-            newshape = (past.shape[0], past.shape[1]*past.shape[2]),
-            order='F'
-            )
-        
-        return X
-        
-    def reconstruct(self, X, Y):
-        """
-        Reconstruct original fluorescence and stimulations time-series from
-        X, Y pair
-
-        Parameters
-        ----------
-        X : 2D numpy array
-            The inputs to the MLP network. Dimensions are 
-            (cells, past_steps * features + horizon * 1)
-        Y : 3D numpy array
-            The groundtruth for the MLP network. Dimensions are
-            (cells, horizon, 1)
-
-        Returns
-        -------
-        fluos : 2D numpy array
-            Reconstructed fluorescence trajectories. Dimensions are 
-            (cells, past_steps + horizon)
-        stims : 2D numpy array
-            Reconstructed stimulations. Dimensions are 
-            (cells, past_steps + horizon)
-
-        """
-        
-        past_steps = int((X.shape[1] - Y.shape[1]) / len(self.features))
-        
-        
-        fluos_ind = [f for f, feature in enumerate(self.features) if feature in ("fluos", "fluo1")][0]
-        fluos_ind *= past_steps
-        stims_ind = [f for f, feature in enumerate(self.features) if feature == "stims"][0]
-        stims_ind *= past_steps
-        
-        fluos = np.concatenate(
-            (X[:,fluos_ind:fluos_ind+past_steps],Y[:,:,0]), axis=1
-            )
-        stims = np.concatenate(
-            (X[:,stims_ind:stims_ind+past_steps], X[:,-Y.shape[1]:]),
-            axis=1
-            )
-        
-        return fluos, stims
 
 class Datasets(Generator):
     """
@@ -1081,13 +971,6 @@ def single_cell_plot(raw_dataset, cell_nb, savefig = None):
     
     ax2.plot(x,raw_dataset["area"][cell_nb],"b",label="area", zorder = 10)
     ax2.plot(x,raw_dataset["perimeter"][cell_nb],"b",alpha=.5,label="perimeter", zorder = 10)
-    
-    # # Divisions:
-    # yl = ax1.get_ylim()
-    # for _x, _d in zip(x, raw_dataset["divisions"][cell_nb]):
-    #     if _d:
-    #         ax1.plot([_x, _x],yl,color="k", alpha=.1, zorder= 5)
-    # ax1.set_ylim(yl)
     
     ax1.set_ylabel('length & width, pixels', color='g')
     ax2.set_ylabel('area & perim., pixels', color='b')
