@@ -8,7 +8,7 @@ Created on Wed Oct 27 14:18:43 2021
 import os
 import time
 
-# Default LSTM parameters:
+# Default LSTM-MLP parameters:
 defaults = dict(
     datasets_folder = os.path.dirname(__file__) + '/../assets/data/experimental/',
     training_sets=(
@@ -16,13 +16,13 @@ defaults = dict(
         "2022-04-19_TrainingSet4_dataset.pkl",
         "2022-04-22_TrainingSet6_dataset.pkl",
         "2022-04-24_TrainingSet8_dataset.pkl",
-        ),
+        ), # Training datasets
     eval_sets=(
         "2022-04-15_TrainingSet3_dataset.pkl",
         "2022-04-21_TrainingSet5_dataset.pkl",
         "2022-04-23_TrainingSet7_dataset.pkl",
-        ),
-    models_folder = os.path.dirname(__file__) + '/../assets/models/',
+        ), # Evaluation datasets
+    models_folder = os.path.dirname(__file__) + '/../assets/models/', # Folder to save models to
     features=(
         'fluo1',
         'area',
@@ -32,24 +32,23 @@ defaults = dict(
         'chamber_std_fluo1',
         'neighbor_stims',
         'stims'
-        ),
-    past_steps=36,
-    horizon = 24,
-    latent_dim=16,
-    output_mode = "timedistributed", # or "dense"
-    output_dim=1,
-    batch_size=100,
-    loss = "mse",
-    learning_rate=1e-3,
-    dropout=0,
-    mlp_layers = 5,
-    mlp_dim = 32,
+        ), # Features to compile for training/control
+    past_steps=36, # obsolete.
+    horizon = 24, # Number of future time points to use for prediction horizon
+    latent_dim=16, # Number of LSTM units in 2nd decoder layer
+    output_mode = "timedistributed", # or "dense" # For LSTM decoder, obsolete.
+    output_dim=1, # Number of features of decoder output
+    batch_size=100, # Training batch size
+    loss = "mse", # Loss to use for training
+    learning_rate=1e-3, # Training learning rate
+    dropout=0, # Obsolete
+    mlp_layers = 5, # Number of MLP decoder layers
+    mlp_dim = 32, # Units per MLP decoder layer
     training_parameters = dict(
         steps_per_epoch = 200,
         epochs=1000
-        ),
-    save_folder=time.strftime("%Y-%m-%d_%H-%M-%S"),
-    logfile=None
+        ), # Keras training parameters
+    save_folder=time.strftime("%Y-%m-%d_%H-%M-%S") # Folder to save model, evaluation etc...
     )
 
 # Feature types names (for normalization purposes):

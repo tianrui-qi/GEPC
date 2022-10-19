@@ -4,6 +4,9 @@
 This file contains functions and objects to simulate the behavior of our 
 optogenetic systems.
 
+Note: This code was used for preliminary evaluations but has not been
+used in a while. We will update it soon as part of a theoretical study.
+
 @author: jeanbaptiste
 """
 import copy
