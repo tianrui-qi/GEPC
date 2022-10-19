@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Implementation of control algorithms and strategy optimizers.
+
 Created on Mon Oct 26 12:56:30 2020
 
 @author: jeanbaptiste
@@ -22,14 +24,6 @@ class _Controller:
     strategy : 2D numpy array of bools
         Array containing strategies for each cell over the entire
         prediction horizon. Size is cells -by- horizon.
-
-    Methods
-    -------
-    __init__:
-        Instanciation.
-    feedback:
-        Feedback function for multiple cells at the current timepoint.
-
     """
 
     def __init__(self):
@@ -85,18 +79,6 @@ class _MPC(_Controller):
     ----------
     strategy_optimizer : _optimizer object
         Strategy optimizer object of sub-classes of _optimizer.
-
-    Methods
-    -------
-    __init__:
-        Instanciation.
-    getStrategy:
-        Identify optimal strategies.
-    run_strategies:
-        Predict response to selected strategies.
-    compute_scores:
-        Compute RMSE over model predictions for each cell's objective.
-
     """
 
     def __init__(
@@ -286,14 +268,6 @@ class MLPMPC(_MPC):
     ----------
     model : Keras model object.
         MLP as defined in models.py.
-
-    Methods
-    -------
-    __init__:
-        Instanciation.
-    compile_x:
-        Compile X array to do predictions over, formatted for the MLP model.
-
     """
 
     def __init__(self, model_file=None, hidden_layers=10, features=2, *args, **kwargs):
@@ -367,14 +341,6 @@ class LSTMMPC(_MPC):
     ----------
     model : Keras model object.
         LSTM encoder-decoder as defined in models.py.
-
-    Methods
-    -------
-    __init__:
-        Instanciation.
-    compile_x:
-        Compile X array to do predictions over, formatted for the LSTM model.
-
     """
 
     def __init__(self, model_file=None, *args, **kwargs):
@@ -436,8 +402,21 @@ class LSTMMPC(_MPC):
             )
 
         return inputs, strategies
-    
+
+
 class SplitLSTMMPC(_MPC):
+    """
+    Model predictive controller based on a plit version of the LSTM 
+    encoder-decoder model. Because the past only needs to be encoded once and 
+    then be evaluated against hundreds of optogenetic strategies, this version
+    is much faster.
+    Child class of _MPC.
+
+    Attributes
+    ----------
+    model : Keras model object.
+        LSTM encoder-decoder as defined in models.py.
+    """
     
     def __init__(self, model_file, *args, **kwargs):
         """
@@ -565,116 +544,6 @@ class SplitLSTMMPC(_MPC):
         predictions = self.model.predict(x)
         
         return predictions
-        
-
-class _RL(_Controller):
-    def __init__(self, model_file, *args, **kwargs):
-        """
-        Instanciation.
-
-        Parameters
-        ----------
-        model_file : str
-            Filepath to model weights file.
-        *args and **kwargs : See _Controller class
-
-        Returns
-        -------
-        None.
-
-        """
-        super().__init__(*args, **kwargs)
-        
-        self.model = tf.keras.models.load_model(model_file)
-
-    def get_strategy(self, inputs, objectives):
-
-        # Compile array to feed into model:
-        x = self.compile_x(inputs, objectives)
-
-        # Predict:
-        yhat = self.model.predict(x)
-
-        return yhat > 0.5
-
-
-class MPLRL(_RL):
-    """
-    Reinforcement-Learning controller that issues a single control strategy
-    without the need for optimization.
-
-    Attributes
-    ----------
-    model : Keras model object.
-        LSTM encoder-decoder as defined in models.py.
-
-    Methods
-    -------
-    __init__ :
-        Instanciation.
-    compile_x :
-        Compile X array to do predictions over, formatted for the LSTM model.
-    """
-
-    def compile_x(self, inputs, objectives):
-        """
-        Compile X array to do predictions over, formatted for the MLP model.
-
-        Parameters
-        ----------
-        inputs : list
-            List containing past observed variables (Fluorescence, cell length
-            etc...) and past control inputs (DMD inputs...).
-            Each list element contains the data for each cell to process in
-            parallel. Each of those elements is a list containing one 2D numpy
-            arrays of size variables -by- past_timepoints for past observed
-            variables and one 1D numpy array of size past_timepoints for past
-            control inputs.
-        objectives : list
-            List containing objectives for each cell to determine the strategy
-            for. Size is cells -by- horizon.
-
-        Returns
-        -------
-        x : 2D numpy array
-            Compiled X array for MLP model. Size is
-            cells -by- (past_steps * features + horizon)
-
-        """
-
-        x = np.empty(
-            (
-                len(inputs),
-                inputs[0][0].shape[0] * self.past_steps
-                + self.past_steps
-                + self.horizon,
-            ),
-            dtype=float,
-        )
-
-        for c in range(len(inputs)):
-            # Process objective:
-            if objectives[c].shape[0] >= self.horizon:
-                obj = objectives[c][: self.horizon]
-            else:  # If we're reaching the end of the control objective, pad with zeros
-                obj = np.concatenate(
-                    (
-                        objectives[c],
-                        np.zeros((self.horizon - objectives[c].shape[0]), dtype=float),
-                    ),
-                    axis=0,
-                )
-
-            x[c] = np.concatenate(
-                (
-                    inputs[c][0][:, -self.past_steps :].flatten(),
-                    inputs[c][1][-self.past_steps :].flatten(),
-                    obj,
-                ),
-                axis=0,
-            )
-
-        return x
 
 
 class _Optimizer:
@@ -691,14 +560,6 @@ class _Optimizer:
         Maximum number of optimization iterations.
     strategies : None
         placeholder for strategies proposed by the optimizer.
-
-    Methods
-    -------
-    __init__:
-        Instanciation.
-    iterate:
-        Run one iteration step.
-
     """
 
     def __init__(self, horizon=12, iterations=1):
@@ -769,16 +630,6 @@ class NullOptimizer(_Optimizer):
     strategies : 2D numpy array of bools
         All possible control strategies over horizon. Size is 2^horizon -by-
         horizon.
-
-    Methods
-    -------
-    __init__:
-        Instanciation.
-    run:
-        Return all strategies for each cell.
-    best_strategy:
-        Identify best strategy for each cell.
-
     """
 
     def __init__(self, *args, **kwargs):
