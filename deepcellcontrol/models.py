@@ -1,28 +1,46 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Model definitions for timeseries prediction + architecture manipulation utils
+
 Created on Fri Aug 14 18:24:45 2020
 
 @author: jeanbaptiste
 """
-from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import Dense, LSTM, Input, Dropout, TimeDistributed, Concatenate
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, LSTM, Input, TimeDistributed, Concatenate
 from tensorflow.keras.optimizers import Adam
 
-def lstm(hyper_parameters):
+
+def lstm_mlp(hyper_parameters):
+    """
+    Get LSTM-MLP encoder-decoder network
+
+    Parameters
+    ----------
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    model : Model
+        Compiled LSTM-MLP model.
+
+    """
     
     # Inputs:
     past_events = Input(
         (None, len(hyper_parameters["features"])),
         name='past_inputs'
         )
-    future_light = Input((None,),name='future_inputs')
+    future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
     
     # Encoder:
     state_h, state_c = _encoder(past_events, hyper_parameters)
     
     # Decoder:
-    prediction = _decoder(state_h, state_c, future_light, hyper_parameters)
+    prediction = _mlpdecoder(state_h, state_c, future_light, hyper_parameters)
 
     # Finalize model:
     model = Model([past_events, future_light], prediction)
@@ -35,87 +53,27 @@ def lstm(hyper_parameters):
     
     return model
 
-def lstm_encoder(hyper_parameters):
-    
-    # Inputs:
-    past_events = Input(
-        (None, len(hyper_parameters["features"])),
-        name='past_inputs'
-        )
-    
-    # Encoder:
-    state_h, state_c = _encoder(past_events, hyper_parameters)
-
-    # Finalize model:
-    model = Model(past_events, [state_h, state_c])
-    model.compile(
-        loss=hyper_parameters["loss"],
-        optimizer = Adam(
-            learning_rate=hyper_parameters["learning_rate"]
-            )
-        )
-    
-    return model
-
-def lstm_decoder(hyper_parameters):
-    
-    # Inputs:
-    state_h = Input((hyper_parameters["latent_dim"],),name='state_h') 
-    state_c = Input((hyper_parameters["latent_dim"],),name='state_c') 
-    future_light = Input((None,),name='future_inputs')
-  
-    # Decoder:
-    prediction = _decoder(state_h, state_c, future_light, hyper_parameters)
-
-    # Finalize model:
-    model = Model([state_h, state_c, future_light], prediction)
-    model.compile(
-        loss=hyper_parameters["loss"],
-        optimizer = Adam(
-            learning_rate=hyper_parameters["learning_rate"]
-            )
-        )
-    
-    return model
-
-def _encoder(past_events,hyper_parameters):
-    
-    # Encoding LSTM: (return internal states to feed into decoder)
-    intermediate = LSTM(64,name='encoder_0',return_sequences=True)(past_events)
-    _, state_h, state_c = LSTM(
-        hyper_parameters["latent_dim"],return_state=True,name='encoder_1'
-        )(intermediate)
-    
-    return state_h, state_c
-
-
-def _decoder(state_h, state_c, future_light, hyper_parameters):
-    
-    
-    if hyper_parameters["output_mode"]=="timedistributed":
-        # Decoding LSTM: (Initialize with decoder states, pass future light inputs)
-        decoder_outputs = LSTM(
-            hyper_parameters["latent_dim"],
-            return_sequences=True,
-            name='decoder_0',
-            )(future_light,initial_state=[state_h, state_c])
-        # Compile prediction over horizon:
-        prediction = TimeDistributed(
-            Dense(1,activation="linear"),
-            name="decoder_1"
-            )(decoder_outputs)
-    elif hyper_parameters["output_mode"]=="dense":
-        decoder_outputs = LSTM(
-            hyper_parameters["latent_dim"], name='decoder_0',
-            )(future_light,initial_state=[state_h, state_c])
-        prediction = Dense(
-            hyper_parameters["horizon"],activation="linear",name="decoder_1"
-            )(decoder_outputs)
-    
-    return prediction
-    
 
 def split(model, decode_mode="mlp"):
+    """
+    Split encoder-decoder model into encoder and decoder parts.
+
+    Parameters
+    ----------
+    model : Model
+        Encoder-decoder model.
+    decode_mode : str, optional
+        Decoder architecture type, options are "lstm" or "mlp".
+        The default is "mlp".
+
+    Returns
+    -------
+    encoder : Model
+        Encoder model (not compiled).
+    decoder : Model
+        Decoder model (not compiled).
+
+    """
     
     # Collect hyper_parameters:
     hyper_parameters = dict(
@@ -154,66 +112,56 @@ def split(model, decode_mode="mlp"):
 
 
 def _transfer(model1, model2, layer_name):
+    """
+    Transfer layer weights between models
+
+    Parameters
+    ----------
+    model1 : Model
+        Model to copy weights from.
+    model2 : Model
+        Model to transfer weights to.
+    layer_name : str
+        Layer name. The layer name must be shared between both models.
+
+    Returns
+    -------
+    None.
+
+    """
+    
     weights = model1.get_layer(layer_name).get_weights()
     model2.get_layer(layer_name).set_weights(weights)
 
-# TODO remove?
-def mlp(hyper_parameters):
-    
-    model = Sequential()
-    model.add(Input(
-        shape=(
-            hyper_parameters["past_steps"]*len(hyper_parameters["features"])
-            +hyper_parameters["horizon"],
-            ),
-        name="input_layer"
-        ))
-    for l in range(hyper_parameters["mlp_layers"]):
-        model.add(
-            Dense(
-                hyper_parameters["mlp_dim"],
-                activation='relu',
-                name=f"hidden_layer_{l}"
-                )
-            )
-        if hyper_parameters["dropout"] > 0:
-            model.add(Dropout(hyper_parameters["dropout"], name=f"dropout_{l}"))
-    
-    # Output layer:
-    model.add(
-        Dense(
-            hyper_parameters["horizon"],
-            activation="linear",
-            name="output_layer"
-            )
-        )
-    
-    model.compile(
-        loss=hyper_parameters["loss"],
-        optimizer = Adam(
-            learning_rate=hyper_parameters["learning_rate"]
-            )
-        )
-    
-    return model
 
-def lstm_mlp(hyper_parameters):
+def lstm_encoder(hyper_parameters):
+    """
+    Get LSTM encoder network 
+
+    Parameters
+    ----------
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    model : Model
+        Compiled LSTM encoder model.
+
+    """
     
     # Inputs:
     past_events = Input(
         (None, len(hyper_parameters["features"])),
         name='past_inputs'
         )
-    future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
     
     # Encoder:
     state_h, state_c = _encoder(past_events, hyper_parameters)
-    
-    # Decoder:
-    prediction = _mlpdecoder(state_h, state_c, future_light, hyper_parameters)
 
     # Finalize model:
-    model = Model([past_events, future_light], prediction)
+    model = Model(past_events, [state_h, state_c])
     model.compile(
         loss=hyper_parameters["loss"],
         optimizer = Adam(
@@ -223,7 +171,138 @@ def lstm_mlp(hyper_parameters):
     
     return model
 
+
+def _encoder(past_events,hyper_parameters):
+    """
+    LSTM encoder definition
+
+    Parameters
+    ----------
+    past_events : tf.Tensor
+        Input tensor of past timeseries. See lstm_encoder()
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    state_h : tf.Tensor
+        LSTM hidden state.
+    state_c : tf.Tensor
+        LSTM cell state.
+
+    """
+    
+    # Encoding LSTM: (return internal states to feed into decoder)
+    intermediate = LSTM(64,name='encoder_0',return_sequences=True)(past_events)
+    _, state_h, state_c = LSTM(
+        hyper_parameters["latent_dim"],return_state=True,name='encoder_1'
+        )(intermediate)
+    
+    return state_h, state_c
+
+
+def lstm_decoder(hyper_parameters):
+    """
+    Get LSTM decoder network (obsolete)
+
+    Parameters
+    ----------
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    model : Model
+        Compiled LSTM decoder model.
+
+    """
+    
+    # Inputs:
+    state_h = Input((hyper_parameters["latent_dim"],),name='state_h') 
+    state_c = Input((hyper_parameters["latent_dim"],),name='state_c') 
+    future_light = Input((None,),name='future_inputs')
+  
+    # Decoder:
+    prediction = _decoder(state_h, state_c, future_light, hyper_parameters)
+
+    # Finalize model:
+    model = Model([state_h, state_c, future_light], prediction)
+    model.compile(
+        loss=hyper_parameters["loss"],
+        optimizer = Adam(
+            learning_rate=hyper_parameters["learning_rate"]
+            )
+        )
+    
+    return model
+
+
+def _decoder(state_h, state_c, future_light, hyper_parameters):
+    """
+    LSTM decoder definition
+
+    Parameters
+    ----------
+    state_h : tf.Tensor
+        LSTM encoder hidden state.
+    state_c : tf.Tensor
+        LSTM encoder cell state.
+    future_light : tf.Tensor
+        Input tensor of (potential) future optogenetic sequence. 
+        See lstm_mlp().
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    prediction : tf.Tensor
+        Future fluorescence prediction.
+
+    """
+    
+    
+    if hyper_parameters["output_mode"]=="timedistributed":
+        # Decoding LSTM: (Initialize with decoder states, pass future light inputs)
+        decoder_outputs = LSTM(
+            hyper_parameters["latent_dim"],
+            return_sequences=True,
+            name='decoder_0',
+            )(future_light,initial_state=[state_h, state_c])
+        # Compile prediction over horizon:
+        prediction = TimeDistributed(
+            Dense(1,activation="linear"),
+            name="decoder_1"
+            )(decoder_outputs)
+    elif hyper_parameters["output_mode"]=="dense":
+        decoder_outputs = LSTM(
+            hyper_parameters["latent_dim"], name='decoder_0',
+            )(future_light,initial_state=[state_h, state_c])
+        prediction = Dense(
+            hyper_parameters["horizon"],activation="linear",name="decoder_1"
+            )(decoder_outputs)
+    
+    return prediction
+
+
 def mlp_decoder(hyper_parameters):
+    """
+    Get MLP decoder network
+
+    Parameters
+    ----------
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    model : Model
+        Compiled MLP decoder model.
+
+    """
     
     # Inputs:
     state_h = Input((hyper_parameters["latent_dim"],),name='state_h') 
@@ -244,7 +323,30 @@ def mlp_decoder(hyper_parameters):
     
     return model
 
+
 def _mlpdecoder(state_h, state_c, future_light, hyper_parameters):
+    """
+    MLP decoder definition
+
+    Parameters
+    ----------
+    state_h : tf.Tensor
+        LSTM encoder hidden state.
+    state_c : tf.Tensor
+        LSTM encoder cell state.
+    future_light : tf.Tensor
+        Input tensor of (potential) future optogenetic sequence. 
+        See lstm_mlp().
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    prediction : tf.Tensor
+        Future fluorescence prediction.
+
+    """
     
     # Concatenate inputs together:
     hidden = Concatenate(
@@ -269,7 +371,24 @@ def _mlpdecoder(state_h, state_c, future_light, hyper_parameters):
     
     return prediction
 
+
 def mlp_nopast(hyper_parameters):
+    """
+    Get MLP network that doesn't use encoded past (for evaluation purposes)
+
+    Parameters
+    ----------
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    model : Model
+        Compiled MLP model.
+
+    """
+    
     
     future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
     
