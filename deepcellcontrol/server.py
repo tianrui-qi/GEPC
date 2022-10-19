@@ -1,5 +1,13 @@
 # -*- coding: utf-8 -*-
 """
+This module implements a basic server to handle TCP/IP control requests from a
+distant client.
+
+I had to implement this because DeLTA and deepcellcontrol where fighting for
+the GPU and performance was severely reduced. The microscope uses the
+DistantServer object below to connect to the SocketServer that runs on my
+laptop.
+
 Created on Mon Dec  6 14:20:34 2021
 
 @author: jeanbaptiste
@@ -23,6 +31,9 @@ class Server(Thread):
     
     This server monitors its inputs queue, and when there are some it compiles
     them together and sends them to the feedback controller
+    
+    Note that it does not implement the TCP/IP communications, it works only 
+    locally. The SocketServer class below implements TCP/IP comms.
     """
     
     def __init__(self, controller, device = None):
@@ -243,6 +254,9 @@ class Server(Thread):
         return strategies
 
 class SocketServer(Thread):
+    """
+    TCP/IP server that handles control requests from the client.
+    """
     
     def __init__(self, control_server, port = 7555, savelog = None, name = "SocketServer_1"):
         """
@@ -250,8 +264,15 @@ class SocketServer(Thread):
 
         Parameters
         ----------
-        control_server : TYPE
-            DESCRIPTION.
+        control_server : Server
+            Control server that actually runs the control requests.
+        port : int
+            TCP/IP port to listen to. The default is 7555
+        savelog : str
+            Path to save console logs to. The default is None.
+        name : str
+            Name of the server. Can be useful if running multiple on same 
+            machine. The default is "SocketServer_1"
 
         Returns
         -------
@@ -293,6 +314,20 @@ class SocketServer(Thread):
         print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {self.name}: {msg}")
     
     def run(self):
+        """
+        Daemon loop, constantly running once the thread is started. See
+        `threading.Thread <https://docs.python.org/3/library/threading.html>`_
+        
+        Any time a client connection socket is accepted, a ClientConnection is 
+        created to pass the control request on to self.control_server. Once the
+        Server has handled the control request the ClientConnection sends the 
+        control output and closes itself.
+
+        Returns
+        -------
+        None.
+
+        """
         
         self._msg("Started online server")
         
@@ -317,8 +352,27 @@ class SocketServer(Thread):
         self._stop_flag = True
 
 class ClientConnection(Thread):
+    """
+    Receive connection socket, pass control request to control server, send 
+    back control output when ready, close socket.
+    """
     
     def __init__(self, connection, control_server):
+        """
+        Instanciate
+
+        Parameters
+        ----------
+        connection : socket
+            New connection accepted by SocketServer.
+        control_server : Server
+            Control server to send control request to.
+
+        Returns
+        -------
+        None.
+
+        """
         
         super().__init__(daemon=True)
         
@@ -327,6 +381,18 @@ class ClientConnection(Thread):
         self.control_server = control_server
     
     def run(self):
+        """
+        Daemon run, running once the thread is started. See
+        `threading.Thread <https://docs.python.org/3/library/threading.html>`_
+        
+        Receives control request data and sends it to the control server. Note 
+        that this is not an infinite loop, the daemon dies once this returns.
+
+        Returns
+        -------
+        None.
+
+        """
         
         # Wait to receive data:
         inputs, meta = self.recv()
@@ -338,6 +404,20 @@ class ClientConnection(Thread):
             )
     
     def recv(self):
+        """
+        Receive control request data
+
+        Returns
+        -------
+        inputs : List
+            List of inputs and objectives to pass to the controller's
+            feedback() method.
+        meta : List of objects
+            List of metadata objects. These are not used by the server 
+            but simply passed back to "client" via the dispatcher for reference.
+            They can be anything
+
+        """
         
         countdown = 50
         ultimate_buffer=b''
@@ -376,15 +456,54 @@ class ClientConnection(Thread):
         return inputs, meta
     
     def dispatch(self, output, meta):
+        """
+        Send control output back to client
+
+        Parameters
+        ----------
+        output : List of 1D numpy array
+            Control outputs to dispatch back.
+        meta : List of objects
+            List of metadata objects. These are not used by the server 
+            but simply passed back to "client" via the dispatcher for reference.
+            They can be anything
+
+        Returns
+        -------
+        None.
+
+        """
         
         # Serialize and send:
         sendback = pickle.dumps([output, meta])
         self.connection.sendall(sendback)
         self.connection.close()
 
+
 class DistantServer(Thread):
+    """
+    Send control requests to the distant server over TCP/IP.
+    """
     
     def __init__(self, server_address, port = 7555, fallback_server = None):
+        """
+        Instanciate
+
+        Parameters
+        ----------
+        server_address : str
+            IP address or domain name of server.
+        port : int, optional
+            TCP/IP port that the server listens to. The default is 7555.
+        fallback_server : Server or DistantServer, optional
+            Other server to send requests to if connections
+            fail (internet issues). The default is None.
+
+        Returns
+        -------
+        None.
+
+        """
          
         super().__init__(daemon=True)
         
@@ -400,6 +519,15 @@ class DistantServer(Thread):
         "Local or remote fallback server in case connection fails with this one"
     
     def run(self):
+        """
+        Daemon run, constantly running once the thread is started. See
+        `threading.Thread <https://docs.python.org/3/library/threading.html>`_
+
+        Returns
+        -------
+        None.
+
+        """
         
         while True:
             time.sleep(.1)
@@ -407,7 +535,13 @@ class DistantServer(Thread):
 
     def _run(self):
         """
-        Function that performs the actual run operations.
+        Function that performs the actual run operations. 
+        
+        If a control request is in the queue, a new connection/socket to the
+        server is opened and the request is passed on.
+        
+        Then it goes over open connections, if control output data has
+        been returned it dispatches it and clears the socket.
 
         Returns
         -------
@@ -487,6 +621,28 @@ class DistantServer(Thread):
         
     
     def send(self, feedback_inputs, metadata, output_dispatcher):
+        """
+        Send control request to server
+
+        Parameters
+        ----------
+        feedback_inputs : List
+            List of inputs and objectives to pass to the controller's
+            feedback() method.
+        metadata : List of objects
+            List of metadata objects. These are not used by the server 
+            but simply passed back to "client" via the dispatcher for reference.
+            They can be anything
+        output_dispatchers : List
+            List of callable. These will be called to dispatch control output
+            results.
+
+        Returns
+        -------
+        socket
+            Client socket handling the request.
+
+        """
         
         # Create new connection to server:
         client_socket=socket.socket()
@@ -515,6 +671,24 @@ class DistantServer(Thread):
         return client_socket
     
     def recv(self, connection):
+        """
+        Retrieve control outputs from socket if they are available.
+
+        Parameters
+        ----------
+        connection : socket
+            Client socket that handles a control request.
+
+        Returns
+        -------
+        control_outputs : List of 1D numpy array
+            Control outputs to dispatch back.
+        metadata : List of objects
+            List of metadata objects. These are not used by the server 
+            but simply passed back to "client" via the dispatcher for reference.
+            They can be anything
+
+        """
         
         # Set non-blocking so we can return None if not done:
         connection.setblocking(0)
@@ -554,13 +728,13 @@ class DistantServer(Thread):
             ultimate_buffer+= receiving_buffer
         
         # De-serialize data:
-        control_output, metadata = pickle.loads(ultimate_buffer)
+        control_outputs, metadata = pickle.loads(ultimate_buffer)
         
         # Make sure socket is deallocated and closed:
         connection.shutdown(socket.SHUT_RDWR)
         connection.close()
         
-        return control_output, metadata
+        return control_outputs, metadata
 
 #%% Utilities
 
