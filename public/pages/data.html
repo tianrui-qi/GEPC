@@ -1,0 +1,258 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>Data &amp; datasets &#8212; deepcellcontrol  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css" />
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="config file" href="config.html" />
+    <link rel="prev" title="Welcome to deepcellcontrol’s documentation!" href="../index.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="data-datasets">
+<h1>Data &amp; datasets<a class="headerlink" href="#data-datasets" title="Permalink to this headline">¶</a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">deepcellcontrol/data.py</span></code> contains the classes and functions to compile
+datasets from experimental data, to normalize data, and to feed training and
+evaluation data to timeseries forecasting models.</p>
+<section id="downloading-the-data">
+<h2>Downloading the data<a class="headerlink" href="#downloading-the-data" title="Permalink to this headline">¶</a></h2>
+<p>We have not yet released our experimental data, please stay tuned.</p>
+</section>
+<section id="compiling-datasets">
+<h2>Compiling datasets<a class="headerlink" href="#compiling-datasets" title="Permalink to this headline">¶</a></h2>
+<p>During training and evaluation dataset experiments not all the features we
+eventually use / might use during training and control are extracted. For this
+reason after experiments were completed, we ran the complete DeLTA pipeline
+on the acquired images.</p>
+<p>Then the DeLTA output files are further processed with the <code class="docutils literal notranslate"><span class="pre">compile_dataset</span></code>
+function to extract the following features for the mother cell in each chamber:</p>
+<ul>
+<li><dl class="simple">
+<dt>Original DeLTA features:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">length</span></code>: Mother cell length (rotated bounding box, in pixels)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">width</span></code>: Mother cell width (rotated bounding box, in pixels)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">area</span></code>: Mother cell area (counted pixels)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">perimeter</span></code>: Mother cell perimeter (in pixels)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fluo1</span></code>: Mother cell mean fluorescence (Camera intensity a.u.)</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl>
+<dt>Other extracted features:</dt><dd><ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">sharpness</span></code>: Mean of Laplacian over the phase contrast image of the chamber (a.u.)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cell_count</span></code>: Number of cells in the chamber</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">chamber_mean_fluo1</span></code>: Mean of <code class="docutils literal notranslate"><span class="pre">fluo1</span></code> for all cells in the chamber</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">chamber_median_fluo1</span></code>: Median of <code class="docutils literal notranslate"><span class="pre">fluo1</span></code> for all cells in the chamber</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">chamber_std_fluo1</span></code>: Standard deviation of <code class="docutils literal notranslate"><span class="pre">fluo1</span></code> for all cells in the chamber</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stims</span></code>: Optogenetic stimulations for the chamber. 0 = red, 1 = green.</p></li>
+<li><div class="line-block">
+<div class="line"><code class="docutils literal notranslate"><span class="pre">neighbor_stims</span></code>: Optogenetic stimulations for the two immediate
+neighbor chambers (0 = both red, 1 = one red one green, 2 = both green)</div>
+</div>
+</li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<p>The compiled dataset is a dictionary, with each feature name as a key, and each
+item under these keys is a 2D array containing the data for each chamber over time.</p>
+<p>See also the script <a class="reference internal" href="scripts.html#compile-script"><span class="std std-ref">compile_datasets.py</span></a></p>
+</section>
+<section id="normalization">
+<h2>Normalization<a class="headerlink" href="#normalization" title="Permalink to this headline">¶</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">Normalization</span></code> class is used to normalize the data from the dataset to
+the [0, 1] range to feed into the neural networks.</p>
+<p>We used the following formulas to ensure
+single-cell timeseries data were consistently normalized to the same range of
+values:</p>
+<ul>
+<li><div class="line-block">
+<div class="line">Fluorescence: Single-cell fluorescence measurements were limited to [0, 4095],
+the dynamic range of the data. Fluorescence features values (mother cell
+fluorescence, average chamber fluorescence, and chamber fluorescence standard
+deviation) were thus simply normalized linearly:</div>
+</div>
+<blockquote>
+<div><p><span class="math notranslate nohighlight">\(x_{norm}=x_{raw}/4095\)</span></p>
+</div></blockquote>
+<div class="line-block">
+<div class="line">Where <span class="math notranslate nohighlight">\(x_{raw}\)</span> is the initial measured value for a given feature and
+time point, and <span class="math notranslate nohighlight">\(x_{norm}\)</span> is the resulting normalized value that is
+used as input for the neural network, both for training and on-the-fly for
+feedback control.</div>
+</div>
+</li>
+<li><div class="line-block">
+<div class="line">Cell area: Mother cell area, measured in pixels, theoretically has no clear
+upper bound. After analyzing area distributions, we used a negative
+exponential function:</div>
+</div>
+<blockquote>
+<div><p><span class="math notranslate nohighlight">\(x_{norm}=1-{10}^{-x_{raw}/3000}\)</span></p>
+</div></blockquote>
+</li>
+<li><div class="line-block">
+<div class="line">Cell length and width: Although we did not end up using cell length and
+width, we normalized length and width with the following formula:</div>
+</div>
+<blockquote>
+<div><p><span class="math notranslate nohighlight">\(x_{norm}=1-{10}^{-x_{raw}/200}\)</span></p>
+</div></blockquote>
+</li>
+<li><div class="line-block">
+<div class="line">Chamber cell count: The number of cells in the chamber at any given timepoint
+also theoretically has no clear upper bound. We also used a negative
+exponential function with a different normalization factor:</div>
+</div>
+<blockquote>
+<div><p><span class="math notranslate nohighlight">\(x_{norm}=1-{10}^{-x_{raw}/9}\)</span></p>
+</div></blockquote>
+</li>
+<li><div class="line-block">
+<div class="line">Chamber image sharpness: Image sharpness, measured as the mean of the
+Laplacian of the image, has no clear upper or lower bound. We used the
+following formula to normalize sharpness to [0, 1]:</div>
+</div>
+<blockquote>
+<div><p><span class="math notranslate nohighlight">\(x_{norm}=\frac{1}{1+e^{-x_{raw}+3.6}}\)</span></p>
+</div></blockquote>
+</li>
+</ul>
+<p>The factors of all these formulas were selected manually to make sure that the
+distribution of the values were spread over the [0, 1] range.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">Normalization</span></code> class is used for training as well as on the fly during
+control experiments.</p>
+</section>
+<section id="training-generators">
+<h2>Training generators<a class="headerlink" href="#training-generators" title="Permalink to this headline">¶</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">Datasets</span></code> class inherits from regular python
+<a class="reference external" href="https://wiki.python.org/moin/Generators">generators</a> and as such can be fed
+directly into Keras’s <code class="docutils literal notranslate"><span class="pre">model.predict()</span></code>. The role of the class is to load
+compiled datasets pickle files, normalize the data via the <code class="docutils literal notranslate"><span class="pre">Normalization</span></code>
+class, and then randomly yield data batches either as training inputs or
+validation data after formatting it depending on the network architecture.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">Datasets</span></code> object can randomly partition the cell timeseries in the datasets
+into training or validation data and be switched between to make sure data from
+different cells is used for training or validation. Alternatively, two objects
+can be instanciated with different subsets of experimental datasets, where one
+is used exclusively for training, and the other exclusively for validation.
+This makes it possible to train and validate on completely different
+experiments. This is what we did to evaluate the performance of our models.</p>
+<p>The “state” of the object can be saved to disk, in the sense that, if data has
+been loaded and cells accross experiments have been partitioned into training
+and validation sets, this partition can be saved to disk and reloaded. However
+it does not save the state of the random number generator that is used to
+select random cells and random timepoints on the fly when generating batches
+for training and evaluation. This can probably be worked around by setting the
+numpy.random seed, but I have not experimented with it.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">load_datasets()</span></code> function instanciates two <code class="docutils literal notranslate"><span class="pre">Datasets</span></code> objects, one for
+training, the other for validation, based on a dictionary describing how to
+split the data. See <a class="reference internal" href="config.html"><span class="doc">the config module</span></a> and
+<a class="reference internal" href="scripts.html#training-script"><span class="std std-ref">the training script</span></a></p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">deepcellcontrol</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Data &amp; datasets</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#downloading-the-data">Downloading the data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#compiling-datasets">Compiling datasets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#normalization">Normalization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#training-generators">Training generators</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="config.html">config file</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Scripts</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="../index.html" title="previous chapter">Welcome to deepcellcontrol’s documentation!</a></li>
+      <li>Next: <a href="config.html" title="next chapter">config file</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2022, Jean-Baptiste Lugagne.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.4.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="../_sources/pages/data.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

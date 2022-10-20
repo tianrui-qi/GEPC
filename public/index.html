@@ -1,10 +1,10 @@
 
 <!DOCTYPE html>
 
-<html lang="en">
+<html>
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
     <title>Welcome to deepcellcontrol’s documentation! &#8212; deepcellcontrol  documentation</title>
     <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
@@ -12,10 +12,10 @@
     <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
     <script src="_static/jquery.js"></script>
     <script src="_static/underscore.js"></script>
-    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
     <script src="_static/doctools.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Data &amp; datasets" href="pages/data.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
   
@@ -33,37 +33,75 @@
           <div class="body" role="main">
             
   <section id="welcome-to-deepcellcontrol-s-documentation">
-<h1>Welcome to deepcellcontrol’s documentation!<a class="headerlink" href="#welcome-to-deepcellcontrol-s-documentation" title="Permalink to this heading">¶</a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">deepcellcontrol</span></code> is a python package that performs deep-learning based
-feedback control of gene expression in single cells.</p>
+<h1>Welcome to deepcellcontrol’s documentation!<a class="headerlink" href="#welcome-to-deepcellcontrol-s-documentation" title="Permalink to this headline">¶</a></h1>
+<p><a class="reference external" href="https://gitlab.com/dunloplab/deepcellcontrol">deepcellcontrol (dcc)</a>
+is a python package that performs deep-learning based
+feedback control of gene expression in single cells. It is the core repository
+of our manuscript available on bioRxiv:</p>
+<p>[Reference and citation]</p>
 <p>It interfaces with the
 <a class="reference external" href="https://gitlab.com/dunloplab/delta">DeLTA</a> and
 <a class="reference external" href="https://gitlab.com/dunloplab/pycromanager">pycromanager_tessie</a> packages on
-Tessie’s computer to conduct high-throughput feedback experiments.</p>
-<p>It is divided in 2 main sub-packages:</p>
-<ul>
-<li><div class="line-block">
-<div class="line">The <span class="xref std std-doc">microscope sub-package</span>, that handles the hardware
-operations, and for the most part simply repackages pycromanager commands
-to make them more user-friendly and use default settings that seem to work
-best.</div>
+Tessie’s computer (Tessie is the name of a microscope in the Dunlop lab)
+to conduct high-throughput feedback experiments.</p>
+<p>This repository contains the dcc package itself under the
+<code class="docutils literal notranslate"><span class="pre">/deepcellcontrol</span></code> sub-folder, and scripts under the <code class="docutils literal notranslate"><span class="pre">/scripts</span></code> sub-folder
+that use the dcc package to compile and format microscopy data, train and
+evaluate timeseries forecasting networks, run feedback control algorithms
+within a TCP/IP server, and finally to plot all the figures in our manuscript.
+The <code class="docutils literal notranslate"><span class="pre">/public</span></code> subfolder simply contains this documentation.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This documentation is a work in progress</p>
 </div>
-</li>
-<li><div class="line-block">
-<div class="line">The <span class="xref std std-doc">acquisitions sub-package</span>, that manages
-experiments logic like order of acquisitions, timing, interfacing with
-DeLTA and DCC etc…</div>
-</div>
-</li>
-</ul>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h2>
+<p>The <a class="reference external" href="https://gitlab.com/dunloplab/deepcellcontrol">dcc package</a>
+can run either in the <a class="reference external" href="https://gitlab.com/dunloplab/delta">DeLTA</a> environment
+or in the <a class="reference external" href="https://gitlab.com/dunloplab/pycromanager">pycromanager_tessie</a>
+environment.
+We do not provide installation instructions here, you can check the
+documentation of these packages.</p>
+<p>Some functions and scripts, especially to recreate our figures, will need the
+DeLTA package to be installed and in the python path to be able to run.</p>
+<p>Our experimental data required to run the scripts is not available yet, but as
+soon as it is released we will either provide instructions on how to download
+it and modify scripts, or automate it like in DeLTA.</p>
+</section>
+<section id="issues-and-support">
+<h2>Issues and support<a class="headerlink" href="#issues-and-support" title="Permalink to this headline">¶</a></h2>
+<p>We can not at the moment provide the same level of support that we do for
+DeLTA, but we will handle bug reports and questions related to the data via
+the Gitlab issues system. Make sure you provide as much context as possible in
+your report (OS, library versions etc…).</p>
+</section>
 <section id="contents">
-<h2>Contents<a class="headerlink" href="#contents" title="Permalink to this heading">¶</a></h2>
+<h2>Contents<a class="headerlink" href="#contents" title="Permalink to this headline">¶</a></h2>
 <div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="pages/data.html">Data &amp; datasets</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pages/data.html#downloading-the-data">Downloading the data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pages/data.html#compiling-datasets">Compiling datasets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pages/data.html#normalization">Normalization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pages/data.html#training-generators">Training generators</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="pages/models.html">Neural Network Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pages/timeseries.html">Time-series forecasting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pages/control.html">Control algorithms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pages/server.html">TCP/IP Server</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pages/scripts.html">Scripts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pages/scripts.html#compile-datasets-py">compile_datasets.py</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pages/scripts.html#training-py">training.py</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="pages/config.html">Configuration file</a></li>
+</ul>
 </div>
 </section>
 </section>
 <section id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this heading">¶</a></h1>
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
 <ul class="simple">
 <li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
 <li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
@@ -88,11 +126,21 @@ DeLTA and DCC etc…</div>
 
 
 <h3>Navigation</h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="pages/data.html">Data &amp; datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pages/models.html">Neural Network Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pages/timeseries.html">Time-series forecasting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pages/control.html">Control algorithms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pages/server.html">TCP/IP Server</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pages/scripts.html">Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pages/config.html">Configuration file</a></li>
+</ul>
 
 <div class="relations">
 <h3>Related Topics</h3>
 <ul>
   <li><a href="#">Documentation overview</a><ul>
+      <li>Next: <a href="pages/data.html" title="next chapter">Data &amp; datasets</a></li>
   </ul></li>
 </ul>
 </div>
@@ -105,7 +153,7 @@ DeLTA and DCC etc…</div>
     </form>
     </div>
 </div>
-<script>document.getElementById('searchbox').style.display = "block"</script>
+<script>$('#searchbox').show(0);</script>
 
 
 
@@ -122,7 +170,7 @@ DeLTA and DCC etc…</div>
       &copy;2022, Jean-Baptiste Lugagne.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.0.2</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.4.0</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |
