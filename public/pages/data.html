@@ -1,10 +1,10 @@
 
 <!DOCTYPE html>
 
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
     <title>Data &amp; datasets &#8212; deepcellcontrol  documentation</title>
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
@@ -12,11 +12,12 @@
     <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
     <script src="../_static/jquery.js"></script>
     <script src="../_static/underscore.js"></script>
+    <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
     <script src="../_static/doctools.js"></script>
     <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="config file" href="config.html" />
+    <link rel="next" title="Neural Network Models" href="models.html" />
     <link rel="prev" title="Welcome to deepcellcontrol’s documentation!" href="../index.html" />
    
   <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
@@ -35,16 +36,16 @@
           <div class="body" role="main">
             
   <section id="data-datasets">
-<h1>Data &amp; datasets<a class="headerlink" href="#data-datasets" title="Permalink to this headline">¶</a></h1>
+<h1>Data &amp; datasets<a class="headerlink" href="#data-datasets" title="Permalink to this heading">¶</a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">deepcellcontrol/data.py</span></code> contains the classes and functions to compile
 datasets from experimental data, to normalize data, and to feed training and
 evaluation data to timeseries forecasting models.</p>
 <section id="downloading-the-data">
-<h2>Downloading the data<a class="headerlink" href="#downloading-the-data" title="Permalink to this headline">¶</a></h2>
+<h2>Downloading the data<a class="headerlink" href="#downloading-the-data" title="Permalink to this heading">¶</a></h2>
 <p>We have not yet released our experimental data, please stay tuned.</p>
 </section>
 <section id="compiling-datasets">
-<h2>Compiling datasets<a class="headerlink" href="#compiling-datasets" title="Permalink to this headline">¶</a></h2>
+<h2>Compiling datasets<a class="headerlink" href="#compiling-datasets" title="Permalink to this heading">¶</a></h2>
 <p>During training and evaluation dataset experiments not all the features we
 eventually use / might use during training and control are extracted. For this
 reason after experiments were completed, we ran the complete DeLTA pipeline
@@ -86,7 +87,7 @@ item under these keys is a 2D array containing the data for each chamber over ti
 <p>See also the script <a class="reference internal" href="scripts.html#compile-script"><span class="std std-ref">compile_datasets.py</span></a></p>
 </section>
 <section id="normalization">
-<h2>Normalization<a class="headerlink" href="#normalization" title="Permalink to this headline">¶</a></h2>
+<h2>Normalization<a class="headerlink" href="#normalization" title="Permalink to this heading">¶</a></h2>
 <p>The <code class="docutils literal notranslate"><span class="pre">Normalization</span></code> class is used to normalize the data from the dataset to
 the [0, 1] range to feed into the neural networks.</p>
 <p>We used the following formulas to ensure
@@ -151,7 +152,7 @@ distribution of the values were spread over the [0, 1] range.</p>
 control experiments.</p>
 </section>
 <section id="training-generators">
-<h2>Training generators<a class="headerlink" href="#training-generators" title="Permalink to this headline">¶</a></h2>
+<h2>Training generators<a class="headerlink" href="#training-generators" title="Permalink to this heading">¶</a></h2>
 <p>The <code class="docutils literal notranslate"><span class="pre">Datasets</span></code> class inherits from regular python
 <a class="reference external" href="https://wiki.python.org/moin/Generators">generators</a> and as such can be fed
 directly into Keras’s <code class="docutils literal notranslate"><span class="pre">model.predict()</span></code>. The role of the class is to load
@@ -204,8 +205,12 @@ split the data. See <a class="reference internal" href="config.html"><span class
 <li class="toctree-l2"><a class="reference internal" href="#training-generators">Training generators</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="config.html">config file</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Neural Network Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="timeseries.html">Time-series forecasting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="control.html">Control algorithms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="server.html">TCP/IP Server</a></li>
 <li class="toctree-l1"><a class="reference internal" href="scripts.html">Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="config.html">Configuration file</a></li>
 </ul>
 
 <div class="relations">
@@ -213,7 +218,7 @@ split the data. See <a class="reference internal" href="config.html"><span class
 <ul>
   <li><a href="../index.html">Documentation overview</a><ul>
       <li>Previous: <a href="../index.html" title="previous chapter">Welcome to deepcellcontrol’s documentation!</a></li>
-      <li>Next: <a href="config.html" title="next chapter">config file</a></li>
+      <li>Next: <a href="models.html" title="next chapter">Neural Network Models</a></li>
   </ul></li>
 </ul>
 </div>
@@ -226,7 +231,7 @@ split the data. See <a class="reference internal" href="config.html"><span class
     </form>
     </div>
 </div>
-<script>$('#searchbox').show(0);</script>
+<script>document.getElementById('searchbox').style.display = "block"</script>
 
 
 
@@ -243,7 +248,7 @@ split the data. See <a class="reference internal" href="config.html"><span class
       &copy;2022, Jean-Baptiste Lugagne.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.4.0</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.0.2</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |
