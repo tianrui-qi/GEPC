@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """
+This script generates plots for Figure 4 and Movie S3
+
 Created on Fri Sep  2 14:03:54 2022
 
 @author: jeanbaptiste
@@ -30,10 +32,9 @@ models_scc = "Z:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/"
 # Save figures to:
 save_folder = "C:/Users/Administrator/jb/deepmpc_paper/figure4/"
 
-um_ppixel = 120/(1851-57)
+um_ppixel = 120/(1851-57) # measured distance per pixel
 
-#%% Reconstruct 2001 movie
-
+#%% Load and reconstruct 2001 movie
 
 movie_shape = (80,125)
 cutoff = 32*12
@@ -70,7 +71,7 @@ whole_movie = np.reshape(whole_movie,movie_shape+(cutoff,))
 obj_movie = np.reshape(obj_movie,movie_shape+(cutoff,))
 pixels_to_xp = np.reshape(pixels_to_xp,movie_shape+(2,))
 
-#%% Obj & Fluo movie kymogrpahs
+#%% Panel A - Obj & Fluo movie kymogrpahs
 
 interval = 24
 
@@ -92,6 +93,7 @@ obj_kymograph = (obj_kymograph*255).astype(np.uint8)
 cells_kymograph = (cells_kymograph*255).astype(np.uint8)
 
 # Plot objectives kymograph
+plt.figure()
 plt.imshow(obj_kymograph)
 plt.axis("off")
 plt.savefig(save_folder+"Panel_A_obj.png", dpi=300, bbox_inches='tight')
@@ -101,6 +103,7 @@ cv2.imwrite(save_folder+"Panel_A_obj.tif", obj_kymograph[:,:,::-1])
 plt.show()
 
 # Plot cells kymograph
+plt.figure()
 plt.imshow(cells_kymograph)
 plt.axis("off")
 plt.savefig(save_folder+"Panel_A_cells.png", dpi=300, bbox_inches='tight')
@@ -192,11 +195,9 @@ for c in range(fluorescence.shape[0]):
     fluorescence[c] = _f
     area[c] = _a
 
-#%% Smoothed growth:
-
+# Smoothed growth:
 window = (6, 6)
 avg_growth = np.zeros_like(growth)
-
 for f in range(cutoff-1):
         
         f_min = f-window[0]
@@ -208,8 +209,9 @@ for f in range(cutoff-1):
         avg_growth[:,f] = t_growth
 
 
-#%% Error over time:
+#%% Panel B - Error over time
 
+plt.figure()
 rmse = np.sqrt(np.nanmean((objectives - fluorescence)**2, axis=0))
 x = np.arange(36, len(rmse), 1)/12
 plt.plot(x, rmse[36:])
@@ -221,8 +223,11 @@ plt.ylabel("Root Mean Square Error (a.u.)")
 plt.savefig(save_folder+"Panel_B_errortime.png", dpi=300)
 plt.savefig(save_folder+"Panel_B_errortime.svg", dpi=300)
 plt.savefig(save_folder+"Panel_B_errortime.pdf", dpi=300)
+plt.show()
 
-#%% Area over time:
+#%% Panel C - Filamentation over time:
+
+plt.figure()
 x = np.arange(0, area.shape[1], 1)/12
 plt.plot(x, np.nanmean(area*um_ppixel**2>6, axis=0))
 plt.xlim([0,x[-1]])
@@ -233,8 +238,11 @@ plt.xlabel("time (hours)")
 plt.savefig(save_folder+"Panel_C_areafraction.png", dpi=300)
 plt.savefig(save_folder+"Panel_C_areafraction.svg", dpi=300)
 plt.savefig(save_folder+"Panel_C_areafraction.pdf", dpi=300)
+plt.show()
 
-#%% Growth rate over time:
+#%% Panel C - Growth rate over time
+
+plt.figure()
 x = np.arange(0, growth.shape[1], 1)/12
 plt.plot(x, np.nanmedian(growth, axis=0))
 plt.xlim([0,x[-1]])
@@ -244,9 +252,11 @@ plt.xlabel("time (hours)")
 plt.savefig(save_folder+"Panel_C_growthtime.png", dpi=300)
 plt.savefig(save_folder+"Panel_C_growthtime.svg", dpi=300)
 plt.savefig(save_folder+"Panel_C_growthtime.pdf", dpi=300)
+plt.show()
 
-#%% Total growth hist:
+#%% Panel D - Total growth hist:
 
+plt.figure()
 plt.hist(avg_growth.flatten(), bins=200)
 
 # Plot quantiles
@@ -262,8 +272,9 @@ plt.ylabel("count")
 plt.savefig(save_folder+"Panel_D_growthdistro.png", dpi=300)
 plt.savefig(save_folder+"Panel_D_growthdistro.svg", dpi=300)
 plt.savefig(save_folder+"Panel_D_growthdistro.pdf", dpi=300)
+plt.show()
 
-#%% RMSE per quantile
+#%% Panel E - RMSE per quantile
 
 def quantile_rmse(x, sq_error, q_num=100):
 
@@ -285,6 +296,8 @@ def quantile_rmse(x, sq_error, q_num=100):
         rmse.append(np.sqrt(np.nanmean(sq_error[points])))
         
     return rmse
+
+plt.figure()
 
 sq_error = (objectives-fluorescence)**2
 sq_error = sq_error[:,:-1]
@@ -310,143 +323,13 @@ plt.legend()
 plt.savefig(save_folder+"Panel_E_errorvsgrowth.png", dpi=300)
 plt.savefig(save_folder+"Panel_E_errorvsgrowth.svg", dpi=300)
 plt.savefig(save_folder+"Panel_E_errorvsgrowth.pdf", dpi=300)
+plt.show()
 
-#%% 
-
-obj_diff = np.diff(objectives, axis=1)
-plt.hist(obj_diff[:,36:].flatten(), bins=100)
-plt.yscale("log")
-
-#%% Obj shift in time:
-
-q_num = 20
-time = 24
-quants = np.linspace(-1500, 1500, q_num+1)
-rmse = np.zeros((q_num, time))
-
-
-sq_error = sq_error = (objectives-fluorescence)**2
-obj_shift = np.copy(objectives)
-obj_shift[:,:36] = np.nan
-for future in range(1, time+1):
-    obj_shift = np.roll(obj_shift, shift=1, axis=1)
-    obj_shift[:, 0] = np.nan
-    diff = objectives - obj_shift
-    
-    for q in range(q_num):
-        
-        q_bot = quants[q]
-        q_top = quants[q+1]
-        
-        points = np.logical_and(diff>=q_bot, diff<q_top)
-        
-        rmse[q, future-1] = np.sqrt(np.nanmean(sq_error[points]))
-        
-        
-plt.imshow(rmse)
-        
-
-#%% 
-from scipy.ndimage import convolve
-rolling_avg = lambda x, n: np.convolve(x, np.ones(n)/n, axis=1)
-
-obj_diff = np.diff(objectives, axis=1)
-
-s = convolve(np.abs(obj_diff), np.ones((1,48))/48, mode="constant")
-rms = np.sqrt(np.sum(obj_diff[:,36:]**2, axis=1))
-
-rms_i = np.argsort(rms)
-
-plt.plot(objectives[rms_i[11_000],:])
-
-
-#%% Area hist:
-plt.hist(area.flatten()*um_ppixel**2, bins=100)
-
-#%% Fluo hist
-plt.hist(fluorescence.flatten(), bins=100)
-
-#%% Error hist
-plt.hist((fluorescence-objectives).flatten(), bins=100)
-
-#%% Cells above 3000:
-over3k = np.mean(fluorescence>=2800, axis=0)
-plt.plot(over3k)
-
-#%% Cells above 6 sq um area:
-plt.plot(np.nanmean(area*um_ppixel**2, axis=0))
-
-#%% Nan area:
-plt.plot(np.nanmean(np.isnan(area), axis=0))
-# TODO: double check what low area levels mean. Are they actually empty?
-
-
-#%% plt
-cumstims = np.cumsum(stims, axis=1)
-cumstims[:,36:] /= np.repeat(np.arange(1, stims.shape[1]+1-36,1)[np.newaxis], stims.shape[0], axis=0)
-
-quants = np.linspace(0, 1, 11)
-
-growth_stims = np.full((10, stims.shape[1]), np.nan)
-
-for t in range(36, stims.shape[1]):
-    
-    for q in range(q_num):
-        
-        q_bot = quants[q]
-        q_top = quants[q+1]
-        
-        points = np.logical_and(cumstims[:,t]>=q_bot, cumstims[:,t]<q_top)
-        
-        growth_stims[q, t] = np.nanmean(avg_growth[points])
-
-plt.imshow(growth_stims)
-        
-
-#%% Error as a function of objective level:
-nbins = 50
-bins = np.linspace(
-    np.min(objectives[:,36:]),
-    np.max(objectives[:,36:]),
-    nbins+1
-    )
-bins[-1] = bins[-1]+.1
-
-sq_error = (objectives-fluorescence)**2
-
-for b in range(nbins):
-    
-    bin_bot = bins[b]
-    bin_top = bins[b+1]
-    
-    points = np.logical_and(objectives>=bin_bot, objectives<bin_top)
-    
-    rmse = np.sqrt(np.nanmean(sq_error[points]))
-    
-    plt.bar(bin_bot, rmse, width=bin_top-bin_bot, align="edge")
-
-#%% SI Movie - 2001
-
-# def draw_text(img, text,
-#           font=cv2.FONT_HERSHEY_SIMPLEX,
-#           pos=(0, 0),
-#           font_scale=2,
-#           font_thickness=4,
-#           text_color=(255, 255, 255),
-#           text_color_bg=(0, 0, 0)
-#           ):
-
-#     x, y = pos
-#     text_size, _ = cv2.getTextSize(text, font, font_scale, font_thickness)
-#     text_w, text_h = text_size
-#     cv2.rectangle(img, pos, (x + text_w, y + text_h), text_color_bg, -1)
-#     cv2.putText(img, text, (x, y + text_h + font_scale - 1), font, font_scale, text_color, font_thickness)
-
-#     return text_size
+#%% SI Movie 3 - 2001: A Space Odyssey
 
 plt.style.use('dark_background')
 compiled = []
-for f in range(36,cutoff):
+for f in range(0,cutoff):
     
     fig = plt.gcf()
     fig.set_size_inches(5.5, 2.5)
@@ -500,6 +383,4 @@ import sys
 sys.path.append("C:/Users/Administrator/jb/delta")
 import delta
 
-delta.utilities.vidwrite(compiled, save_folder + "SI_movie_2001.mp4")
-
-
+delta.utilities.vidwrite(compiled, save_folder + "SI_movie_3_2001SpaceOdyssey.mp4")

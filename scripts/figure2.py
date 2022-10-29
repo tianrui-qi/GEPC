@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """
+This script generates plots for Figure 2, and SI Figures 1 & 2
+
 Created on Tue Jul 12 16:16:25 2022
 
 @author: jeanbaptiste
@@ -19,14 +21,14 @@ import deepcellcontrol as dcc
 images_raw = "Y:/data/Microscope/jeanbaptiste/deepmpc/trainingsets/"
 
 # Save images to:
-save_folder = "D:/deepmpc_paper/figure2/"
+save_folder = "C:/Users/Administrator/jb/deepmpc_paper/figure2/"
 
 # Trained models:
 model_folder_dict = {
-    12: "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-39_98118f0c-60c8-42a0-b873-6749a2128406",
-    24: "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-35_b0d0b5c3-158d-4476-926b-75b2607d6154",
-    36: "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-35_2d5eec41-ec65-4f75-afb1-f526a2dbbbc0",
-    48: "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-35_a9392a1f-6163-49c4-bae0-9e0894d8198f"
+    12: "Z:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-39_98118f0c-60c8-42a0-b873-6749a2128406",
+    24: "Z:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-35_b0d0b5c3-158d-4476-926b-75b2607d6154",
+    36: "Z:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-35_2d5eec41-ec65-4f75-afb1-f526a2dbbbc0",
+    48: "Z:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-35_a9392a1f-6163-49c4-bae0-9e0894d8198f"
     }
 
 # Load datasets, model etc:
@@ -57,7 +59,7 @@ for horizon, model_folder in model_folder_dict.items():
         pickle.dump(eval_d, f)
 
 
-#%% Panel B - Kymograph
+#%% Panel A - Kymograph
 # Note: this panel will not work if you do not have access to the raw images 
 # data. Also it requires DeLTA.
 
@@ -110,6 +112,8 @@ for f in range(0,len(stims), interval):
     
     # Mother cell contour:
     mother = roi.label_stack[f] == roi.lineage.cellnumbers[f][0]+1
+    kernel = np.ones((3,3),np.uint8)
+    mother = cv2.dilate(mother.astype(np.uint8),kernel,iterations = 2) # More visible
     cnt = delta.utilities.find_contours(mother.astype(np.uint8))
     
     # Colored chamber image (fluo):
@@ -118,7 +122,7 @@ for f in range(0,len(stims), interval):
     chamber_img = delta.utilities.cropbox(frame, roi.box)
     chamber_img = np.repeat(chamber_img[:,:,np.newaxis], 3, axis=2)
     # Add in mother cell contour:
-    chamber_img = cv2.drawContours(chamber_img, cnt, 0, [255,255,255], thickness=1)
+    chamber_img = cv2.drawContours(chamber_img, cnt, 0, [255,255,255], thickness=4)
     # Append
     kymograph_img += [chamber_img]
     
@@ -128,17 +132,17 @@ for f in range(0,len(stims), interval):
     chamber_img = dcc.utilities.color_img(chamber_img, vmin=0.01, vmax=.9)
     chamber_img = (chamber_img*255).astype(np.uint8)
     # Add in mother cell contour:
-    chamber_img = cv2.drawContours(chamber_img, cnt, 0, [255,255,255], thickness=1)
+    chamber_img = cv2.drawContours(chamber_img, cnt, 0, [255,255,255], thickness=4)
     # Append
     kymograph_fluo += [chamber_img]
 
 # Concatenate into a single image, save to disk:
 kymograph_fluo = np.concatenate(kymograph_fluo, axis=1)
-cv2.imwrite(save_folder+"Panel_B_fluo.tif", kymograph_fluo[:,:,::-1])
+cv2.imwrite(save_folder+"Panel_A_kymographfluo.tif", kymograph_fluo[:,:,::-1])
 kymograph_img = np.concatenate(kymograph_img, axis=1)
-cv2.imwrite(save_folder+"Panel_B_img.tif", kymograph_img[:,:,::-1])
+cv2.imwrite(save_folder+"Panel_A_kymographphase.tif", kymograph_img[:,:,::-1])
 
-#%% Panel C - Dataset sample
+#%% Panel B - Dataset sample
 
 # Parameters:
 params, dataset, eval_set, model = load_model(model_folder_dict[24])
@@ -147,7 +151,8 @@ raw_dataset = subset["raw_dataset"]
 cell_nb = 285
 stims = raw_dataset["stims"][cell_nb]
 
-x = np.arange(0, raw_dataset["stims"][cell_nb].shape[0], dtype = np.float32) / 12
+# X vector (time points)
+x = np.arange(0, raw_dataset["stims"][cell_nb].shape[0], dtype = np.float32)/12
 
 plt.figure(figsize=(6, 12), dpi=300)
 
@@ -167,8 +172,6 @@ plt.plot(x,raw_dataset["fluo1"][cell_nb],"k",label="Mother")
 plt.ylabel("Fluorescence")
 plt.xlim([x[0], x[-1]])
 plt.ylim(0, 4095)
-# plt.legend()
-# plt.title(f"Cell {cell_nb}")
 
 # Mean chamber fluorescence
 plt.subplot(9,1,4)
@@ -211,7 +214,6 @@ plt.ylabel("Neighbor stims")
 plt.xlim([x[0], x[-1]])
 plt.xlabel("time (hours)")
 plt.ylim(0, 2)
-# plt.grid(which="both", axis="both")
 
 # Image sharpness
 plt.subplot(9,1,9)
@@ -220,9 +222,9 @@ plt.ylabel("Sharpness")
 plt.xlim([x[0], x[-1]])
 plt.grid(which="both", axis="both")
 
-plt.savefig(save_folder+"Panel_C.png", dpi=300)
-plt.savefig(save_folder+"Panel_C.svg", dpi=300)
-plt.savefig(save_folder+"Panel_C.pdf", dpi=300)
+plt.savefig(save_folder+"Panel_B_cellfeatures.png", dpi=300)
+plt.savefig(save_folder+"Panel_B_cellfeatures.svg", dpi=300)
+plt.savefig(save_folder+"Panel_B_cellfeatures.pdf", dpi=300)
 plt.show()
 
 #%% Load 2-hour horizon evaluation:
@@ -264,6 +266,8 @@ def prediction_plot(eval_d, pred_nb):
 
 #%% Panel D - RMSE distro
 
+plt.figure()
+
 # Log-spaced bins:
 nbins = 100
 bins = np.logspace(0, 4, nbins + 1, base=10)
@@ -273,7 +277,6 @@ n, _, _ = plt.hist(rmse, bins=bins)
 qs = np.quantile(rmse, [.25, .5, .75])
 for q in qs:
     plt.plot([q, q], [0, 4500], color="gray", zorder=-1)
-
 
 plt.xscale("log")
 plt.xlim([5, 5000])
@@ -286,26 +289,28 @@ plt.show()
 
 #%% Panel E - 25th percentile
 
+plt.figure()
 prediction_plot(eval_d, rmse_order[25_007])
-plt.savefig(save_folder+"Panel_F.png", dpi=300)
-plt.savefig(save_folder+"Panel_F.svg", dpi=300)
+plt.savefig(save_folder+"Panel_E_25thperc.png", dpi=300)
+plt.savefig(save_folder+"Panel_E_25thperc.svg", dpi=300)
 plt.show()
 
 #%% Panel E - 50th percentile
 
+plt.figure()
 prediction_plot(eval_d, rmse_order[50_012])
-plt.savefig(save_folder+"Panel_G.png", dpi=300)
-plt.savefig(save_folder+"Panel_G.svg", dpi=300)
+plt.savefig(save_folder+"Panel_E_median.png", dpi=300)
+plt.savefig(save_folder+"Panel_E_median.svg", dpi=300)
 plt.show()
 
 #%% Panel E - 75th percentile
 
 prediction_plot(eval_d, rmse_order[75_002])
-plt.savefig(save_folder+"Panel_H.png", dpi=300)
-plt.savefig(save_folder+"Panel_H.svg", dpi=300)
+plt.savefig(save_folder+"Panel_E_75thperc.png", dpi=300)
+plt.savefig(save_folder+"Panel_E_75thperc.svg", dpi=300)
 plt.show()
 
-#%% SI Fig - 95th percentile
+#%% SI Fig 1 - 95th percentile
 
 plt.figure(figsize=(8,6))
 for i in range(4):
@@ -319,6 +324,8 @@ plt.show()
 
 params, dataset, eval_set, model = load_model(model_folder_dict[24])
 model.save(save_folder+"/model24.hdf5")
+
+plt.figure()
 
 rmse_all = []
 for past_steps in range(1,1+4*12):
@@ -344,6 +351,7 @@ plt.xlabel("past (hours)")
 plt.ylabel("Root mean square error (a.u.)")
 plt.savefig(save_folder+"Panel_J.png", dpi=300)
 plt.savefig(save_folder+"Panel_J.svg", dpi=300)
+plt.show()
 
 #%% Panel G - RMSE per horizon
 
@@ -353,6 +361,8 @@ colors = {
     36: [2, 67, 171],
     48: [1, 33, 84]
     }
+
+plt.figure()
 
 for horizon in model_folder_dict:
     
@@ -378,9 +388,9 @@ plt.ylabel("Root mean square error (a.u.)")
 plt.legend(title="Horizon")
 plt.savefig(save_folder+"Panel_I.png", dpi=300)
 plt.savefig(save_folder+"Panel_I.svg", dpi=300)
+plt.show()
 
-
-#%% SI Fig: Median evaluations & RMSEs
+#%% SI Fig 2 - Other horizons evaluations & RMSEs
 
 horizon_list = [12, 36, 48]
 
@@ -428,50 +438,4 @@ for h, horizon in enumerate(horizon_list):
 
 plt.savefig(save_folder+"SI_Fig_X_OtherHorizonsEval.png", dpi=300)
 plt.savefig(save_folder+"SI_Fig_X_OtherHorizonsEval.svg", dpi=300)
-
-#%% Panel I <--Not sure what this is supposed to be anymore
-
-params, dataset, eval_set, model = load_model(model_folder_dict[24])
-
-# Shortest dataset:
-max_timepoint = np.inf
-for subset in eval_set.data:
-    if subset["normalized_dataset"]["fluo1"].shape[1] < max_timepoint:
-        max_timepoint = subset["normalized_dataset"]["fluo1"].shape[1]
-
-mae = []
-rmse = []
-
-for timepoint in range(36, max_timepoint-eval_set.horizon):
-    print(timepoint)
-    all_past = []
-    all_future = []
-    for subset in eval_set.data:
-        norm_set = subset["normalized_dataset"]
-        past = np.zeros(
-            (norm_set["fluo1"].shape[0], timepoint, len(eval_set.features)),
-            dtype=np.float32
-            )
-        future = np.empty(
-            (norm_set["fluo1"].shape[0], eval_set.horizon, len(eval_set.features)), 
-            dtype=np.float32
-            )
-        for f, feature in enumerate(eval_set.features):
-            past[:,:,f] = norm_set[feature][:, :timepoint, 0]
-            future[:,:,f] = norm_set[feature][:, timepoint:timepoint + eval_set.horizon, 0]
-        all_past.append(past)
-        all_future.append(future)
-    all_past = np.concatenate(all_past,axis=0)
-    all_future = np.concatenate(all_future,axis=0)
-    X, yval = eval_set.formatter.training(all_past, all_future)
-    yval = yval[:,:,0]
-    
-    yhat = model.predict(X, verbose=1)
-    
-    mae.append(np.mean(np.mean(np.abs(yhat-yval), axis=1)))
-    rmse.append(np.mean(np.sqrt(np.mean(np.square(yhat-yval), axis=1))))
-
-# np.save("mae.npy", np.array(mae))
-# np.save("rmse.npy", np.array(rmse))
-# mae = np.load("mae.npy")
-# rmse = np.load("rmse.npy")
+plt.show()
