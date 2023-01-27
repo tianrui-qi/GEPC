@@ -228,15 +228,31 @@ def camera_sim(fluo, camera_mult=40,camera_max=4095,camera_offset=100,noise_perc
 
     '''
     return np.clip(
-                    np.multiply(
-                        (fluo*camera_mult+camera_offset),
-                        np.random.normal(loc=1.0,scale=noise_perc/100,size=fluo.shape)
-                        ),
-                    0,
-                    camera_max
-                    )
+                np.multiply(
+                    (fluo*camera_mult+camera_offset),
+                    np.random.normal(loc=1.0,scale=noise_perc/100,size=fluo.shape)
+                    ),
+                0,
+                camera_max
+            )
 
 def training_set(stims, sampling=SAMPLING):
+    """
+    Generate training set from Gillespie model and pre-determined stimulations
+
+    Parameters
+    ----------
+    stims : 2D array of bool.
+        Stimulations to apply to the cell.
+    sampling : int, optional
+        Period between measurements, in (simulated) minutes. The default is 5.
+
+    Returns
+    -------
+    fluo : 2D array of float
+        Generated fluorescence.
+
+    """
     
     # Run Gillespie simulations: (not using multiprocessing here because it's relatively fast)
     fluo = []
@@ -288,87 +304,3 @@ def evaluation_set(
             )
     
     return res
-
-# TODO test this function
-def control(
-        controller,
-        objectives,
-        control_batch_size = 27
-        ):
-    
-    # Initialize main return variables:
-    cells = []
-    fluorescence = np.empty(
-        (objectives.shape[0],objectives.shape[1]+controller.past_steps),
-        dtype=float
-        )
-    stims = np.zeros(
-        (objectives.shape[0],objectives.shape[1]+controller.past_steps),
-        dtype=bool
-        )
-    
-    # Run no-control "warm-up" for all cells:
-    for c in range(objectives.shape[0]):
-        
-        # Init an run CcaSR model:
-        cell = CcaSR_gillespie() # Instantiate new "cell"
-        cells.append(cell) # Add to cells list
-        cell.species['F']=20
-        timeseries = cell.run(objectives.shape[1]*SAMPLING)[1:]
-        
-        # Store fluo values:
-        for timepoint, x in enumerate(timeseries):
-            fluorescence[c,timepoint] = camera_sim(np.array(x['F']))
-    
-    for timepoint in range(objectives.shape[1]):
-        
-        timepoint+=controller.past_steps # Add warm-up period
-        process_cells = [-1] # No cells processed yet
-        
-        # Run batches of cells
-        while process_cells[-1]+1 < objectives.shape[0]:
-            
-            # Determine cells to process:
-            process_cells = np.arange(
-                process_cells[-1]+1, 
-                min(process_cells[-1]+control_batch_size+1,objectives.shape[0])
-                )
-            
-            # Initialize lists:
-            control_inputs = []
-            control_objectives = []
-            
-            # Compile control inputs for each cell:
-            for c in process_cells:
-                control_inputs += [
-                    (
-                        data.fluo_norm(fluorescence[c,np.newaxis,:timepoint]),
-                        stims[c,:timepoint]
-                        )
-                    ]
-                control_objectives += [
-                    data.fluo_norm(
-                        objectives[c,int(timepoint-objectives.shape[1]):]
-                        )
-                    ]
-            
-            # Run controller:
-            control_outputs = controller.feedback(
-                control_inputs,
-                control_objectives
-                )
-                
-            # Run next timepoint for each cell:
-            for b, c in enumerate(process_cells):
-                
-                # Apply next optogenetic input:
-                stims[c,timepoint] = control_outputs[b]
-                cells[c].set_light_events([stims[c,timepoint]])
-                
-                # Run model for next 5 minutes:
-                timeseries = cells[c].run(timepoint*SAMPLING)
-                fluorescence[c,timepoint] = camera_sim(
-                    np.array(timeseries[-1]['F'])
-                    )
-    
-    return stims, fluorescence

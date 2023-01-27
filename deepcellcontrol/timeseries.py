@@ -274,13 +274,17 @@ def batch_train_eval(
     
     # Plot single cell evaluations:
     if plot_singlecell:
-        os.makedirs(os.path.join(save_folder,'single_cell_evals'))
+        os.makedirs(os.path.join(save_folder,'single_cell_evals'), exist_ok=True)
         fluos, stims = dataset.formatter.reconstruct(eval_d['input'],eval_d['groundtruth'])
+        if type(params['past_steps']) is int:
+            _past_steps = params['past_steps']
+        else:
+            _past_steps = params['past_steps'][1]
         for eval_num in range(50):
             utils.evaluationPlot(
                 stims[eval_num],
-                fluos[eval_num,:params['past_steps']],
-                fluos[eval_num,params['past_steps']:],
+                fluos[eval_num,:_past_steps],
+                fluos[eval_num,_past_steps:],
                 eval_d["prediction"][eval_num],
                 dyn_range=1,
                 savefig = os.path.join(save_folder,'single_cell_evals','sample_%02d'%eval_num),

@@ -64,7 +64,7 @@ def getRandomStimulations(totalchambers, timepoints, upper_limit=1, lower_limit=
     
     # Run over timepoints:
     for t in range(timepoints-1):
-        print((sum_arr[:,t], flips[:,t]))
+        # print((sum_arr[:,t], flips[:,t]))
         sum_arr[:,t+1] = sum_arr[:,t] + flips[:,t] # Add timepoints sequentially
         sum_arr = sum_arr.clip(lower_limit,upper_limit) # Apply lower and upper limits
         
@@ -541,7 +541,7 @@ def random_objectives(
     return objective
 
 
-def plotq(fluo,q = .5, color="b"):
+def plotq(fluo, x = None, q = .5, color="b"):
     """
     Quantile plot
 
@@ -562,7 +562,8 @@ def plotq(fluo,q = .5, color="b"):
 
     """
     
-    x = np.arange(0,len(fluo[0]),1)/12
+    if x is None:
+        x = np.arange(0,len(fluo[0]),1)/12
     plt.plot(x,np.nanmedian(fluo,axis=0), color=color)
     plt.fill_between(
         x,

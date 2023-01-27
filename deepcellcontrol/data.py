@@ -413,7 +413,7 @@ class Datasets(Generator):
     Generator class so it can be fed directly to TF's .fit() function
     """
 
-    def __init__(self, datasets, features, formatter):
+    def __init__(self, datasets, formatter, parameters):
         """
         Instanciate
 
@@ -432,14 +432,14 @@ class Datasets(Generator):
 
         """
         self.datasets = datasets
-        self.features = features
         self.formatter = formatter
         self.test_ratio = 0.1
         self.data_type = "raw_dataset"
         self.mode = "training"
-        self.horizon = 24
-        self.past_steps = 36
-        self.batch_size = 100
+        self.features = parameters["features"]
+        self.horizon = parameters["horizon"]
+        self.past_steps = parameters["past_steps"]
+        self.batch_size = parameters["batch_size"]
         self.normalization = Normalization()
 
     def load(self):
@@ -646,12 +646,12 @@ class Datasets(Generator):
         # Run through features, compile sample:
         
         for f, feature in enumerate(self.features):
-            past[past_point-timepoint:,f] = dataset[feature][
-                cell_nb, past_point:timepoint, 0
-                ]
-            future[:,f] = dataset[feature][
-                cell_nb, timepoint : timepoint + self.horizon, 0
-                ]
+            past[past_point-timepoint:,f] = np.squeeze(
+                dataset[feature][cell_nb, past_point:timepoint]
+                )
+            future[:,f] = np.squeeze(
+                dataset[feature][cell_nb, timepoint : timepoint + self.horizon]
+                )
         
         return past, future
 
@@ -726,13 +726,10 @@ def load_datasets(parameters):
             ]
         training_set = Datasets(
             training_files,
-            features = parameters["features"],
-            formatter = LSTMFormatter(parameters["features"])
+            formatter = LSTMFormatter(parameters["features"]),
+            parameters = parameters
             )
         training_set.test_ratio = 0
-        training_set.horizon = parameters["horizon"]
-        training_set.past_steps = parameters["past_steps"]
-        training_set.batch_size = parameters["batch_size"]
         training_set.mode = "training"
         training_set.load()
         training_set.normalize()
@@ -745,13 +742,10 @@ def load_datasets(parameters):
             ]
         evaluation_set = Datasets(
             evaluation_files,
-            features = parameters["features"],
-            formatter = LSTMFormatter(parameters["features"])
+            formatter = LSTMFormatter(parameters["features"]),
+            parameters = parameters
             )
         evaluation_set.test_ratio = 1
-        evaluation_set.horizon = parameters["horizon"]
-        evaluation_set.past_steps = parameters["past_steps"]
-        training_set.batch_size = parameters["batch_size"]
         training_set.mode = "evaluation"
         evaluation_set.load()
         evaluation_set.normalize()
