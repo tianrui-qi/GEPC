@@ -15,12 +15,70 @@ from multiprocessing import Pool
 
 import numpy as np
 
-from . import utilities as utils
-from . import data
-
 SAMPLING = 5
 
+class Reaction():
+    """
+    Class to implement reaction propensity evaluation.
+    """
+    
+    def __init__(self, propensity, stoichiometry):
+        """
+        Init/Instanciate reaction.
+
+        Parameters
+        ----------
+        propensity : str
+            String describing propensity computation. e.g. "a*E*S" for an 
+            enzymatic reaction E + S --> C with rate a.
+        stoichiometry : Dict
+            Description of the stoichiometry of the reaction. 
+            e.g. {"E": -1, "S": -1, "C": 1}
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        self.propensity = propensity
+        self.stoichiometry = stoichiometry
+        
+    def update(self, params, species):
+        """
+        Evaluate and return propensity based on current parameters and soecies
+        levels.
+
+        Parameters
+        ----------
+        params : Dict
+            Dictionary of reaction parameters.
+        species : Dict
+            Dictionary of species numbers.
+
+        Returns
+        -------
+        float
+            Evaluated propensity of the reaction.
+
+        """
+        
+        return eval(self.propensity, {}, {**params, **species})
+        
+
 class CcaSR_gillespie():
+    """
+    Base class that implements an optogenetics-friendly Gillespie algorithm and
+    the simple CcaSR-GFP circuit that we used in our feedback control 
+    experiements.
+    
+                            "Responsiveness" (E)
+                                    |
+                                    v
+    Light Input (U) ---> CcaSR (H) ---> GFP (F)
+    
+    
+    """
     
     def __init__(self):
         
@@ -31,22 +89,31 @@ class CcaSR_gillespie():
         # We also treat the light-activation dynamics (species H) as stochastic
         # instead of the 
         self.params = {
-            'h1':0.0710/25,
-            'h2':0.0303/50,
-            'c2':0.0631,
-            'a':0.2827,
-            'b':0.0104,
-            's':0.9958,
-            'nh':3.6655,
-            'K':0.4851,
-            'tau':12
+            'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
+            'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
+            'c2':0.0631, # Hill normalization parameter
+            'a':0.2827, # PcpcG2 promoter rate
+            'b':0.0104, # Proteins dilution rate
+            's':0.9958, # Not used in the end
+            'nh':3.6655, # Hill coefficient
+            'K':0.4851, # Hill threshold (sort of)
+            'tau':12 # Response delay
             }
+        "Parameters used in the propensity calculations"
         self.species = {
-            'U':0,
-            'H':0.,
-            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])),
-            'F':0
+            'U':0, # Optogenetic input
+            'H':0., # CcaS-CcaR
+            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
+            'F':0 # GFP
             }
+        self.reactions = (
+            Reaction('h1', {'E': 1}), # "Extrinsic" creation
+            Reaction('h2*E', {'E': -1}), # "Extrinsic" dilution
+            Reaction('U', {'H': 1}), # CcaSR activation
+            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E*((c2*H)**nh)/(K+(c2*H)**nh)', {'F': 1}), # GFP creation
+            Reaction('b*F', {'F': -1}), # GFP dilution
+            )
         self.sampling = SAMPLING # Sampling interval
         self.events = [] # External events
         self.past_events = []
@@ -59,7 +126,7 @@ class CcaSR_gillespie():
         Parameters
         ----------
         stoptime : float
-            Time-point at which the simulation should be stopped.
+            Time-point at which the simulation should be stopped, in minutes.
 
         Returns
         -------
@@ -141,31 +208,11 @@ class CcaSR_gillespie():
 
         '''
         
-        # Calculate propensities (See SI of Chait et al.):
-        propensities = []
-        # "Extrinsic" creation:
-        propensities.append((self.params['h1'], 
-                             (['E',1],))) # (propensity, reaction stoichiometry)
-        # "Extrinsic" dilution:
-        propensities.append((self.params['h2']*self.species['E'], 
-                             (['E',-1],)))
-        # CcaSR activation:
-        propensities.append((self.species['U'], 
-                              (['H',1],)))
-        # CcaSR deactivation/dilution:
-        propensities.append((self.params['c2']*self.species['H'], 
-                              (['H',-1],)))
-        # GFP creation:
-        propensities.append((self.params['a']*self.species['E']*\
-                            ((self.species['H']*self.params['c2'])**self.params['nh'])/\
-                            (self.params['K']+((self.species['H']*self.params['c2'])**self.params['nh'])),
-                            (['F',1],)))
-        # GFP dilution:
-        propensities.append((self.params['b']*self.species['F'], 
-                             (['F',-1],)))
+        # Calculate propensities:
+        propensities = [r.update(self.params, self.species) for r in self.reactions]
         
         # Cumulative sum:
-        cs = np.cumsum([x[0] for x in propensities])
+        cs = np.cumsum(propensities)
             
         # Update timestep to next reaction:
         timestep = -np.log(np.random.random()) / cs[-1]
@@ -190,13 +237,66 @@ class CcaSR_gillespie():
             
         else: # Apply reaction
             # Get random number and select reaction:
-            reaction = np.argmax(cs >= np.random.random()*cs[-1])
+            selected = np.argmax(cs >= np.random.random()*cs[-1])
             # Apply selected reaction stoichiometry:
-            for r in propensities[reaction][1]:
-                newspecies[r[0]] = self.species[r[0]] + r[1]
+            for s, r in self.reactions[selected].stoichiometry.items():
+                newspecies[s] = self.species[s] + r
         
         # Return:
         return (timestep,newspecies)
+
+
+class CcaSR_Inverter(CcaSR_gillespie):
+    """
+    A simple inverter circuit where LacI is downstream of PcpcG2 and then
+    represses the expression of GFP.
+    
+                                   "Responsiveness" (E)
+                                    |             |
+                                    v             V
+    Light Input (U) ---> CcaSR (H) ---> LacI (R) ---| GFP (F)
+    
+    This class inherits from the `CcaSR_gillespie` class.
+    """
+    
+    def __init__(self):
+        # Run parent class init:
+        super().__init__()
+        
+        # Alter the reactions network:
+        self.params = {
+            'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
+            'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
+            'c2':0.0631, # Hill normalization parameter
+            'a':0.2827, # PcpcG2 promoter rate
+            'b':0.0104, # Proteins dilution rate
+            's':0.9958, # Not used in the end
+            'nh':3.6655, # Hill coefficient
+            'K':0.4851, # Hill threshold (sort of)
+            'tau':12, # Response delay
+            'g':.05, # pLac promoter rate
+            'Kr':.25, # pLac-LacI Hill threshold
+            'c3':.03, # pLac-LacI Hill normalization parameter
+            'nr':2 # pLac-LacI Hill coefficient
+            }
+        self.species = {
+            'U':0, # Optogenetic input
+            'H':0., # CcaS-CcaR
+            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
+            'F':0, # GFP
+            'R':0, # LacI
+            }
+        self.reactions = (
+            Reaction('h1', {'E': 1}), # "Extrinsic" creation
+            Reaction('h2*E', {'E': -1}), # "Extrinsic" dilution
+            Reaction('U', {'H': 1}), # CcaSR activation
+            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E*((c2*H)**nh)/(K+(c2*H)**nh)', {'R': 1}), # LacI creation
+            Reaction('b*R', {'R': -1}), # LacI dilution
+            Reaction('g*E/(Kr+(c3*R)**nr)', {'F': 1}), # GFP creation
+            Reaction('b*F', {'F': -1}), # GFP dilution
+            )
+        
 
 def camera_sim(fluo, camera_mult=40,camera_max=4095,camera_offset=100,noise_perc=5):
     '''
@@ -236,28 +336,30 @@ def camera_sim(fluo, camera_mult=40,camera_max=4095,camera_offset=100,noise_perc
                 camera_max
             )
 
-def training_set(stims, sampling=SAMPLING):
+def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie):
     """
     Generate training set from Gillespie model and pre-determined stimulations
 
     Parameters
     ----------
     stims : 2D array of bool.
-        Stimulations to apply to the cell.
+        Stimulations to apply to the cells. Dimensions are (cells, time).
     sampling : int, optional
         Period between measurements, in (simulated) minutes. The default is 5.
+    cell_class : CcaSR_gillespie or descendant class, optional.
+        The type of cell to simulate. The default is CcaSR_gillespie
 
     Returns
     -------
     fluo : 2D array of float
-        Generated fluorescence.
+        Generated fluorescence. Dimensions are (cells, time).
 
     """
     
     # Run Gillespie simulations: (not using multiprocessing here because it's relatively fast)
     fluo = []
     for l in range(stims.shape[0]):
-        cell = CcaSR_gillespie() # Instantiate new "cell"
+        cell = cell_class() # Instantiate new "cell"
         cell.set_light_events(stims[l]) # Set future light events
         ts = cell.run(stims.shape[1]*sampling) # Run until the end
         fluo.append([x['F'] for x in ts[1:]]) # Append fluorescence to list (skip first timepoint before any stim)
@@ -270,9 +372,101 @@ def training_set(stims, sampling=SAMPLING):
     
     return fluo
 
-# Define simulation function (Needs to be top level to use in multiprocessing pool):
-def _evaluation(stims, cut_off, future_realizations, sampling):
-    cell = CcaSR_gillespie() # Instantiate new "cell"
+
+def evaluation_set(
+        stims, 
+        cut_off,
+        cell_class = CcaSR_gillespie,
+        future_realizations=5000, 
+        sampling=SAMPLING, 
+        num_workers=8,
+        ):
+    """
+    Generate evaluation set with multiple future realization of the cell 
+    response after an arbitrary cut-off timepoint.
+
+    Parameters
+    ----------
+    stims : 2D array of bool.
+        Stimulations to apply to the cells. Dimensions are (cells, time).
+    cut_off : int
+        cut-off time point after which multiple realizations of the cell 
+        response are computed.
+    cell_class : CcaSR_gillespie or descendant class, optional.
+        The type of cell to simulate. The default is CcaSR_gillespie
+    future_realizations : int, optional
+        Number of future realization to compute per cell. The default is 5000.
+    sampling : int, optional
+        Period between measurements, in (simulated) minutes. The default is 5.
+    num_workers : int, optional
+        Number of parallel workers to use to compute each cell trajectory. If
+        None, no parallel execution is used. The default is 8. 
+
+    Returns
+    -------
+    res : List[(1D array, 2D array)]
+        List of all cells and their simulations before and after cutoff. Each
+        list element contains the single trajectory of the cell before cut-off,
+        and its multiple realisations after cut-off. Dimensions of the two
+        arrays are (time,) and (realizations, time).
+
+    """
+    
+    if num_workers is None:
+        res = []
+        for s in stims:
+            res.append(
+                _evaluation(s, cut_off, future_realizations, sampling, cell_class)
+                )
+        return res
+    
+    # Run _evaluation function in parallel:
+    with Pool(num_workers) as pool:
+        res = pool.starmap(
+            _evaluation,
+            zip(
+                stims,
+                itertools.repeat(cut_off),
+                itertools.repeat(future_realizations),
+                itertools.repeat(sampling),
+                itertools.repeat(cell_class)
+                )
+            )
+    
+    return res
+
+
+def _evaluation(stims, cut_off, future_realizations, sampling, cell_class):
+    """
+    This function implements the actual evaluation routine for a specific cell.
+    It has to be a top-level function otherwise the parallel processing 
+    library is sad :(
+
+    Parameters
+    ----------
+    stims : 1D array of bool.
+        Stimulations to apply to the 1 cell. Dimensions are (time,).
+    cut_off : int
+        cut-off time point after which multiple realizations of the cell 
+        response are computed.
+    future_realizations : int, optional
+        Number of future realization to compute per cell. The default is 5000.
+    sampling : int, optional
+        Period between measurements, in (simulated) minutes. The default is 5.
+    cell_class : CcaSR_gillespie or descendant class, optional.
+        The type of cell to simulate. The default is CcaSR_gillespie
+
+    Returns
+    -------
+    Past : 1D numpy array
+        The single trajectory of the cell until cut-off. Dimensions are (time,)
+    Future : 2D numpy array.
+        The multiple trajectories of the cell's response "realizations" after
+        cut-off. Dimensions are (realizations, time).
+
+    """
+    
+    cell = cell_class() # Instantiate new "cell"
     cell.set_light_events(stims) # Set future light events
     ts = cell.run(cut_off*sampling) # Run until cut off between "Past" and "Future"
     Past = np.array([x['F'] for x in ts[1:]]) # Append fluorescence time-series to the "Past" of the cell
@@ -286,21 +480,3 @@ def _evaluation(stims, cut_off, future_realizations, sampling):
     Future = camera_sim(np.array(Future))
 
     return Past, Future
-
-def evaluation_set(
-        stims, cut_off, future_realizations=5000, sampling=SAMPLING, num_workers=8
-        ):
-    
-    # Run _evaluation function in parallel:
-    with Pool(num_workers) as pool:
-        res = pool.starmap(
-            _evaluation, 
-            zip(
-                stims, 
-                itertools.repeat(cut_off),
-                itertools.repeat(future_realizations), 
-                itertools.repeat(sampling)
-                )
-            )
-    
-    return res
