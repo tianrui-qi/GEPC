@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import deepcellcontrol as dcc
 
 #%% Parameters:
-_folder = "D:/deepcellcontrol/assets/simulated2/"
+_folder = "D:/deepcellcontrol/assets/simulated_inverter/"
 with open(_folder + "/training_parameters.json", "r") as f:
     params = json.load(f)
 
@@ -44,7 +44,7 @@ objectives = dcc.utilities.sine_objective(
 objectives = np.repeat(objectives[np.newaxis], repeats=num_cells, axis=0)
 
 # Create cells:
-chip = [dcc.simulations.CcaSR_gillespie() for _ in range(num_cells)]
+chip = [dcc.simulations.CcaSR_Inverter() for _ in range(num_cells)]
 fluorescence = np.empty([num_cells, objectives.shape[1] + nocontrol])
 stims = np.empty([num_cells, objectives.shape[1] + nocontrol])
 

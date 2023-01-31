@@ -14,7 +14,7 @@ import deepcellcontrol as dcc
 #%% Parameters
 # Load default params:
 params = copy.deepcopy(dcc.config.defaults)
-params["save_folder"] = "D:/deepcellcontrol/assets/simulated2/"
+params["save_folder"] = "D:/deepcellcontrol/assets/simulated_inverter/"
 params["past_steps"] = [36, 144]
 params["features"] = ["fluo1", "stims"]
 params["training_parameters"]["epochs"] = 200
@@ -24,10 +24,13 @@ os.makedirs(params["save_folder"], exist_ok = True)
 
 #%% Generate training set:
 # Get an array of random stimulations:
-stims = dcc.utilities.random_stimulations(total_simulations=10_000)
+stims = dcc.utilities.random_stimulations(total_simulations=3_000)
 
 # Generate cell responses:
-fluorescence = dcc.simulations.training_set(stims)
+fluorescence = dcc.simulations.training_set(
+    stims, 
+    cell_class = dcc.simulations.CcaSR_Inverter
+    )
 
 # Save to disk:
 os.makedirs(params["save_folder"]+"training_set", exist_ok = True)

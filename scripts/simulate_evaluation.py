@@ -8,24 +8,24 @@ import os
 import json
 
 import numpy as np
-import tensorflow as tf
 import matplotlib.pyplot as plt
+import tensorflow as tf
 
 import deepcellcontrol as dcc
 
 #%% Parameters et al.
 # Load parameters from training:
-_folder = "D:/deepcellcontrol/assets/simulated2/"
+_folder = "D:/deepcellcontrol/assets/simulated_inverter/"
 with open(_folder + "/training_parameters.json", "r") as f:
     params = json.load(f)
-
-# Create results subfolder:
-os.makedirs(params["save_folder"] + "/evaluation/", exist_ok = True)
 
 # Load trained model:
 network = tf.keras.models.load_model(
     params["save_folder"]+"/model_besteval.hdf5"
     )
+
+# Create results subfolder:
+os.makedirs(params["save_folder"] + "/evaluation/", exist_ok = True)
 
 # Misc params:
 cutoff = 24*12 # Cut off b/w past and future
@@ -39,8 +39,13 @@ stims = dcc.utilities.random_stimulations(
 
 # Generate evaluation set:
 eval_sims = dcc.simulations.evaluation_set(
-    stims, cut_off = cutoff, future_realizations = 100
+    stims,
+    cell_class = dcc.simulations.CcaSR_Inverter,
+    cut_off = cutoff,
+    future_realizations = 100,
+    num_workers = None
     )
+
 # Reformat a little bit:
 past_fluo = np.stack([cell[0] for cell in eval_sims], axis=0)
 futures_fluo = np.stack([cell[1] for cell in eval_sims], axis=0)
@@ -50,6 +55,7 @@ np.save(params["save_folder"]+"/evaluation/futures_fluo.npy", futures_fluo)
 np.save(params["save_folder"]+"/evaluation/stims.npy", stims)
 
 #%% Predict fluorescence:
+
 # Reformat to what the model expects:
 x = (np.stack([past_fluo/4095, stims[:,:cutoff]], axis = -1), stims[:,cutoff:])
 
