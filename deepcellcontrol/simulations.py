@@ -42,6 +42,7 @@ class Reaction():
         """
         
         self.propensity = propensity
+        self._compiled = compile(propensity, "_", "eval")
         self.stoichiometry = stoichiometry
         
     def update(self, params, species):
@@ -63,7 +64,7 @@ class Reaction():
 
         """
         
-        return eval(self.propensity, {}, {**params, **species})
+        return eval(self._compiled, {}, {**params, **species})
         
 
 class CcaSR_gillespie():
