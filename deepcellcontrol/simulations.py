@@ -247,6 +247,45 @@ class CcaSR_gillespie():
         return (timestep,newspecies)
 
 
+class CcaSR_gillespie_nondimensional(CcaSR_gillespie):
+    """
+    A simple inverter circuit where LacI is downstream of PcpcG2 and then
+    represses the expression of GFP.
+    
+                                   "Responsiveness" (E)
+                                    |             |
+                                    v             V
+    Light Input (U) ---> CcaSR (H) ---> LacI (R) ---| GFP (F)
+    
+    This class inherits from the `CcaSR_gillespie` class.
+    """
+    
+    def __init__(self):
+        # Run parent class init:
+        super().__init__()
+        
+        # Alter the reactions network:
+        self.params = {
+            'alpha': 5, # ratio of H production (per unit light) to dilution
+            'beta': 5, # ratio of E production (per amount of H) to dilution
+            'gamma': 5, # ratio of F production to dilution
+            'nh': 2, # cooperativity of F activation by H
+            }
+        self.species = {
+            'U':0, # Optogenetic input
+            'H':0., # CcaS-CcaR
+            'E':round(np.random.poisson(self.params['beta'])), # "Extrinsic noise / responsiveness"
+            'F':0, # GFP
+            }
+        self.reactions = (
+            Reaction('beta', {'E': 1}), # "Extrinsic" creation
+            Reaction('E', {'E': -1}), # "Extrinsic" dilution
+            Reaction('alpha*U', {'H': 1}), # CcaSR activation
+            Reaction('H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('gamma*E * (H**nh)/(1+H**nh)', {'F': 1}), # GFP creation
+            Reaction('F', {'F': -1}), # GFP dilution
+            )
+
 class CcaSR_Inverter(CcaSR_gillespie):
     """
     A simple inverter circuit where LacI is downstream of PcpcG2 and then
@@ -296,6 +335,50 @@ class CcaSR_Inverter(CcaSR_gillespie):
             Reaction('b*R', {'R': -1}), # LacI dilution
             Reaction('g*E/(Kr+(c3*R)**nr)', {'F': 1}), # GFP creation
             Reaction('b*F', {'F': -1}), # GFP dilution
+            )
+        
+class CcaSR_Cascade(CcaSR_gillespie):
+    """
+    A simple inverter circuit where LacI is downstream of PcpcG2 and then
+    represses the expression of GFP.
+    
+                                       "Responsiveness" (E)
+                                    |                     |
+                                    v                     V
+    Light Input (U) ---> CcaSR (H) ---> Intermediate (I) ---> GFP (F)
+    
+    This class inherits from the `CcaSR_gillespie` class.
+    """
+    
+    def __init__(self):
+        # Run parent class init:
+        super().__init__()
+        
+        # Alter the reactions network:
+        self.params = {
+            'alpha': 5, # ratio of H production (per unit light) to dilution
+            'beta': 5, # ratio of E production (per amount of H) to dilution
+            'gamma': 5, # ratio of F production to dilution
+            'kappa': 5, # ratio of activation strengths, raised to power of I cooperativity
+            'nh': 2, # cooperativity of I activation by H
+            'ni': 2, # cooperativity of F activation by I
+            }
+        self.species = {
+            'U':0, # Optogenetic input
+            'H':0., # CcaS-CcaR
+            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
+            'F':0, # GFP
+            'R':0, # LacI
+            }
+        self.reactions = (
+            Reaction('beta', {'E': 1}), # "Extrinsic" creation
+            Reaction('E', {'E': -1}), # "Extrinsic" dilution
+            Reaction('alpha*U', {'H': 1}), # CcaSR activation
+            Reaction('H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('gamma*E * (H**nh)/(1+H**nh)', {'I': 1}), # Intermediate creation
+            Reaction('I', {'I': -1}), # Intermediate dilution
+            Reaction('gamma*E * (I**ni)/(1+I**ni)', {'F': 1}), # GFP creation
+            Reaction('F', {'F': -1}), # GFP dilution
             )
         
 
