@@ -415,9 +415,10 @@ def evaluation_set(
     
     if num_workers is None:
         res = []
-        for s in stims:
+        for s, stim in enumerate(stims):
+            print(f"{s}/{stims.shape[0]} cells")
             res.append(
-                _evaluation(s, cut_off, future_realizations, sampling, cell_class)
+                _evaluation(stim, cut_off, future_realizations, sampling, cell_class)
                 )
         return res
     

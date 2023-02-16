@@ -24,12 +24,12 @@ os.makedirs(params["save_folder"], exist_ok = True)
 
 #%% Generate training set:
 # Get an array of random stimulations:
-stims = dcc.utilities.random_stimulations(total_simulations=3_000)
+stims = dcc.utilities.random_stimulations(total_simulations=10_000)
 
 # Generate cell responses:
 fluorescence = dcc.simulations.training_set(
-    stims, 
-    cell_class = dcc.simulations.CcaSR_Inverter
+    stims,
+    cell_class = dcc.simulations.CcaSR_gillespie
     )
 
 # Save to disk:
