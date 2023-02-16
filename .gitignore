@@ -145,3 +145,6 @@ config.py
 
 # Vi swap files:
 *.py.swp
+
+# macOS files
+.DS_Store
