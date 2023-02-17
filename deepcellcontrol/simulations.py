@@ -269,6 +269,7 @@ class CcaSR_gillespie_nondimensional(CcaSR_gillespie):
             'beta': 5, # ratio of E production (per amount of H) to dilution
             'gamma': 5, # ratio of F production to dilution
             'nh': 2, # cooperativity of F activation by H
+            'tau':12 # Response delay
             }
         self.species = {
             'U':0, # Optogenetic input
@@ -360,6 +361,7 @@ class CcaSR_Cascade(CcaSR_gillespie):
             'kappa_i': 5, # ratio of I to H activation strengths, raised to power of I cooperativity
             'nh': 2, # cooperativity of I activation by H
             'ni': 2, # cooperativity of F activation by I
+            'tau':12 # Response delay
             }
         self.species = {
             'U':0, # Optogenetic input
@@ -405,6 +407,7 @@ class CcaSR_Autoactivation(CcaSR_gillespie):
             'kappa_f': 5, # ratio of F to H activation strengths, raised to power of F cooperativity
             'nh': 2, # cooperativity of F activation by H
             'nf': 2, # cooperativity of F activation by F
+            'tau':12 # Response delay
             }
         self.species = {
             'U':0, # Optogenetic input
@@ -451,6 +454,7 @@ class CcaSR_FeedforwardPositive(CcaSR_gillespie):
             'nh': 2, # cooperativity of I activation by H
             'ni': 2, # cooperativity of F, J activation by I
             'nj': 2, # cooperativity of F activation by J
+            'tau':12 # Response delay
             }
         self.species = {
             'U':0, # Optogenetic input
@@ -539,6 +543,7 @@ class CcaSR_FeedbackPositive(CcaSR_gillespie):
             'ni': 2, # cooperativity of F activation by I
             'nj': 2, # cooperativity of I activation by J
             'nf': 2, # cooperativity of J activation by F
+            'tau':12 # Response delay
             }
         self.species = {
             'U':0, # Optogenetic input
