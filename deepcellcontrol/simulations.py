@@ -285,6 +285,48 @@ class CcaSR_gillespie_nondimensional(CcaSR_gillespie):
             Reaction('gamma*E * (H**nh)/(1+H**nh)', {'F': 1}), # GFP creation
             Reaction('F', {'F': -1}), # GFP dilution
             )
+        
+class CcaSR_gillespie_simple(CcaSR_gillespie):
+    """
+    A variant of the base class with simpler parameter choices
+    
+                            "Responsiveness" (E)
+                                    | 
+                                    v  
+    Light Input (U) ---> CcaSR (H) ---> LGFP (F)
+    
+    This class inherits from the `CcaSR_gillespie` class.
+    """
+    
+    def __init__(self):
+        # Run parent class init:
+        super().__init__()
+        
+        # Alter the reactions network:
+        self.params = {
+            'eta': 1, # production rate of H per unit of U
+            'nu': 0.0104, # dilution of all proteins (i.e.H, F); matches Chait c2 or b
+            'rho': 0.0710/25, # production of extrinsic noise; matches Chait h1
+            'nu_E': 0.0303/50, # dilution of extrinsic noise; matches Chait h2
+            'a': 0.2827, # production rate of F per unit of E; matches Chait a
+            'K_H': 1.716, # concentration of H for 50% production of F; matches Chait K/c2
+            'nH': 3.6655, # cooperativity for H activation of F; matches Chait nh
+            'tau': 12, # delay between light change and effect on U
+            }
+        self.species = {
+            'U':0, # Optogenetic input
+            'H':0., # CcaS-CcaR
+            'E':round(np.random.poisson(self.params['rho'] / self.params['nu_E'])), # "Extrinsic noise / responsiveness"
+            'F':0, # GFP
+            }
+        self.reactions = (
+            Reaction('rho', {'E': 1}), # "Extrinsic" creation
+            Reaction('nu_E*E', {'E': -1}), # "Extrinsic" dilution
+            Reaction('eta*U', {'H': 1}), # CcaSR activation
+            Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E * (H**nH)/(K_H**nH+H**nH)', {'F': 1}), # GFP creation
+            Reaction('nu*F', {'F': -1}), # GFP dilution
+            )        
 
 class CcaSR_Inverter(CcaSR_gillespie):
     """
@@ -508,7 +550,7 @@ class CcaSR_FeedforwardNegative(CcaSR_gillespie):
             Reaction('gamma*E * (I**ni)/(kappa_i+I**ni)', {'J': 1}), # Intermediate J creation
             Reaction('J', {'J': -1}), # Intermediate J dilution
             Reaction('gamma*E/2 * (I**ni)/(kappa_i+I**ni)', {'F': 1}), # GFP creation by I
-            Reaction('gamma*E/2 * (kappa_J)/(kappa_j+J**nj)', {'F': 1}), # GFP creation by J
+            Reaction('gamma*E/2 * (kappa_j)/(kappa_j+J**nj)', {'F': 1}), # GFP creation by J
             Reaction('F', {'F': -1}), # GFP dilution
             )
 
