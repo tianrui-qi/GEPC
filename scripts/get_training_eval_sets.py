@@ -14,10 +14,11 @@ import numpy as np
 import deepcellcontrol as dcc
 
 # Datasets folder:
-base_folder = "/projectnb/dunlop/JB/deepcellcontrol/assets/simulated/data/"
+username='hklumpe'
+base_folder = f"/projectnb/dunlop/{username}/deepcellcontrol/assets/simulated/data/"
 
 # Class of cells to train:
-cell_class = dcc.simulations.CcaSR_Inverter
+cell_class = dcc.simulations.CcaSR_gillespie_simple
 
 # Training parameters:
 training_cells = 10_000
