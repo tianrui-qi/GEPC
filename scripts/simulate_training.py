@@ -22,27 +22,14 @@ params["models_folder"] = "" # TODO: fix this in timeseries.batch_train_eval
 
 os.makedirs(params["save_folder"], exist_ok = True)
 
-#%% Generate training set:
-# Get an array of random stimulations:
-stims = dcc.utilities.random_stimulations(total_simulations=10_000)
+#%% Generate Dataset object from saved data:
 
-# Generate cell responses:
-fluorescence = dcc.simulations.training_set(
-    stims,
-    cell_class = dcc.simulations.CcaSR_gillespie
-    )
-
-# Save to disk:
-os.makedirs(params["save_folder"]+"training_set", exist_ok = True)
-np.save(params["save_folder"]+"training_set/fluo1.npy", fluorescence)
-np.save(params["save_folder"]+"training_set/stims.npy", stims)
-
-# Generate Dataset object from saved data:
 training_set = dcc.data.Datasets(
     [params["save_folder"]+"training_set/"],
     formatter = dcc.data.LSTMFormatter(params["features"]),
     parameters = params
     )
+
 training_set.test_ratio = 0.1 # Fraction of samples that are left out of training
 # Actually load data and normalize:
 training_set.load()
