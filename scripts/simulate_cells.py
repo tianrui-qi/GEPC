@@ -21,20 +21,20 @@ params["save_folder"] = "../assets/activation/"
 
 os.makedirs(params["save_folder"], exist_ok = True)
 
-# #%% Generate training set:
-# # Get an array of random stimulations:
-# stims = dcc.utilities.random_stimulations(total_simulations=3_000)
+#%% Generate training set:
+# Get an array of random stimulations:
+stims = dcc.utilities.random_stimulations(total_simulations=3_000)
 
-# # Generate cell responses:
-# fluorescence = dcc.simulations.training_set(
-#     stims, 
-#     cell_class = dcc.simulations.CcaSR_gillespie_nondimensional
-#     )
+# Generate cell responses:
+fluorescence = dcc.simulations.training_set(
+    stims, 
+    cell_class = dcc.simulations.CcaSR_gillespie_simple
+    )
 
-# # Save to disk:
-# os.makedirs(params["save_folder"]+"training_set", exist_ok = True)
-# np.save(params["save_folder"]+"training_set/fluo1.npy", fluorescence)
-# np.save(params["save_folder"]+"training_set/stims.npy", stims)
+# Save to disk:
+os.makedirs(params["save_folder"]+"training_set", exist_ok = True)
+np.save(params["save_folder"]+"training_set/fluo1.npy", fluorescence)
+np.save(params["save_folder"]+"training_set/stims.npy", stims)
 
 #%% Plot results to check
 

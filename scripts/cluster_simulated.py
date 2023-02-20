@@ -9,7 +9,8 @@ import copy
 import qsub
 
 # TODO: use different deepcellcontrol folder:
-dcc_data_path = "/projectnb/dunlop/JB/deepcellcontrol/"
+username='hklumpe'
+dcc_data_path = f"/projectnb/dunlop/{username}/deepcellcontrol/"
 dcc_repo_path = "/project/dunlop/shared_python_packages/deepcellcontrol/"
 
 # Make sure the proper path is used:
@@ -33,17 +34,19 @@ def params_change(params):
     return foldername+"parameters.json"
 
 #%% Launch single training:
+    
+cell_class = 'CcaSR_gillespie_simple' # in training data path, and name of class in dcc.simulations
 
 # Fields to change in config.py:
 config = dict(
     training_parameters = dict(
         epochs = 200, # 200 is typically enough
         ),
-    datasets_folder = dcc_data_path + "assets/simulated/data/CcaSR_gillespie/", # Point to generated sets folder
+    datasets_folder = dcc_data_path + f"assets/simulated/data/{cell_class}/", # Point to generated sets folder
     training_sets = ("training_set",), # Training subfolder(s)
     eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
     features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
-    cell_class = "CcaSR_gillespie" # Cell class to use in dcc.simulations
+    cell_class = cell_class, # Cell class to use in dcc.simulations
     )
 
 # Updated config and save it to disk:
