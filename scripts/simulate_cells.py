@@ -17,13 +17,13 @@ import deepcellcontrol as dcc
 #%% Parameters
 # Load default params:
 params = copy.deepcopy(dcc.config.defaults)
-params["save_folder"] = "../assets/activation/"
+params["save_folder"] = "../assets/test_simulation/"
 
 os.makedirs(params["save_folder"], exist_ok = True)
 
 #%% Generate training set:
 # Get an array of random stimulations:
-stims = dcc.utilities.random_stimulations(total_simulations=3_000)
+stims = dcc.utilities.random_stimulations(total_simulations=20)#3_000)
 
 # Generate cell responses:
 fluorescence = dcc.simulations.training_set(
@@ -43,7 +43,7 @@ stims = np.load(params['save_folder']+'training_set/stims.npy')
 
 max_fluor = np.max(fluorescence)
 
-n_cells = 10
+n_cells = 20
 
 for i in range(n_cells):
 

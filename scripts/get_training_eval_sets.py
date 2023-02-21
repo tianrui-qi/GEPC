@@ -18,15 +18,15 @@ username='hklumpe'
 base_folder = f"/projectnb/dunlop/{username}/deepcellcontrol/assets/simulated/data/"
 
 # Class of cells to train:
-cell_class = dcc.simulations.CcaSR_gillespie_simple
+cell_class = dcc.simulations.CcaSR_Autoactivation
 
 # Training parameters:
 training_cells = 10_000
 
 # Evaluation parameters:
-eval_cells = 1_000
+eval_cells = 500# 1_000
 eval_cutoff = 24*12 # Number of past timepoints
-eval_future_realizations = 1_000 # Number of future realizations per cell
+eval_future_realizations = 500 # 1_000 # Number of future realizations per cell
 eval_horizon = 4*12 # Number of future timepoints
 
 
