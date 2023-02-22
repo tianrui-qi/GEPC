@@ -407,10 +407,10 @@ class CcaSR_Autoactivation(CcaSR_gillespie):
             'nu': 0.03, # dilution of all proteins (midpoint of c2, b, h2 from Chait)
             'K_H': 14, # dissociation constant, H activation of F
             'rho': 0.42, # production of E (used to keep nondim. beta=1)
-            'a': 3, # production of F per unit E (tunes hysteresis)
+            'a': 0.038, # production of F per unit E (tunes hysteresis)
             'nh': 3.6, # cooperativity of F activation by H (from Chait)
             'nf': 3.6, # cooperativity of F activation by F (to match nh)
-            'K_F': 140, # for nondim. kappa = 10
+            'K_F': 5.6, # for nondim. kappa = 10
             'tau':12 # Response delay
             }
         self.species = {
