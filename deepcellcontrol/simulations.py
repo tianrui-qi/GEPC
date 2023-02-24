@@ -265,7 +265,7 @@ class CcaSR_gillespie_simple(CcaSR_gillespie):
         # Alter the reactions network:
         self.params = {
             'eta': 1, # production rate of H per unit of U
-            'nu': 0.0303, # dilution of all proteins (i.e.H, F); matches Chait c2 or b
+            'nu': 0.015, # dilution of all proteins (i.e.H, F); matches Chait c2 or b
             'rho': 0.0710/25, # production of extrinsic noise; matches Chait h1
             'nu_E': 0.0303/30, # dilution of extrinsic noise; matches Chait h2
             'a': 0.2827, # production rate of F per unit of E; matches Chait a
@@ -404,7 +404,7 @@ class CcaSR_Autoactivation(CcaSR_gillespie):
         # Alter the reactions network:
         self.params = {
             'eta': 1, # production of H per light
-            'nu': 0.03, # dilution of all proteins (midpoint of c2, b, h2 from Chait)
+            'nu': 0.015, # dilution of all proteins (midpoint of c2, b, h2 from Chait)
             'K_H': 14, # dissociation constant, H activation of F
             'rho': 0.42, # production of E (used to keep nondim. beta=1)
             'a': 0.038, # production of F per unit E (tunes hysteresis)
