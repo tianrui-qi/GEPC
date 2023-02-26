@@ -644,7 +644,7 @@ def camera_sim(fluo, camera_mult=40,camera_max=4095,camera_offset=100,noise_perc
                 camera_max
             )
 
-def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie):
+def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie, num_workers = None):
     """
     Generate training set from Gillespie model and pre-determined stimulations
 
@@ -663,8 +663,22 @@ def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie):
         Generated fluorescence. Dimensions are (cells, time).
 
     """
+    # If parallel processing, call self with None num_workers:
+    if num_workers is not None:
+        with Pool(num_workers) as pool:
+            res = pool.starmap(
+                training_set,
+                zip(
+                    stims[:,np.newaxis],
+                    itertools.repeat(sampling),
+                    itertools.repeat(cell_class),
+                    itertools.repeat(None),
+                    )
+                )
+            fluo = np.concatenate(res[0])
+            return fluo
     
-    # Run Gillespie simulations: (not using multiprocessing here because it's relatively fast)
+    # Run Gillespie simulations:
     fluo = []
     for l in range(stims.shape[0]):
         cell = cell_class() # Instantiate new "cell"

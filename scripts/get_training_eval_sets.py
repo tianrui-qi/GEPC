@@ -30,13 +30,19 @@ eval_future_realizations = 500 # 1_000 # Number of future realizations per cell
 eval_horizon = 4*12 # Number of future timepoints
 
 
+WORKERS = None # NOne, 4, 8, 12 etc depending on number of cores
+
 #%% Generate training set
 
 # Get an array of random stimulations:
 stims = dcc.utilities.random_stimulations(total_simulations=training_cells)
 
 # Generate cell responses:
-fluorescence = dcc.simulations.training_set(stims, cell_class = cell_class)
+fluorescence = dcc.simulations.training_set(
+    stims, 
+    cell_class = cell_class,
+    num_workers = WORKERS
+    )
 
 # Save to disk:
 save_folder = base_folder + "/" + cell_class.__name__ + "/training_set/"
@@ -57,7 +63,7 @@ eval_sims = dcc.simulations.evaluation_set(
     cell_class = cell_class,
     cut_off = eval_cutoff,
     future_realizations = eval_future_realizations,
-    num_workers = None
+    num_workers = WORKERS
     )
 
 # Reformat a little bit:
