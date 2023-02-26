@@ -404,24 +404,25 @@ class CcaSR_Autoactivation(CcaSR_gillespie):
         # Alter the reactions network:
         self.params = {
             'eta': 1, # production of H per light
-            'nu': 0.015, # dilution of all proteins (midpoint of c2, b, h2 from Chait)
-            'K_H': 14, # dissociation constant, H activation of F
-            'rho': 0.42, # production of E (used to keep nondim. beta=1)
-            'a': 0.038, # production of F per unit E (tunes hysteresis)
+            'nu': 0.01, # dilution of all proteins (midpoint of c2, b, h2 from Chait)
+            'K_H': 100, # dissociation constant, H activation of F
+            'h1':4e-2, # "Extrinsic responsiveness" generation rate
+            'h2':1e-3, # "Extrinsic responsiveness" dilution rate
+            'a': 0.025, # production of F per unit E (tunes hysteresis)
             'nh': 3.6, # cooperativity of F activation by H (from Chait)
             'nf': 3.6, # cooperativity of F activation by F (to match nh)
-            'K_F': 5.6, # for nondim. kappa = 10
+            'K_F': 30, # for nondim. kappa = 10
             'tau':12 # Response delay
             }
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'E':round(np.random.poisson(self.params['rho'] / self.params['nu'])), # "Extrinsic noise / responsiveness"
+            'E':round(np.random.poisson(self.params['h1'] / self.params['h2'])), # "Extrinsic noise / responsiveness"
             'F':0, # GFP
             }
         self.reactions = (
-            Reaction('rho', {'E': 1}), # "Extrinsic" creation
-            Reaction('nu*E', {'E': -1}), # "Extrinsic" dilution
+            Reaction('h1', {'E': 1}), # "Extrinsic" creation
+            Reaction('h2*E', {'E': -1}), # "Extrinsic" dilution
             Reaction('eta*U', {'H': 1}), # CcaSR activation
             Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
             Reaction('a*E/2 * (H**nh)/(K_H**nh+H**nh)', {'F': 1}), # GFP creation by H
