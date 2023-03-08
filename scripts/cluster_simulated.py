@@ -5,19 +5,25 @@ import time
 import os
 import sys
 import copy
+import glob
 
+sys.path.insert(0,'/project/dunlop/shared_python_packages/')
 import qsub
 
 # TODO: use different deepcellcontrol folder:
 username='hklumpe'
 dcc_data_path = f"/projectnb/dunlop/{username}/deepcellcontrol/"
-dcc_repo_path = "/project/dunlop/shared_python_packages/deepcellcontrol/"
+dcc_repo_path = f"/projectnb/dunlop/{username}/deepcellcontrol/"
 
 # Make sure the proper path is used:
 sys.path.insert(0,dcc_repo_path)
 import deepcellcontrol as dcc
 
 def params_change(params):
+    """
+    Store params (dict) in `~/qsub_scripts/assets/` in specific folder for
+    current simulation; return location of this dict
+    """
     
     # Create relevant directories:
     assets = os.path.expanduser("~") + "/qsub_scripts/assets/"
@@ -35,35 +41,49 @@ def params_change(params):
 
 #%% Launch single training:
     
-cell_class = 'CcaSR_gillespie_simple' # in training data path, and name of class in dcc.simulations
+# Cell class: in training data path, and name of class in dcc.simulations
+cell_class_list = ['CcaSR_gillespie_simple_noE',
+                   'CcaSR_gillespie_simple',
+                   'CcaSR_gillespie']
 
-# Fields to change in config.py:
-config = dict(
-    training_parameters = dict(
-        epochs = 200, # 200 is typically enough
-        ),
-    datasets_folder = dcc_data_path + f"assets/simulated/data/{cell_class}/", # Point to generated sets folder
-    training_sets = ("training_set",), # Training subfolder(s)
-    eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
-    features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
-    cell_class = cell_class, # Cell class to use in dcc.simulations
-    )
+horizon_list = [12, 24, 48]
 
-# Updated config and save it to disk:
-saved_config_file = params_change(config)
+for cell_class in cell_class_list:
+    for horizon in horizon_list:
+        
+        datasets_folder = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*")[0]
 
-# Submit qsub request for single job:
-job_id = qsub.submit(
-    dcc_repo_path + "scripts/simulated_pipeline.py",
-    args = [saved_config_file],
-    conda_env="delta_env",
-    hardware_requirements = dict(
-        time_limit = 2,
-        cores=4,
-        gpus=1,
-        mem_per_core=4,
-        )
-    )
+        # Fields to change in config.py:
+        # Training epochs, locations of training and evaluation datsets,
+        # which cell class to use for simulations
+        config = dict(
+            training_parameters = dict(
+                epochs = 20, # 200 is typically enough
+                ),
+            datasets_folder = datasets_folder, # Point to generated sets folder
+            training_sets = ("training_set",), # Training subfolder(s)
+            eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+            features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
+            cell_class = cell_class, # Cell class to use in dcc.simulations
+            horizon = horizon, # 24 default
+            )
+        
+        # Updated config and save it to disk:
+        saved_config_file = params_change(config)
+        
+        # Submit qsub request for single job:
+        job_id = qsub.submit(
+            dcc_repo_path + "scripts/simulated_pipeline.py",
+            args = [saved_config_file],
+            conda_env="delta_env",
+            hardware_requirements = dict(
+                time_limit = 1, #2
+                cores=4, #4
+                gpus=1,
+                mem_per_core=4,
+                )
+            )
+
 
 #%% Launch job array:
 
@@ -81,6 +101,7 @@ base_config = dict(
 
 # List of different configs for different jobs
 configs = []
+
 
 new_config = copy.deepcopy(base_config)
 new_config.update({"horizon": 36}) # for example
@@ -110,7 +131,7 @@ job_id = qsub.submit(
     kwargs = [{}] * len(configs),
     conda_env="delta_env",
     hardware_requirements = dict(
-        time_limit = 2,
+        time_limit = 12,
         cores=4,
         gpus=1,
         mem_per_core=4,

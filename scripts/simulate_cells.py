@@ -48,6 +48,7 @@ n_cells = 20
 for i in range(n_cells):
 
     plt.figure()
-    plt.plot(fluorescence[i] / max_fluor)
-    dcc.utilities.OptoPlotBackground(stims[i])
+    # plt.plot(fluorescence[i] / max_fluor)
+    plt.plot(fluorescence[i])
+    # dcc.utilities.OptoPlotBackground(stims[i])
     plt.title(f'Cell {i}')
