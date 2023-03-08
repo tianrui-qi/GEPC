@@ -18,22 +18,23 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 
 # Make sure the proper package is used:
-sys.path.insert(0,"/project/dunlop/shared_python_packages/deepcellcontrol/")
+sys.path.insert(0,'./../')
 import deepcellcontrol as dcc
 
-
-# Load params:
+# Load default params:
 params = copy.deepcopy(dcc.config.defaults)
 
-# If path to parameters JSON file passed as argument:
+# If path to parameters JSON file passed as argument, load additional
+# parameters stored there:
 if len(sys.argv) > 1:
     with open(sys.argv[-1], "r") as f:
         params.update(json.load(f))
 
-# Save folder:
+# Folder to save training, evaluation, control results:
 params["save_folder"] = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_simulated_{uuid.uuid4()}"
 save_path = params["models_folder"]+ "/" + params["save_folder"]
 
+print(f'Save path: {save_path}')
 
 #%% Timeseries predictor training:
 print("="*100 + f"\n{time.strftime('%Y-%m-%d_%H-%M-%S')}: Training prediction network\n" + "="*100)
@@ -115,82 +116,82 @@ for c in range(stims.shape[0]):
     plt.savefig(save_path+f'/evaluation/cell_{c:06d}.svg',dpi=300)
     plt.cla()
 
-#%% Evaluate control:
-print("="*100 + f"\n{time.strftime('%Y-%m-%d_%H-%M-%S')}: Evaluating control\n" + "="*100)
-os.makedirs(save_path + "/control/", exist_ok = True)
+# #%% Evaluate control:
+# print("="*100 + f"\n{time.strftime('%Y-%m-%d_%H-%M-%S')}: Evaluating control\n" + "="*100)
+# os.makedirs(save_path + "/control/", exist_ok = True)
 
-cell_class = getattr(dcc.simulations, params["cell_class"])
-control_cells = 1_000
-objectives = dcc.utilities.sine_objective(
-    period=8*60,
-    offset=1250,
-    amplitude=750,
-    delay=0,
-    duration=48*60,
-    sampling=5
-    )
-objectives = np.repeat(objectives[np.newaxis], repeats=control_cells, axis=0)
-no_control = 3*12
-end_control = 24*12
+# cell_class = getattr(dcc.simulations, params["cell_class"])
+# control_cells = 1_000
+# objectives = dcc.utilities.sine_objective(
+#     period=8*60,
+#     offset=1250,
+#     amplitude=750,
+#     delay=0,
+#     duration=48*60,
+#     sampling=5
+#     )
+# objectives = np.repeat(objectives[np.newaxis], repeats=control_cells, axis=0)
+# no_control = 3*12
+# end_control = 24*12
 
-# Init controller:
-controller = dcc.control.SplitLSTMMPC(
-    model_file = save_path + '/model_besteval.hdf5',
-    strategy_optimizer=dcc.control.BinaryParticleSwarmOptimizer(
-        horizon=params["horizon"], iterations=25, particles=40
-        )
-    )
+# # Init controller:
+# controller = dcc.control.SplitLSTMMPC(
+#     model_file = save_path + '/model_besteval.hdf5',
+#     strategy_optimizer=dcc.control.BinaryParticleSwarmOptimizer(
+#         horizon=params["horizon"], iterations=25, particles=40
+#         )
+#     )
 
-# Create cells:
-chip = [cell_class() for _ in range(control_cells)]
-fluorescence = np.empty([control_cells, end_control + no_control])
-stims = np.empty([control_cells, end_control + no_control])
+# # Create cells:
+# chip = [cell_class() for _ in range(control_cells)]
+# fluorescence = np.empty([control_cells, end_control + no_control])
+# stims = np.empty([control_cells, end_control + no_control])
 
-# Run control experiment:
-for t in range(end_control + no_control):
+# # Run control experiment:
+# for t in range(end_control + no_control):
     
-    # Run control:
-    if t < no_control:
-        # "Open-loop":
-        stims[:, t] = 0
-    else:
-        stims[:,t] = controller.feedback(
-            np.stack((fluorescence[:,:t]/4095, stims[:,:t]), axis=-1),
-            objectives[:,t-no_control:t-no_control+params["horizon"]]/4095
-            )
+#     # Run control:
+#     if t < no_control:
+#         # "Open-loop":
+#         stims[:, t] = 0
+#     else:
+#         stims[:,t] = controller.feedback(
+#             np.stack((fluorescence[:,:t]/4095, stims[:,:t]), axis=-1),
+#             objectives[:,t-no_control:t-no_control+params["horizon"]]/4095
+#             )
     
-    # Run cells:
-    for c, cell in enumerate(chip):
-        # Set optogenetic signal:
-        cell.set_light_events([stims[c,t]])
+#     # Run cells:
+#     for c, cell in enumerate(chip):
+#         # Set optogenetic signal:
+#         cell.set_light_events([stims[c,t]])
         
-        # Run model for next 5 minutes:
-        timeseries = cell.run((t+1)*5)
-        fluorescence[c,t] = dcc.simulations.camera_sim(
-            np.array(timeseries[-1]['F'])
-            )
+#         # Run model for next 5 minutes:
+#         timeseries = cell.run((t+1)*5)
+#         fluorescence[c,t] = dcc.simulations.camera_sim(
+#             np.array(timeseries[-1]['F'])
+#             )
     
-    time_str = f"{int(t/12):02d}h {5*(t%12):02d}m"
-    print(time_str)
+#     time_str = f"{int(t/12):02d}h {5*(t%12):02d}m"
+#     print(time_str)
     
 
-plt.figure(1)
-plt.cla()
-plt.plot((np.arange(objectives.shape[1])+no_control)/12, objectives[0],"k--")
+# plt.figure(1)
+# plt.cla()
+# plt.plot((np.arange(objectives.shape[1])+no_control)/12, objectives[0],"k--")
 
-# Plot cell fluorescence:
-dcc.utilities.plotq(fluorescence[:,:(t+1)], x = np.arange(t+1)/12)
+# # Plot cell fluorescence:
+# dcc.utilities.plotq(fluorescence[:,:(t+1)], x = np.arange(t+1)/12)
 
-# Clean up the plot, save to disk:
-plt.xlim([0, (end_control + no_control)/12])
-plt.ylim([0, 4095])
-plt.xlabel("time (h)")
-plt.ylabel("Fluorescence (a.u.)")
-plt.savefig(save_path+'/control/Population_quantiles.png',dpi=300)
-plt.savefig(save_path+'/control/Population_quantiles.svg',dpi=300)
+# # Clean up the plot, save to disk:
+# plt.xlim([0, (end_control + no_control)/12])
+# plt.ylim([0, 4095])
+# plt.xlabel("time (h)")
+# plt.ylabel("Fluorescence (a.u.)")
+# plt.savefig(save_path+'/control/Population_quantiles.png',dpi=300)
+# plt.savefig(save_path+'/control/Population_quantiles.svg',dpi=300)
 
-# Save results to disc:
-np.save(save_path + "/control/fluo.npy", fluorescence)
-np.save(save_path + "/control/stims.npy", stims)
+# # Save results to disc:
+# np.save(save_path + "/control/fluo.npy", fluorescence)
+# np.save(save_path + "/control/stims.npy", stims)
 
-print("="*50 + f"\n{time.strftime('%Y-%m-%d_%H-%M-%S')}: Done\n" + "="*50)
+# print("="*50 + f"\n{time.strftime('%Y-%m-%d_%H-%M-%S')}: Done\n" + "="*50)
