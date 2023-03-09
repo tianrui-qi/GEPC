@@ -12,10 +12,13 @@ used in a while. We will update it soon as part of a theoretical study.
 import copy
 import itertools
 from multiprocessing import Pool
+import ast
 
 import numpy as np
+import gillespy2 as gp2
 
 SAMPLING = 5
+
 
 class Reaction():
     """
@@ -65,6 +68,37 @@ class Reaction():
         """
         
         return eval(self._compiled, {}, {**params, **species})
+
+class PowForDoubleStar(ast.NodeTransformer):
+    """
+    This class is used to replace '**' with 'pow()' in propensity functions,
+    as gillespy2 expects expressions to be interpretable in C
+    stackoverflow.com/questions/17789021/replace-with-math-pow-in-python
+    """
+    
+    pow_func = ast.parse("pow", mode="eval").body
+    
+    def visit_BinOp(self, node):
+        node.left = self.visit(node.left)
+        node.right = self.visit(node.right)
+
+        if isinstance(node.op, ast.Pow):
+            node = ast.copy_location(
+                       ast.Call(func=self.pow_func,
+                                args=[node.left, node.right],
+                                keywords=[]
+                               ),
+                       node
+                   )
+
+        return node
+    
+    def mytransform(self, expression):
+        
+            tree = ast.parse(expression, mode="eval")
+            tree = self.visit(tree)
+            expression = ast.unparse(tree)
+            return expression
         
 
 class CcaSR_gillespie():
@@ -81,7 +115,7 @@ class CcaSR_gillespie():
     
     """
     
-    def __init__(self):
+    def __init__(self, use_gillespy2 = False):
         
         # All parameters based on Chait et al. except for 'h1' and 'h2'.
         # They are lower to reflect the slow changes we see in responsiveness,
@@ -102,7 +136,7 @@ class CcaSR_gillespie():
             }
         "Parameters used in the propensity calculations"
         self.species = {
-            'U':0, # Optogenetic input
+            'U':1, # Optogenetic input
             'H':0., # CcaS-CcaR
             'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
             'F':0 # GFP
@@ -119,6 +153,57 @@ class CcaSR_gillespie():
         self.events = [] # External events
         self.past_events = []
         self.time = 0 # time is NOT reset when run() is called! (see run method below)
+        
+        self.gp2 = {
+            "use": False, 
+            "model": None,
+            "algorithm": "SSA",
+            "realizations": 1
+            }
+        "Gillespy2 parameters and variables"
+        if use_gillespy2:
+            self.gp2["use"] = True
+            self.gp2["model"] = self.gillespy2ify()
+        
+    
+    def gillespy2ify(self):
+        """
+        Turn parameters, species, and reactions into a gp2 model
+
+        Returns
+        -------
+        model : gp2.Model
+            The corresponding gp2 model.
+
+        """
+        
+        # create model
+        model = gp2.Model(name = self.__class__.__name__)
+        
+        # Add parameters:
+        for name, value in self.params.items():
+            param = gp2.Parameter(name = name, expression = value)
+            model.add_parameter(param)
+        
+        # Add species:
+        for name, value in self.species.items():
+            species = gp2.Species(name = name, initial_value = value)
+            model.add_species(species)
+        
+        # Add reactions:
+        trans = PowForDoubleStar()
+        for r, reaction in enumerate(self.reactions):
+            gp2reaction = gp2.Reaction(
+                name = f"reaction_{r}",
+                propensity_function = trans.mytransform(reaction.propensity),
+                ode_propensity_function = trans.mytransform(reaction.propensity),
+                reactants = {name: -value for name, value in reaction.stoichiometry.items() if value < 0},
+                products = {name: value for name, value in reaction.stoichiometry.items() if value > 0},
+                )
+            model.add_reaction(gp2reaction)
+        
+        return model
+        
         
     def run(self, stoptime):
         '''
@@ -137,11 +222,16 @@ class CcaSR_gillespie():
 
         '''
         
+        # Sort events in ascending time before runnning just in case
+        self.events.sort(key=lambda elem: elem['time'])
+        
+        if self.gp2["use"]:
+            return self._run_gp2(stoptime)
+        
         # Intialize:
         starttime = self.time
         time_series = []
         newspecies = self.species.copy() # Initialize for 1st while loop run
-        self.events.sort(key=lambda elem: elem['time']) # Sort events in ascending time before runnning just in case
         
         while self.time<stoptime:
             
@@ -171,6 +261,81 @@ class CcaSR_gillespie():
         time_series = time_series[:int((stoptime-starttime)/self.sampling)+1]
             
         return time_series
+    
+    def _run_gp2(self, stoptime):
+        """
+        Run using the Gillespy2 library.
+
+        Parameters
+        ----------
+        stoptime : float
+            Time-point at which the simulation should be stopped, in minutes.
+
+        Returns
+        -------
+        time_series : list of dicts
+            List of copies of the species property at sampling time points for 
+            the duration of the run.
+
+        """
+        
+        # Set gp2model species to current species level:
+        for name, value in self.species.items():
+            self.gp2["model"].get_species(name).set_initial_value(value)
+            
+        # Set upcoming events that will happen during run:
+        for e_index, e in enumerate(self.events):
+            if e["time"] < stoptime:
+                assignments = []
+                for a in e["set"]:
+                    assignments += [gp2.EventAssignment(
+                        variable = a[0], expression = a[1]
+                        )]
+                gp2event = gp2.Event(
+                    name = f"event_{e_index}",
+                    assignments = assignments,
+                    trigger = gp2.EventTrigger("True", initial_value=True),
+                    delay = f"{e['time'] - self.time}"
+                    )
+                self.gp2["model"].add_event(gp2event)
+                self.events.remove(e)
+                self.past_events.append(e)
+        
+        # Set simulation timespan:
+        tspan = gp2.TimeSpan.arange(
+            increment = self.sampling, t=stoptime-self.time
+            )
+        self.gp2["model"].timespan(tspan)
+        
+        # Run:
+        results = self.gp2["model"].run(
+            number_of_trajectories=self.gp2["realizations"],
+            algorithm=self.gp2["algorithm"],
+            )
+        
+        # Remove events before next run:
+        self.gp2["model"].delete_all_events()
+        
+        # Reformat results:
+        timeseries = []
+        for t in range(len(tspan)):
+            
+            timepoint = {}
+            for s in self.species:
+                if self.gp2["realizations"] == 1:
+                    timepoint[s] = results[0][s][t]
+                else:
+                    timepoint[s] = [res[s][t] for res in results]
+            
+            timeseries.append(timepoint)
+        
+        # Set state:
+        self.time = stoptime
+        for name in self.species:
+            self.species[name] = timeseries[-1][name]
+        
+        return timeseries
+            
         
     def set_light_events(self,light_sequence):
         '''
@@ -192,8 +357,12 @@ class CcaSR_gillespie():
         '''
         
         for i, u in enumerate(light_sequence):
-            self.events.append({'time': self.time+i*self.sampling+self.params['tau'],
-                                'set': (['U',u],)})
+            self.events.append(
+                {
+                    'time': self.time+i*self.sampling+self.params['tau'],
+                    'set': (['U',u],)
+                    }
+                )
         
     def run_nextreaction(self):
         '''
