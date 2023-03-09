@@ -21,9 +21,9 @@ job_id = qsub.submit(
     dcc_repo_path + "scripts/get_training_eval_sets.py",
     conda_env="delta_env",
     hardware_requirements = dict(
-        time_limit = 1, #2
+        time_limit = 2, #2
         cores=8, #4
-        gpus=0,
+        gpus=1,
         mem_per_core=4,
         )
     )

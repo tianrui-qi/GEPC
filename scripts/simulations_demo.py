@@ -50,59 +50,59 @@ hist = np.array(hist)
 hist = np.log(hist)
 plt.imshow(hist.transpose())
 
-#%% Test full transcription/translation model
+# #%% Test full transcription/translation model
 
-n_simul = 5
+# n_simul = 5
 
-# Optogenetic input sequence (every point is 5 min, 12 for an hour)
-light_sequence = [1]*5 # [0]*24 + [1]*24 + [0]*24
+# # Optogenetic input sequence (every point is 5 min, 12 for an hour)
+# light_sequence = [1]*5 # [0]*24 + [1]*24 + [0]*24
 
-# Test for some cells
-Fp = []
-Rp = []
-Sp = []
-SR = []
+# # Test for some cells
+# Fp = []
+# Rp = []
+# Sp = []
+# SR = []
 
-for c in range(n_simul):
-    print(c)
-    # instantiate and simulate cells
-    cell = dcc.simulations.CcaSR_gillespie_full()
-    cell.set_light_events(light_sequence)
-    series = cell.run(len(light_sequence)*5)
+# for c in range(n_simul):
+#     print(c)
+#     # instantiate and simulate cells
+#     cell = dcc.simulations.CcaSR_gillespie_full()
+#     cell.set_light_events(light_sequence)
+#     series = cell.run(len(light_sequence)*5)
     
-    # Save results
-    Fp.append(np.asarray([state["Fp"] for state in series]))
-    Rp.append(np.asarray([state["Rp"] for state in series]))
-    Sp.append(np.asarray([state["Sp"] for state in series]))
-    SR.append(np.asarray([state["SR"] for state in series]))
+#     # Save results
+#     Fp.append(np.asarray([state["Fp"] for state in series]))
+#     Rp.append(np.asarray([state["Rp"] for state in series]))
+#     Sp.append(np.asarray([state["Sp"] for state in series]))
+#     SR.append(np.asarray([state["SR"] for state in series]))
     
 
-F = dcc.simulations.camera_sim(np.array(Fp))
-#%%
-# Plot results:
+# F = dcc.simulations.camera_sim(np.array(Fp))
+# #%%
+# # Plot results:
 
-x = [t/12. for t in range(len(series))] # Convert hours back to ... light units?
-x = [t*5 for t in range(len(series))] # Convert hours back to ... light units?
-# F = np.asarray([state["F"] for state in series])
-# plt.plot(F/np.max(F), label="GFP")
-# plt.plot(x, [state["R"] for state in series], label="LacI")
+# x = [t/12. for t in range(len(series))] # Convert hours back to ... light units?
+# x = [t*5 for t in range(len(series))] # Convert hours back to ... light units?
+# # F = np.asarray([state["F"] for state in series])
+# # plt.plot(F/np.max(F), label="GFP")
+# # plt.plot(x, [state["R"] for state in series], label="LacI")
 
-proteins = [Sp, Rp, SR, Fp]
-protein_labels = ['CcaS protein','CcaR protein','SR dimer','GFP protein']
-colors = ['r','b','k','b']
+# proteins = [Sp, Rp, SR, Fp]
+# protein_labels = ['CcaS protein','CcaR protein','SR dimer','GFP protein']
+# colors = ['r','b','k','b']
 
-for i in range(n_simul):
-    # dcc.utilities.OptoPlotBackground(light_sequence, ymax=4000, x=x)
+# for i in range(n_simul):
+#     # dcc.utilities.OptoPlotBackground(light_sequence, ymax=4000, x=x)
     
-    for p, protein in enumerate(proteins):
-        plt.plot(x, protein[i],
-                 color=colors[p], 
-                 lw=2, 
-                 label=protein_labels[p])
-    plt.xlabel("time (min)")
-    plt.ylabel("proteins (#)")
-    plt.legend()
-    plt.yscale('log')
-    plt.show()
+#     for p, protein in enumerate(proteins):
+#         plt.plot(x, protein[i],
+#                  color=colors[p], 
+#                  lw=2, 
+#                  label=protein_labels[p])
+#     plt.xlabel("time (min)")
+#     plt.ylabel("proteins (#)")
+#     plt.legend()
+#     plt.yscale('log')
+#     plt.show()
 
     

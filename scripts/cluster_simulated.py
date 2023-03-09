@@ -41,16 +41,59 @@ def params_change(params):
 
 #%% Launch single training:
     
+cell_class = 'CcaSR_gillespie_simple'
+    
+datasets_folder = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*")[0]
+
+# Fields to change in config.py:
+# Training epochs, locations of training and evaluation datsets,
+# which cell class to use for simulations
+config = dict(
+    training_parameters = dict(
+        epochs = 20, # 200 is typically enough
+        ),
+    datasets_folder = datasets_folder, # Point to generated sets folder
+    training_sets = ("training_set",), # Training subfolder(s)
+    eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+    features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
+    cell_class = cell_class, # Cell class to use in dcc.simulations
+    horizon = 24, # 24 default
+    )
+
+# Updated config and save it to disk:
+saved_config_file = params_change(config)
+
+# Submit qsub request for single job:
+job_id = qsub.submit(
+    dcc_repo_path + "scripts/simulated_pipeline.py",
+    args = [saved_config_file],
+    conda_env="delta_env",
+    hardware_requirements = dict(
+        time_limit = 1, #2
+        cores=4, #4
+        gpus=1,
+        mem_per_core=4,
+        )
+    )
+    
+
+#%% Launch several single trainings:
+    
 # Cell class: in training data path, and name of class in dcc.simulations
 cell_class_list = ['CcaSR_gillespie_simple_noE',
                    'CcaSR_gillespie_simple',
                    'CcaSR_gillespie']
 
-horizon_list = [12, 24, 48]
+# horizon_list = [12, 24, 48]
+# past_steps_list = [12, 24, 36]
 
 for cell_class in cell_class_list:
-    for horizon in horizon_list:
         
+    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training_set_*")
+    training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
+    
+    for training_file in training_file_list:
+                
         datasets_folder = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*")[0]
 
         # Fields to change in config.py:
@@ -58,14 +101,14 @@ for cell_class in cell_class_list:
         # which cell class to use for simulations
         config = dict(
             training_parameters = dict(
-                epochs = 20, # 200 is typically enough
+                epochs = 200, # 200 is typically enough
                 ),
             datasets_folder = datasets_folder, # Point to generated sets folder
-            training_sets = ("training_set",), # Training subfolder(s)
+            training_sets = (training_file,), # Training subfolder(s)
             eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
             features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
             cell_class = cell_class, # Cell class to use in dcc.simulations
-            horizon = horizon, # 24 default
+            models_folder = dcc_repo_path + '/assets/models/',
             )
         
         # Updated config and save it to disk:
@@ -77,7 +120,7 @@ for cell_class in cell_class_list:
             args = [saved_config_file],
             conda_env="delta_env",
             hardware_requirements = dict(
-                time_limit = 1, #2
+                time_limit = 2, #2
                 cores=4, #4
                 gpus=1,
                 mem_per_core=4,

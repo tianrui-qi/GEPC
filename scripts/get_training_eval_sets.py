@@ -8,33 +8,36 @@ Created on Fri Feb 10 16:02:58 2023
 
 import os
 import json
+import sys
 
 import time
 import uuid
 
 import numpy as np
 
+# Make sure the proper package is used:
+sys.path.insert(0,'./../')
 import deepcellcontrol as dcc
 
 # Class of simulation model
-cell_class_object = dcc.simulations.CcaSR_gillespie_simple_noE()
+cell_class_object = dcc.simulations.CcaSR_gillespie_full()
 cell_class_type = type(cell_class_object)
 
 # Datasets folder (index with simulation data):
-username='hklumpe'
+username="hklumpe"
 simulated_data_folder = f"/projectnb/dunlop/{username}/deepcellcontrol/assets/simulated/data/"
 base_folder = simulated_data_folder + f"/{cell_class_type.__name__}/{time.strftime('%Y-%m-%d_%H-%M-%S')}_simulated_{uuid.uuid4()}"
 
 # Training parameters:
-training_cells = 100 #10_000
-timepoints = 36*12 # 36*12 How much time to simulate
-nostim_start = 3*12 # 3*12 Timepoints with light off
+training_cells = 8 #10_000
+timepoints = 1*12 # 36*12 How much time to simulate
+nostim_start = 1 # 3*12 Timepoints with light off
 
 # Evaluation parameters:
-eval_cells = 100 #1_000
-eval_cutoff = 24*12 # 24*12 # Number of past timepoints
-eval_future_realizations = 100 #1_000 # Number of future realizations per cell
-eval_horizon = 4*12 # 4*12 # Number of future timepoints
+eval_cells = 8 #1_000
+eval_cutoff = 1*12 # 24*12 # Number of past timepoints
+eval_future_realizations = 1 #1_000 # Number of future realizations per cell
+eval_horizon = 1*12 # 4*12 # Number of future timepoints
 
 # Have note checked that this works
 WORKERS = 8 # NOne, 4, 8, 12 etc depending on number of cores

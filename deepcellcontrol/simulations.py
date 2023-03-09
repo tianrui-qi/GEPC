@@ -98,7 +98,7 @@ class CcaSR_gillespie():
             's':0.9958, # Not used in the end
             'nh':3.6655, # Hill coefficient
             'K':0.4851, # Hill threshold (sort of)
-            '':12 # Response delay
+            'tau':12 # Response delay
             }
         "Parameters used in the propensity calculations"
         self.species = {
