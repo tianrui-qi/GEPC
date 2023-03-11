@@ -756,9 +756,9 @@ class CcaSR_gillespie_full(CcaSR_gillespie):
     A full model capturing all transcription and translation
     """
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         # Run parent class init:
-        super().__init__()
+        super().__init__(*args, **kwargs)
         
         # Alter the reactions network:
         self.params = {
@@ -868,9 +868,9 @@ class CcaSR_Cascade(CcaSR_gillespie):
     This class inherits from the `CcaSR_gillespie` class.
     """
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         # Run parent class init:
-        super().__init__()
+        super().__init__(*args, **kwargs)
         
         # Alter the reactions network:
         self.params = {
@@ -962,9 +962,9 @@ class OldCcaSR_Autoactivation(CcaSR_gillespie):
     This class inherits from the `CcaSR_gillespie` class.
     """
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         # Run parent class init:
-        super().__init__()
+        super().__init__(*args, **kwargs)
         
         # Alter the reactions network:
         self.params = {
@@ -996,7 +996,6 @@ class OldCcaSR_Autoactivation(CcaSR_gillespie):
             Reaction('b*F', {'F': -1}), # GFP dilution
             )
         
-        self.compile_models()
 
 class OldCcaSR_Autoactivation_noE(CcaSR_gillespie):
     """
@@ -1012,9 +1011,9 @@ class OldCcaSR_Autoactivation_noE(CcaSR_gillespie):
     This class inherits from the `CcaSR_gillespie` class.
     """
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         # Run parent class init:
-        super().__init__()
+        super().__init__(*args, **kwargs)
         
         # Alter the reactions network:
         self.params = {
@@ -1060,9 +1059,9 @@ class CcaSR_FeedforwardPositive(CcaSR_gillespie):
     This class inherits from the `CcaSR_gillespie` class.
     """
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         # Run parent class init:
-        super().__init__()
+        super().__init__(*args, **kwargs)
         
         # Alter the reactions network:
         self.params = {
@@ -1113,9 +1112,9 @@ class CcaSR_FeedforwardNegative(CcaSR_gillespie):
     This class inherits from the `CcaSR_FeedforwardPositive` class.
     """
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         # Run parent class init:
-        super().__init__()
+        super().__init__(*args, **kwargs)
         
         # Alter the reactions network:
         self.reactions = (
@@ -1147,9 +1146,9 @@ class CcaSR_FeedbackPositive(CcaSR_gillespie):
     This class inherits from the `CcaSR_gillespie` class.
     """
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         # Run parent class init:
-        super().__init__()
+        super().__init__(*args, **kwargs)
         
         # Alter the reactions network:
         self.params = {
@@ -1202,9 +1201,9 @@ class CcaSR_FeedbackNegative(CcaSR_gillespie):
     This class inherits from the `CcaSR_FeedbackPositive` class.
     """
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         # Run parent class init:
-        super().__init__()
+        super().__init__(*args, **kwargs)
         
         # Alter the reactions network:
         self.reactions = (
