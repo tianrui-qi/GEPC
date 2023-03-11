@@ -151,7 +151,7 @@ class CcaSR_gillespie():
             }
         "Parameters used in the propensity calculations"
         self.species = {
-            'U':1, # Optogenetic input
+            'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
             'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
             'F':0 # GFP
