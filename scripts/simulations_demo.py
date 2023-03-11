@@ -35,6 +35,7 @@ plt.xlabel("time (hours)")
 plt.ylabel("proteins (#)")
 plt.ylim(0,100)
 plt.title("Deterministic")
+plt.show()
 
 #%% Original SSA implementation run:
 
@@ -49,6 +50,7 @@ plt.xlabel("time (hours)")
 plt.ylabel("proteins (#)")
 plt.ylim(0,100)
 plt.title("Original SSA")
+plt.show()
 
 #%% GillesPy2 implementation run:
 
@@ -63,6 +65,7 @@ plt.xlabel("time (hours)")
 plt.ylabel("proteins (#)")
 plt.ylim(0,100)
 plt.title("GillesPy2 SSA")
+plt.show()
 
 #%% Bifurcation:    
 
@@ -101,6 +104,7 @@ plt.plot(u_values, start_on, '-o', label="start on")
 plt.plot(u_values, start_off, '-o', label="start off")
 plt.xlabel("U")
 plt.ylabel("F (#proteins)")
+plt.show()
 
 #%% Step-by-step computation (for example as in feedback control)
 
@@ -127,6 +131,7 @@ plt.xlabel("time (hours)")
 plt.ylabel("proteins (#)")
 plt.ylim(0,100)
 plt.title("Step-by-step computation")
+plt.show()
 
 #%% Serialize and load demo:
 
@@ -167,3 +172,4 @@ plt.xlabel("time (hours)")
 plt.ylabel("proteins (#)")
 plt.ylim(0,100)
 plt.title("Reloaded")
+plt.show()
