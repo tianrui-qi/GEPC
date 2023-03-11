@@ -69,6 +69,16 @@ class Reaction():
         """
         
         return eval(self._compiled, {}, {**params, **species})
+    
+    def serialize(self):
+        
+        serial = self.__dict__.copy()
+        keys = list(serial.keys())
+        for key in keys:
+            if key[0] == "_":
+                del serial[key]
+        return serial
+        
 
 class PowForDoubleStar(ast.NodeTransformer):
     """
@@ -116,7 +126,9 @@ class CcaSR_gillespie():
     
     """
     _gp2model = None
+    "Compiled GillesPy2 model"
     _odemodel = None
+    "Compiled ODE model"
     
     def __init__(self):
         
@@ -125,7 +137,7 @@ class CcaSR_gillespie():
         # h2 is further divided by 2 to reflect the higher overal 
         # responsiveness in our data.
         # We also treat the light-activation dynamics (species H) as stochastic
-        # instead of the 
+        # instead of the original deterministic implementation.
         self.params = {
             'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
             'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
@@ -144,6 +156,7 @@ class CcaSR_gillespie():
             'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
             'F':0 # GFP
             }
+        "System species"
         self.reactions = (
             Reaction('h1', {'E': 1}), # "Extrinsic" creation
             Reaction('h2*E', {'E': -1}), # "Extrinsic" dilution
@@ -152,10 +165,15 @@ class CcaSR_gillespie():
             Reaction('a*E*((c2*H)**nh)/(K+(c2*H)**nh)', {'F': 1}), # GFP creation
             Reaction('b*F', {'F': -1}), # GFP dilution
             )
-        self.sampling = SAMPLING # Sampling interval
-        self.events = [] # External events
+        "List of reactions in system"
+        self.sampling = SAMPLING 
+        "Sampling interval (in minutes)"
+        self.events = [] 
+        "External events."
         self.past_events = []
+        "External events that have been executed."
         self.time = 0 # time is NOT reset when run() is called! (see run method below)
+        "Current cell time."
     
     def _compile_gp2_model(self):
         """
@@ -201,7 +219,19 @@ class CcaSR_gillespie():
         return model
     
     def _compile_ode_model(self):
+        """
+        Write ODE system and compile it for evaluation.
+
+        Returns
+        -------
+        system : dict
+            Text of the equations.
+        compiled : dict
+            Compiled code for the equations.
+
+        """
         
+        # Assemble text equations:
         name = self.__class__.__name__
         print(f"Compiling ODE model for class {name}... ", end="")
         system = {name: '' for name in self.species}
@@ -209,11 +239,11 @@ class CcaSR_gillespie():
             for name, value in r.stoichiometry.items():
                 system[name] += f"{'+' if value > 0 else '-'}{abs(value)}*{r.propensity} "
         
+        # Compile equations for faster execution:
         compiled = {}
         for name, value in system.items():
             if len(value) == 0:
                 system[name] = '0'
-            system[name] = ast.unparse(ast.parse(system[name]))
             compiled[name] = compile(system[name], f"d{name}_dt", "eval")
         
         print("done.")
@@ -221,6 +251,22 @@ class CcaSR_gillespie():
         return system, compiled
         
     def _ode_computation(self, t, y):
+        """
+        ODE computation function to use with scipy's solve_ivp function
+
+        Parameters
+        ----------
+        t : float
+            Timepoint.
+        y : 1D array of float
+            Current species values.
+
+        Returns
+        -------
+        dydt : 1D array fo float
+            Time derivatives of the system.
+
+        """
         
         species = {key: y[k] for k, key in enumerate(self.species)}
         
@@ -238,14 +284,21 @@ class CcaSR_gillespie():
 
         Parameters
         ----------
-        stoptime : float
+        stoptime : int or float
             Time-point at which the simulation should be stopped, in minutes.
+        realizations : int, optional
+            Number of realizations of the same run to perform (i.e. parallel 
+            cells). Not taken into account for ODE runs. The default is 1.
+        solver : str, optional
+            Name of the solver to use. Can be "original"/"og", "gillespy2"/"gp2",
+            or "ode". The default is "original".
 
         Returns
         -------
         time_series : list of dicts
-            List of copies of the species property at sampling time points for 
-            the duration of the run.
+            List of copies of the species attribute at sampling time points for 
+            the duration of the run. If realizations > 1 and the solver is
+            not "ode", a list of time_series will be returned.
 
         '''
         
@@ -253,20 +306,7 @@ class CcaSR_gillespie():
         self.events.sort(key=lambda elem: elem['time'])
         
         if solver.lower() in ("original", "og"):
-            initial_species = copy.deepcopy(self.species)
-            initial_time = self.time
-            initial_events = copy.deepcopy(self.events)
-            initial_pastevents = copy.deepcopy(self.past_events)
-            timeseries = []
-            for _ in range(realizations):
-                self.time = initial_time
-                self.species = copy.deepcopy(initial_species)
-                self.events= copy.deepcopy(initial_events)
-                self.past_events = copy.deepcopy(initial_pastevents)
-                timeseries.append(self._run_original(stoptime))
-            if realizations == 1:
-                timeseries = timeseries[0]
-            return timeseries
+            return self._run_original(stoptime, realizations)
         if solver.lower() in ("gillespy2", "gp2"):
             return self._run_gp2(stoptime, realizations)
         if solver.lower() == "ode":
@@ -274,7 +314,17 @@ class CcaSR_gillespie():
         
         raise(f"Unknown solver: {solver}")
     
-    def _run_original(self, stoptime):
+    def _run_original(self, stoptime, realizations = 1):
+        "Run original (JB's) implementation of SSA"
+        
+        # If multiple realizations, call self in a loop:
+        if realizations > 1:
+            time_series = []
+            for _ in range(realizations):
+                realize = self.copy()
+                time_series.append(realize._run_original(stoptime))
+            self.copy(realize) # Update self with last simulated cell
+            return time_series
         
         # Intialize:
         starttime = self.time
@@ -313,6 +363,7 @@ class CcaSR_gillespie():
     
     
     def _run_gp2(self, stoptime, realizations = 1):
+        "Run GillesPy2 Tau-Hybrid version of SSA"
         
         if self._gp2model is None:
             self.__class__._gp2model = self._compile_gp2_model()
@@ -378,6 +429,7 @@ class CcaSR_gillespie():
     
     
     def _run_ode(self, stoptime):
+        "Run deterministic model"
         
         if self._odemodel is None:
             _, self.__class__._odemodel = self._compile_ode_model()
@@ -526,6 +578,101 @@ class CcaSR_gillespie():
         
         # Return:
         return (timestep,newspecies)
+    
+    def serialize(self):
+        """
+        Serialize cell
+
+        Returns
+        -------
+        dict
+            Serialized version of cell, to save or use with load().
+
+        """
+        
+        serial = self.__dict__.copy()
+        keys = list(serial.keys())
+        for key in keys:
+            if key[0] == "_":
+                del serial[key]
+        serial["reactions"] = list(serial["reactions"])
+        for r, reaction in enumerate(serial["reactions"]):
+            serial["reactions"][r] = reaction.serialize()
+        serial["reactions"] = tuple(serial["reactions"])
+        return copy.deepcopy(serial)
+    
+    def load(self, serial):
+        """
+        Load attributes from serialized cell
+
+        Parameters
+        ----------
+        serial : dict
+            Serialized list of attributes from other cell.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        for key, value in serial.items():
+            setattr(self, key, value)
+        self.reactions = list(self.reactions)
+        for r, reaction in enumerate(self.reactions):
+            self.reactions[r] = Reaction(
+                reaction["propensity"],
+                reaction["stoichiometry"]
+                )
+        self.reactions = tuple(self.reactions)
+    
+    def copy(self, copy_from = None):
+        """
+        Copy attributes from other cell -OR- instanciate new cell with copied
+        attributes.
+
+        Parameters
+        ----------
+        copy_from : CcaSR_gillespie or None, optional
+            Cell from which to copy attributes to self. If a cell is provided,
+            the attributes of self will be overwritten by the attributes from
+            copy_from. Otherwise, if copy_from == None, a new cell of the same
+            class as self will be instanciated, and the attributes from self
+            will be copied to it. In either case, the copy is a deep copy.
+            The default is None.
+
+        Returns
+        -------
+        copy_to : CcaSR_gillespie (or descendants)
+            Cell that was copied -to-. If copy_from was None, then this is a 
+            new cell. If copy_from was another cell of the same class, then
+            this is self.
+
+        """
+        
+        if copy_from is None:
+            copy_to = self.__class__()
+            copy_from = self
+        else:
+            if copy_from.__class__ != self.__class__:
+                raise("You can only copy from the same cell class.")
+            copy_to = self
+        copy_to.load(copy_from.serialize())
+        
+        return copy_to
+    
+    def decompile(self):
+        """
+        Remove compiled models from the current cell.
+
+        Returns
+        -------
+        None.
+
+        """
+        self._odemodel = None
+        self._gp2model = None
+
 
 class CcaSR_gillespie_simple_noE(CcaSR_gillespie):
     """
@@ -775,7 +922,7 @@ class CcaSR_Autoactivation(CcaSR_gillespie):
         self.params = {
             'eta': 1, # production of H per light
             'nu': 0.01, # dilution of all proteins (midpoint of c2, b, h2 from Chait)
-            'K_H': 100, # dissociation constant, H activation of F
+            'K_H': 90, # dissociation constant, H activation of F
             'h1':4e-2, # "Extrinsic responsiveness" generation rate
             'h2':1e-3, # "Extrinsic responsiveness" dilution rate
             'a': 0.025, # production of F per unit E (tunes hysteresis)
