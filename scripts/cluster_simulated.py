@@ -77,11 +77,12 @@ job_id = qsub.submit(
     )
     
 
+
+
 #%% Launch several single trainings:
     
 # Cell class: in training data path, and name of class in dcc.simulations
-cell_class_list = ['CcaSR_gillespie_simple_noE',
-                   'CcaSR_gillespie_simple',
+cell_class_list = ['CcaSR_gillespie_simple',
                    'CcaSR_gillespie']
 
 # horizon_list = [12, 24, 48]
@@ -89,10 +90,13 @@ cell_class_list = ['CcaSR_gillespie_simple_noE',
 
 for cell_class in cell_class_list:
         
-    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training_set_*")
+    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023-03-09*/training*")
     training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
     
-    for training_file in training_file_list:
+    for training_dir in training_dir_list:
+        
+        training_file = training_dir.split('/')[-1]
+        datasets_folder = '/'.join(training_dir.split('/')[:-1])
                 
         datasets_folder = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*")[0]
 
@@ -120,7 +124,7 @@ for cell_class in cell_class_list:
             args = [saved_config_file],
             conda_env="delta_env",
             hardware_requirements = dict(
-                time_limit = 2, #2
+                time_limit = 3, #2
                 cores=4, #4
                 gpus=1,
                 mem_per_core=4,
