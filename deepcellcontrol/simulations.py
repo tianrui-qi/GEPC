@@ -245,6 +245,24 @@ class CcaSR_gillespie():
         
         # Return:
         return (timestep,newspecies)
+    
+    def update_params(self, new_params):
+        """
+        Update parameters of Gillespie simulation
+
+        Parameters
+        ----------
+        new_params : dict
+            Key-value pairs of parameter name and value
+
+        Returns
+        -------
+        None. (cell object is updated)
+
+        """
+        for key in new_params.keys():
+            self.params[key] = new_params[key]
+        
 
 class CcaSR_gillespie_simple_noE(CcaSR_gillespie):
     """
@@ -828,7 +846,8 @@ def camera_sim(fluo, camera_mult=40,camera_max=4095,camera_offset=100,noise_perc
                 camera_max
             )
 
-def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie, num_workers = None):
+def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie, 
+                 num_workers = None, new_params=None):
     """
     Generate training set from Gillespie model and pre-determined stimulations
 
@@ -840,6 +859,11 @@ def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie, num_wor
         Period between measurements, in (simulated) minutes. The default is 5.
     cell_class : CcaSR_gillespie or descendant class, optional.
         The type of cell to simulate. The default is CcaSR_gillespie
+    num_workers: int, optional
+        The number of workers for parallel computing. The default is None
+    new_params: dict, optional
+        Key-value pairs for updated parameter values for Gillespie simulation. 
+        The default is None.
 
     Returns
     -------
@@ -857,6 +881,7 @@ def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie, num_wor
                     itertools.repeat(sampling),
                     itertools.repeat(cell_class),
                     itertools.repeat(None),
+                    itertools.repeat(new_params),
                     )
                 )
             fluo = np.concatenate(res[0])
@@ -866,6 +891,8 @@ def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie, num_wor
     fluo = []
     for l in range(stims.shape[0]):
         cell = cell_class() # Instantiate new "cell"
+        if new_params:
+            cell.update_params(new_params)
         cell.set_light_events(stims[l]) # Set future light events
         ts = cell.run(stims.shape[1]*sampling) # Run until the end
         fluo.append([x['F'] for x in ts[1:]]) # Append fluorescence to list (skip first timepoint before any stim)
@@ -886,6 +913,7 @@ def evaluation_set(
         future_realizations=5000, 
         sampling=SAMPLING, 
         num_workers=8,
+        new_params=None,
         ):
     """
     Generate evaluation set with multiple future realization of the cell 
@@ -907,6 +935,9 @@ def evaluation_set(
     num_workers : int, optional
         Number of parallel workers to use to compute each cell trajectory. If
         None, no parallel execution is used. The default is 8. 
+    new_params: dict, optional
+        Key-value pairs of new parameter values for Gillespie simulation. The 
+        default is None.
 
     Returns
     -------
@@ -923,7 +954,7 @@ def evaluation_set(
         for s, stim in enumerate(stims):
             print(f"{s}/{stims.shape[0]} cells")
             res.append(
-                _evaluation(stim, cut_off, future_realizations, sampling, cell_class)
+                _evaluation(stim, cut_off, future_realizations, sampling, cell_class, new_params)
                 )
         return res
     
@@ -936,14 +967,20 @@ def evaluation_set(
                 itertools.repeat(cut_off),
                 itertools.repeat(future_realizations),
                 itertools.repeat(sampling),
-                itertools.repeat(cell_class)
+                itertools.repeat(cell_class),
+                itertools.repeat(new_params),
                 )
             )
     
     return res
 
 
-def _evaluation(stims, cut_off, future_realizations, sampling, cell_class):
+def _evaluation(stims, 
+                cut_off, 
+                future_realizations, 
+                sampling, 
+                cell_class,
+                new_params=None):
     """
     This function implements the actual evaluation routine for a specific cell.
     It has to be a top-level function otherwise the parallel processing 
@@ -962,6 +999,8 @@ def _evaluation(stims, cut_off, future_realizations, sampling, cell_class):
         Period between measurements, in (simulated) minutes. The default is 5.
     cell_class : CcaSR_gillespie or descendant class, optional.
         The type of cell to simulate. The default is CcaSR_gillespie
+    new_params: dict, optional
+        Key-value pairs for new model parameter values
 
     Returns
     -------
@@ -974,6 +1013,8 @@ def _evaluation(stims, cut_off, future_realizations, sampling, cell_class):
     """
     
     cell = cell_class() # Instantiate new "cell"
+    if new_params:
+        cell.update_params(new_params)
     cell.set_light_events(stims) # Set future light events
     ts = cell.run(cut_off*sampling) # Run until cut off between "Past" and "Future"
     Past = np.array([x['F'] for x in ts[1:]]) # Append fluorescence time-series to the "Past" of the cell
