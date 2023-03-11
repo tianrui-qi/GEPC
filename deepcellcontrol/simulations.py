@@ -16,6 +16,7 @@ import ast
 
 import numpy as np
 import gillespy2 as gp2
+from scipy.integrate import solve_ivp
 
 SAMPLING = 5
 
@@ -114,8 +115,10 @@ class CcaSR_gillespie():
     
     
     """
+    _gp2model = None
+    _odemodel = None
     
-    def __init__(self, use_gillespy2 = False):
+    def __init__(self):
         
         # All parameters based on Chait et al. except for 'h1' and 'h2'.
         # They are lower to reflect the slow changes we see in responsiveness,
@@ -153,20 +156,8 @@ class CcaSR_gillespie():
         self.events = [] # External events
         self.past_events = []
         self.time = 0 # time is NOT reset when run() is called! (see run method below)
-        
-        self.gp2 = {
-            "use": False, 
-            "model": None,
-            "algorithm": "SSA",
-            "realizations": 1
-            }
-        "Gillespy2 parameters and variables"
-        if use_gillespy2:
-            self.gp2["use"] = True
-            self.gp2["model"] = self.gillespy2ify()
-        
     
-    def gillespy2ify(self):
+    def _compile_gp2_model(self):
         """
         Turn parameters, species, and reactions into a gp2 model
 
@@ -178,7 +169,9 @@ class CcaSR_gillespie():
         """
         
         # create model
-        model = gp2.Model(name = self.__class__.__name__)
+        name = self.__class__.__name__
+        print(f"Compiling GillesPy2 model for class {name}... ", end="")
+        model = gp2.Model(name = name)
         
         # Add parameters:
         for name, value in self.params.items():
@@ -188,6 +181,7 @@ class CcaSR_gillespie():
         # Add species:
         for name, value in self.species.items():
             species = gp2.Species(name = name, initial_value = value)
+            species.mode = "discrete"
             model.add_species(species)
         
         # Add reactions:
@@ -202,10 +196,43 @@ class CcaSR_gillespie():
                 )
             model.add_reaction(gp2reaction)
         
+        print("done.")
+        
         return model
+    
+    def _compile_ode_model(self):
+        
+        name = self.__class__.__name__
+        print(f"Compiling ODE model for class {name}... ", end="")
+        system = {name: '' for name in self.species}
+        for r in self.reactions:
+            for name, value in r.stoichiometry.items():
+                system[name] += f"{'+' if value > 0 else '-'}{abs(value)}*{r.propensity} "
+        
+        compiled = {}
+        for name, value in system.items():
+            if len(value) == 0:
+                system[name] = '0'
+            system[name] = ast.unparse(ast.parse(system[name]))
+            compiled[name] = compile(system[name], f"d{name}_dt", "eval")
+        
+        print("done.")
+        
+        return system, compiled
+        
+    def _ode_computation(self, t, y):
+        
+        species = {key: y[k] for k, key in enumerate(self.species)}
+        
+        dydt = np.empty_like(y)
+        for k, key in enumerate(self._odemodel):
+            dydt[k] = eval(self._odemodel[key], {}, {**self.params, **species})
+        
+        return dydt
+            
         
         
-    def run(self, stoptime):
+    def run(self, stoptime, realizations = 1, solver = "original"):
         '''
         Run Gillespie simulation of the system until stopping point.
 
@@ -225,8 +252,29 @@ class CcaSR_gillespie():
         # Sort events in ascending time before runnning just in case
         self.events.sort(key=lambda elem: elem['time'])
         
-        if self.gp2["use"]:
-            return self._run_gp2(stoptime)
+        if solver.lower() in ("original", "og"):
+            initial_species = copy.deepcopy(self.species)
+            initial_time = self.time
+            initial_events = copy.deepcopy(self.events)
+            initial_pastevents = copy.deepcopy(self.past_events)
+            timeseries = []
+            for _ in range(realizations):
+                self.time = initial_time
+                self.species = copy.deepcopy(initial_species)
+                self.events= copy.deepcopy(initial_events)
+                self.past_events = copy.deepcopy(initial_pastevents)
+                timeseries.append(self._run_original(stoptime))
+            if realizations == 1:
+                timeseries = timeseries[0]
+            return timeseries
+        if solver.lower() in ("gillespy2", "gp2"):
+            return self._run_gp2(stoptime, realizations)
+        if solver.lower() == "ode":
+            return self._run_ode(stoptime)
+        
+        raise(f"Unknown solver: {solver}")
+    
+    def _run_original(self, stoptime):
         
         # Intialize:
         starttime = self.time
@@ -239,7 +287,7 @@ class CcaSR_gillespie():
             self.species = newspecies
             
             # Run reaction:
-            timestep, newspecies = self.run_nextreaction()
+            timestep, newspecies = self._run_nextreaction()
                 
             # Update time:
             self.time += timestep
@@ -247,7 +295,7 @@ class CcaSR_gillespie():
             # If sampling time, append current species values to time-series:
             while (self.time-starttime) >= len(time_series)*self.sampling:
                 time_series.append(self.species.copy())
-                
+        
         # Set to stop time:
         self.time = stoptime
         
@@ -262,28 +310,18 @@ class CcaSR_gillespie():
             
         return time_series
     
-    def _run_gp2(self, stoptime):
-        """
-        Run using the Gillespy2 library.
-
-        Parameters
-        ----------
-        stoptime : float
-            Time-point at which the simulation should be stopped, in minutes.
-
-        Returns
-        -------
-        time_series : list of dicts
-            List of copies of the species property at sampling time points for 
-            the duration of the run.
-
-        """
+    
+    
+    def _run_gp2(self, stoptime, realizations = 1):
+        
+        if self._gp2model is None:
+            self.__class__._gp2model = self._compile_gp2_model()
         
         # Set gp2model species to current species level:
         for name, value in self.species.items():
-            self.gp2["model"].get_species(name).set_initial_value(value)
-            
-        # Set upcoming events that will happen during run:
+            self._gp2model.get_species(name).set_initial_value(value)
+        
+        remove_me = []
         for e_index, e in enumerate(self.events):
             if e["time"] < stoptime:
                 assignments = []
@@ -294,47 +332,121 @@ class CcaSR_gillespie():
                 gp2event = gp2.Event(
                     name = f"event_{e_index}",
                     assignments = assignments,
-                    trigger = gp2.EventTrigger("True", initial_value=True),
+                    trigger = gp2.EventTrigger("1", initial_value=False),
                     delay = f"{e['time'] - self.time}"
                     )
-                self.gp2["model"].add_event(gp2event)
-                self.events.remove(e)
+                self._gp2model.add_event(gp2event)
+                remove_me.append(e)
                 self.past_events.append(e)
+        for e in remove_me:
+            self.events.remove(e)
         
         # Set simulation timespan:
-        tspan = gp2.TimeSpan.arange(
+        tspan = gp2.TimeSpan.arange( 
             increment = self.sampling, t=stoptime-self.time
             )
-        self.gp2["model"].timespan(tspan)
+        self._gp2model.timespan(tspan)
         
         # Run:
-        results = self.gp2["model"].run(
-            number_of_trajectories=self.gp2["realizations"],
-            algorithm=self.gp2["algorithm"],
+        results = self._gp2model.run(
+            number_of_trajectories=realizations,
+            algorithm="Tau-Hybrid",
             )
         
         # Remove events before next run:
-        self.gp2["model"].delete_all_events()
+        self._gp2model.delete_all_events()
         
         # Reformat results:
         timeseries = []
-        for t in range(len(tspan)):
-            
-            timepoint = {}
-            for s in self.species:
-                if self.gp2["realizations"] == 1:
-                    timepoint[s] = results[0][s][t]
-                else:
-                    timepoint[s] = [res[s][t] for res in results]
-            
-            timeseries.append(timepoint)
+        for r, res in enumerate(results):
+            timeseries.append([])
+            for t in range(len(res[tuple(self.species.keys())[0]])):
+                timepoint = {}
+                for s in self.species:
+                    timepoint[s] = res[s][t]
+                timeseries[-1].append(timepoint)
         
         # Set state:
         self.time = stoptime
         for name in self.species:
-            self.species[name] = timeseries[-1][name]
+            self.species[name] = timeseries[-1][-1][name]
+        
+        # Return timeseries
+        if realizations == 1:
+            return timeseries[0]
+        return timeseries
+    
+    
+    def _run_ode(self, stoptime):
+        
+        if self._odemodel is None:
+            _, self.__class__._odemodel = self._compile_ode_model()
+        
+        sampling_times = np.arange(0,stoptime+1, self.sampling)
+        
+        y0 = np.array(
+            [x for x in self.species.values()], 
+            dtype=np.float32
+            )
+        
+        record = [y0[:,np.newaxis]]
+        
+        while self.time < stoptime:            
+            
+            
+            # Figure out next stopping point:
+            next_event = self.events[0]
+            run_to = next_event["time"]
+            if run_to > stoptime:
+                next_event = None
+                run_to = stoptime
+            
+            # Sampling points:
+            sampling = np.logical_and(
+                sampling_times>self.time, sampling_times<=run_to
+                )
+            sampling = [sampling_times[s] for s, sample in enumerate(sampling) if sample]
+            if run_to != stoptime:
+                sampling.append(run_to)
+            
+            # Run:
+            y = solve_ivp(
+                self._ode_computation, 
+                t_span = (0,run_to-self.time),
+                y0 = y0,
+                t_eval = [s-self.time for s in sampling],
+                method = "LSODA",
+                )
+            self.time = run_to
+            
+            # Store timespan values:
+            y0 = y.y[:,-1]
+            if self.time != stoptime:
+                record.append(y.y[:,:-1])
+            else:
+                record.append(y.y)
+            
+            # Run events:
+            if next_event is not None:
+                for name, value in next_event["set"]:
+                    k = tuple(self.species.keys()).index(name)
+                    y0[k] = value
+                self.events.remove(next_event)
+                
+        
+        for k, name in enumerate(self.species):
+            self.species[name] = y0[k]
+
+        record = np.concatenate(record, axis = 1)
+        timeseries = []
+        for t in range(record.shape[1]):
+            timeseries.append({})
+            for k, name in enumerate(self.species):
+                timeseries[-1][name] = record[k,t]
         
         return timeseries
+            
+        
             
         
     def set_light_events(self,light_sequence):
@@ -364,7 +476,7 @@ class CcaSR_gillespie():
                     }
                 )
         
-    def run_nextreaction(self):
+    def _run_nextreaction(self):
         '''
         Simulate next reaction (or apply next event, whichever comes first)
 
@@ -462,9 +574,9 @@ class CcaSR_gillespie_simple(CcaSR_gillespie):
     This class inherits from the `CcaSR_gillespie` class.
     """
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         # Run parent class init:
-        super().__init__()
+        super().__init__(*args, **kwargs)
         
         # Alter the reactions network:
         self.params = {
@@ -559,9 +671,9 @@ class CcaSR_Inverter(CcaSR_gillespie):
     This class inherits from the `CcaSR_gillespie` class.
     """
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         # Run parent class init:
-        super().__init__()
+        super().__init__(*args, **kwargs)
         
         # Alter the reactions network:
         self.params = {
@@ -655,9 +767,9 @@ class CcaSR_Autoactivation(CcaSR_gillespie):
     This class inherits from the `CcaSR_gillespie` class.
     """
     
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         # Run parent class init:
-        super().__init__()
+        super().__init__(*args, **kwargs)
         
         # Alter the reactions network:
         self.params = {
@@ -675,8 +787,9 @@ class CcaSR_Autoactivation(CcaSR_gillespie):
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'E':round(np.random.poisson(self.params['h1'] / self.params['h2'])), # "Extrinsic noise / responsiveness"
-            'F':0, # GFP
+            # "Extrinsic noise / responsiveness"
+            'E': round(np.random.poisson(self.params['h1'] / self.params['h2'])),
+            'F': 0,  # GFP
             }
         self.reactions = (
             Reaction('h1', {'E': 1}), # "Extrinsic" creation
@@ -735,6 +848,8 @@ class OldCcaSR_Autoactivation(CcaSR_gillespie):
             Reaction('a*E/2*((F*b*h2/(a*h1))**nh)/(K_F+(F*b*h2/(a*h1))**nh)', {'F': 1}), # GFP creation
             Reaction('b*F', {'F': -1}), # GFP dilution
             )
+        
+        self.compile_models()
 
 class OldCcaSR_Autoactivation_noE(CcaSR_gillespie):
     """
