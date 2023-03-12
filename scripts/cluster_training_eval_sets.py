@@ -62,7 +62,7 @@ for new_params in new_params_list:
         conda_env="delta_env",
         args = [cell_class, new_params_dir,],
         hardware_requirements = dict(
-            time_limit = 9, #2
+            time_limit = 16, #2
             cores=2, #4
             gpus=1,
             mem_per_core=4,

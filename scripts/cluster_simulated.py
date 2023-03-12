@@ -79,7 +79,8 @@ job_id = qsub.submit(
 
 
 
-#%% Launch several single trainings:
+
+#%% Launch several single trainings (change horizon, past steps, or training set size):
     
 # Cell class: in training data path, and name of class in dcc.simulations
 cell_class_list = ['CcaSR_gillespie_simple',
@@ -131,6 +132,47 @@ for cell_class in cell_class_list:
                 )
             )
 
+
+
+#%% Launch trainings on multiple different datsets
+
+# Cell class: in training data path, and name of class in dcc.simulations
+cell_class = 'CcaSR_gillespie'
+
+datasets_folder_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023-03-11*")
+
+for datasets_folder in datasets_folder_list:    
+
+    # Fields to change in config.py:
+    # Training epochs, locations of training and evaluation datsets,
+    # which cell class to use for simulations
+    config = dict(
+        training_parameters = dict(
+            epochs = 200, # 200 is typically enough
+            ),
+        datasets_folder = datasets_folder+'/', # Point to generated sets folder
+        training_sets = ("training_set",), # Training subfolder(s)
+        eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+        features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
+        cell_class = cell_class, # Cell class to use in dcc.simulations
+        models_folder = dcc_repo_path + '/assets/models/',
+        )
+    
+    # Updated config and save it to disk:
+    saved_config_file = params_change(config)
+    
+    # Submit qsub request for single job:
+    job_id = qsub.submit(
+        dcc_repo_path + "scripts/simulated_pipeline.py",
+        args = [saved_config_file],
+        conda_env="delta_env",
+        hardware_requirements = dict(
+            time_limit = 5, #2
+            cores=6, #4
+            gpus=1,
+            mem_per_core=4,
+            )
+        )
 
 #%% Launch job array:
 
