@@ -139,7 +139,7 @@ for cell_class in cell_class_list:
 # Cell class: in training data path, and name of class in dcc.simulations
 cell_class = 'CcaSR_gillespie'
 
-datasets_folder_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023-03-11*")
+datasets_folder_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023-03-12*")
 
 for datasets_folder in datasets_folder_list:    
 
