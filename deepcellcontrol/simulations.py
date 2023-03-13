@@ -1313,7 +1313,7 @@ def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie,
                     itertools.repeat(new_params),
                     )
                 )
-            fluo = np.concatenate(res[0])
+            fluo = np.concatenate(res, axis=0)
             return fluo
     
     # Run Gillespie simulations:
