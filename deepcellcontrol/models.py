@@ -8,7 +8,9 @@ Created on Fri Aug 14 18:24:45 2020
 @author: jeanbaptiste
 """
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, LSTM, Input, TimeDistributed, Concatenate
+from tensorflow.keras.layers import (
+    Dense, LSTM, Input, TimeDistributed, Concatenate, Reshape, Conv2DTranspose, Conv2D
+    )
 from tensorflow.keras.optimizers import Adam
 
 
@@ -371,6 +373,107 @@ def _mlpdecoder(state_h, state_c, future_light, hyper_parameters):
     
     return prediction
 
+def _cnndecoder(state_h, state_c, future_light, hyper_parameters):
+    """
+    CNN decoder definition
+
+    Parameters
+    ----------
+    state_h : tf.Tensor
+        LSTM encoder hidden state.
+    state_c : tf.Tensor
+        LSTM encoder cell state.
+    future_light : tf.Tensor
+        Input tensor of (potential) future optogenetic sequence. 
+        See lstm_mlp().
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    prediction : tf.Tensor
+        Future fluorescence prediction.
+
+    """
+    
+    # Process parameters:
+    first_shape = (
+        int(hyper_parameters["cnn_bins"]/8), 
+        int(hyper_parameters["horizon"]/8)
+        )
+    filters = hyper_parameters["cnn_filters"]
+    
+    # Concatenate inputs together:
+    latent = Concatenate(
+        axis=-1,
+        name="prediction_inputs"
+        )([state_h, state_c, future_light])
+    
+    
+    # 1D latent to 3D tensor:
+    hidden = Dense(first_shape[0] * first_shape[1] * filters[0], activation="relu")(latent)
+    hidden = Reshape(first_shape + (filters[0],))(hidden)
+    hidden = Conv2D(filters[1], 3, activation = "relu", padding= "same")(hidden)
+    
+    # Upscaling block 1 (x2):
+    hidden = Conv2DTranspose(filters[2], 3, activation="relu", strides=2, padding="same")(hidden)
+    hidden = Conv2D(filters[3], 3, activation = "relu", padding= "same")(hidden)
+    
+    # Upscaling block 2 (x4):
+    hidden = Conv2DTranspose(filters[4], 3, activation="relu", strides=2, padding="same")(hidden)
+    hidden = Conv2D(filters[5], 3, activation = "relu", padding= "same")(hidden)
+    
+    # Upscaling block 3 (x8):
+    hidden = Conv2DTranspose(filters[6], 3, activation="relu", strides=2, padding="same")(hidden)
+    hidden = Conv2D(filters[7], 3, activation = "relu", padding= "same")(hidden)
+    
+    # Output:
+    prediction = Conv2DTranspose(1, 3, activation="relu", padding="same")(hidden)
+    
+    return prediction
+
+
+def lstm_cnn(hyper_parameters):
+    """
+    Get LSTM-MLP encoder-decoder network
+
+    Parameters
+    ----------
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    model : Model
+        Compiled LSTM-MLP model.
+
+    """
+    
+    # Inputs:
+    past_events = Input(
+        (None, len(hyper_parameters["features"])),
+        name='past_inputs'
+        )
+    future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
+    
+    # Encoder:
+    state_h, state_c = _encoder(past_events, hyper_parameters)
+    
+    # Decoder:
+    prediction = _cnndecoder(state_h, state_c, future_light, hyper_parameters)
+
+    # Finalize model:
+    model = Model([past_events, future_light], prediction)
+    model.compile(
+        loss=hyper_parameters["loss"],
+        optimizer = Adam(
+            learning_rate=hyper_parameters["learning_rate"]
+            )
+        )
+    
+    return model
 
 def mlp_nopast(hyper_parameters):
     """
