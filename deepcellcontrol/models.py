@@ -194,7 +194,11 @@ def _encoder(past_events,hyper_parameters):
     """
     
     # Encoding LSTM: (return internal states to feed into decoder)
-    intermediate = LSTM(64,name='encoder_0',return_sequences=True)(past_events)
+    intermediate = LSTM(
+        hyper_parameters["lstm_units"],
+        name='encoder_0',
+        return_sequences=True
+        )(past_events)
     _, state_h, state_c = LSTM(
         hyper_parameters["latent_dim"],return_state=True,name='encoder_1'
         )(intermediate)

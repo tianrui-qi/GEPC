@@ -35,7 +35,8 @@ defaults = dict(
         ), # Features to compile for training/control
     past_steps=36, # obsolete.
     horizon = 24, # Number of future time points to use for prediction horizon
-    latent_dim=16, # Number of LSTM units in 2nd decoder layer
+    lstm_units = 64, # Number of LSTM units in the first encoder layer
+    latent_dim=16, # Number of LSTM units in 2nd encoder layer
     output_mode = "timedistributed", # or "dense" # For LSTM decoder, obsolete.
     output_dim=1, # Number of features of decoder output
     batch_size=100, # Training batch size
