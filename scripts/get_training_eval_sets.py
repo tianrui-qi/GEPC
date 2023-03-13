@@ -27,11 +27,20 @@ if len(sys.argv) > 1:
 cell_class_type = getattr(dcc.simulations, cell_class)
 cell_class_object = cell_class_type()
 
-# Update parameters, if passed as new argument
-new_params = {'h1': 0.0710/25*10, 
-              'h2': 0.0303/50*10}
+# Have note checked that this works
+WORKERS = None # NOne, 4, 8, 12 etc depending on number of cores
 if len(sys.argv) > 2:
-    with open(sys.argv[2], 'r') as f:
+    WORKERS = int(sys.argv[2])
+    
+    # Convert to 
+    if WORKERS==0:
+        WORKERS = None
+
+# Update parameters, if passed as new argument
+new_params = {'h1': 0.0710/25, 
+              'h2': 0.0303/50}
+if len(sys.argv) > 3:
+    with open(sys.argv[3], 'r') as f:
         new_params = json.load(f)
 
 # Datasets folder (index with simulation data):
@@ -40,18 +49,15 @@ simulated_data_folder = f"/projectnb/dunlop/{username}/deepcellcontrol/assets/si
 base_folder = simulated_data_folder + f"/{cell_class_type.__name__}/{time.strftime('%Y-%m-%d_%H-%M-%S')}_simulated_{uuid.uuid4()}"
 
 # Training parameters:
-training_cells = 10000 # 10_000
+training_cells = 10 # 10_000
 timepoints = 36*12 # 36*12 How much time to simulate
 nostim_start = 3*12 # 3*12 Timepoints with light off
 
 # Evaluation parameters:
-eval_cells = 1000 #1_000
+eval_cells = 10 #1_000
 eval_cutoff = 24*12 # 24*12 # Number of past timepoints
 eval_future_realizations = 1000 #1_000 # Number of future realizations per cell
 eval_horizon = 4*12 # 4*12 # Number of future timepoints
-
-# Have note checked that this works
-WORKERS = None # NOne, 4, 8, 12 etc depending on number of cores
 
 print(cell_class)
 print(new_params)
