@@ -16,6 +16,7 @@ import pickle
 
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from . import utilities as utils
 from . import config
@@ -405,7 +406,7 @@ class LSTMFormatter(AbstractFormatter):
             )
         
         return fluos, stims
-
+    
 
 class Datasets(Generator):
     """
@@ -698,6 +699,185 @@ class Datasets(Generator):
         """Generator function for end of iterations"""
         raise StopIteration
 
+
+class Datasets_cnn(Datasets):
+    
+    
+    def __init__(self, datasets, formatter, parameters, *args, **kwargs):
+        super().__init__(datasets, formatter, parameters, *args, **kwargs)
+        self.n_bins = parameters["cnn_bins"]
+        "Number of bins to quantize fluorescence values (must be multiple of 8)"
+    
+    def normalize(self):
+        
+        super().normalize()
+        
+        for d, data in enumerate(self.data):
+            
+            density = data["raw_dataset"].copy()
+            
+            if os.path.exists(self.datasets[d]+"/compiled/density.npy"):
+                print("Loading gaussian image representations from disk...", end=" ")
+                density["fluo1"] = np.load(self.datasets[d]+"/compiled/density.npy")
+                print("done.")
+            else:
+                print("Compiling gaussian image representations...")
+                density["fluo1"] = np.zeros(
+                    density["fluo1"].shape + (self.n_bins,), dtype=np.float32
+                    )
+                for c in tqdm(range(density["fluo1"].shape[0])):
+                    density["fluo1"][c] = gaussian_img(
+                        data["raw_dataset"]["fluo1"][c], self.n_bins
+                        )
+                os.makedirs(self.datasets[d]+"/compiled/", exist_ok = True)
+                np.save(self.datasets[d]+"/compiled/density.npy", density["fluo1"])
+            
+            data["density_dataset"] = density
+    
+    def sample(self):
+        
+        if isinstance(self.past_steps, (list, tuple)):
+            min_steps, max_steps = self.past_steps
+        else:
+            min_steps = max_steps = self.past_steps
+        
+        # Get random cell from proper partition:
+        if self.mode == "training":
+            cell_nb = np.random.choice(self._training_set)
+        else:
+            cell_nb = np.random.choice(self._evaluation_set)
+
+        # Break down set/cell numbers:
+        for set_nb, cumsum_cells in enumerate(self._cumsum_cells):
+            if cumsum_cells > cell_nb:
+                if set_nb > 0:
+                    cell_nb -= self._cumsum_cells[set_nb - 1]
+                break
+        
+        # Get dataset ref:
+        dataset = self.data[set_nb][self.data_type]
+        density = self.data[set_nb]["density_dataset"]["fluo1"]
+        
+        # Random time point:
+        timepoint = np.random.randint(
+            min_steps, dataset["stims"].shape[1] - self.horizon
+        )
+        if min_steps == max_steps:
+            past_point = timepoint-max_steps
+        else:
+            past_point = np.random.randint(timepoint-max_steps, timepoint-min_steps)
+        past_point = max(past_point, 0)
+        
+        # Init sample:
+        past = np.zeros((max_steps, len(self.features)), dtype=np.float32)
+        
+        # Run through features, compile past:
+        for f, feature in enumerate(self.features):
+            past[past_point-timepoint:,f] = np.squeeze(
+                dataset[feature][cell_nb, past_point:timepoint]
+                )
+        
+        # Future light inputs:
+        future_stims = dataset["stims"][cell_nb, timepoint : timepoint + self.horizon]
+        
+        # Retrieve gaussian image representations for the groundtruth:
+        groundtruth = density[cell_nb, timepoint : timepoint + self.horizon]
+        
+        return past, future_stims, groundtruth
+
+    def batch(self):
+        
+        if isinstance(self.past_steps, (list, tuple)):
+            past_steps = self.past_steps[1]
+        else:
+            past_steps = self.past_steps
+
+        past = np.empty(
+            (self.batch_size, past_steps, len(self.features)), dtype=np.float32
+        )
+        future_stims = np.empty(
+            (self.batch_size, self.horizon), dtype=np.float32
+        )
+        ground_truth = np.empty(
+            (self.batch_size, self.horizon, self.n_bins), dtype=np.float32
+        )
+
+        for b in range(self.batch_size):
+            past[b], future_stims[b], ground_truth[b] = self.sample()
+
+        return (past, future_stims), ground_truth
+
+# import cv2
+# def gaussianify(cell_trajectory, quantization):
+    
+#     img = np.zeros((cell_trajectory.shape[0],4096), dtype = np.uint16)
+#     for t, value in enumerate(cell_trajectory.astype(np.uint16)):
+#         img[t,value] = 65_535
+    
+#     sigma = int(4096/quantization)
+#     kernel = np.transpose(cv2.getGaussianKernel(12*sigma,sigma))
+    
+#     img = cv2.filter2D(img, ddepth = -1, kernel = kernel)
+    
+#     final_img = np.empty((cell_trajectory.shape[0],quantization), dtype = np.float32)
+#     bars = np.linspace(0, 4096, quantization+1).astype(int)
+#     for b in range(quantization):
+#         final_img[:,b] = np.sum(img[:,bars[b]:bars[b+1]],axis=1)
+#     final_img /= 65_535
+    
+#     return final_img
+
+def gaussian_img(cell_trajectory, n_bins):
+    """
+    Compile a "Gaussian image" of a single-cell trajectory
+
+    Parameters
+    ----------
+    cell_trajectory : 1D array of floats
+        Single cell fluorescence trajectory (not normalized, ie values between 
+        0 and 4095).
+    n_bins : int
+        Number of bins to "quantize" the trajectory over.
+
+    Returns
+    -------
+    img : 2D array of float32
+        Image representation of the trajectory.
+
+    """
+    
+    # Precompute gaussian:    
+    sigma = int(4096/n_bins)+1
+    x = np.arange(-6*sigma, 6*sigma)
+    gau = np.exp(-x**2/(2*sigma**2))/(sigma*np.sqrt(2*np.pi)).astype(np.float32)
+    
+    # Init image reprensentation with 0s
+    img = np.zeros((cell_trajectory.shape[0],n_bins), dtype = np.float32)
+    
+    # Run through timepoints:
+    for t, value in enumerate(cell_trajectory):
+        
+        # Which bin is the central one:
+        main_bin_ind = int(value // sigma)
+        # How much shift?
+        shift = round(value) % sigma
+        
+        # Run through bins:
+        for b in range(-6,6):
+            
+            # Find how to bin the gaussian curve:
+            if main_bin_ind+b<0 or main_bin_ind+b>=n_bins:
+                continue
+            gau_start = b*sigma + 6*sigma - shift -1
+            if gau_start < 0:
+                gau_start = 0
+            gau_end = (b+1)*sigma + 6*sigma - shift -1
+            
+            # Integrate gaussian over the interval:
+            img[t,main_bin_ind+b] = np.sum(gau[gau_start:gau_end])
+    
+    return img
+    
 
 def load_datasets(parameters):
     """

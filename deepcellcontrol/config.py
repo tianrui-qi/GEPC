@@ -48,6 +48,8 @@ defaults = dict(
         steps_per_epoch = 200,
         epochs=1000
         ), # Keras training parameters
+    cnn_bins = 96, # Number of "bins" along the fluorescence axis
+    cnn_filters = [16, 16, 32, 16, 16, 8, 8, 8], # Number of filters per convolutional layer
     save_folder=time.strftime("%Y-%m-%d_%H-%M-%S") # Folder to save model, evaluation etc...
     )
 
