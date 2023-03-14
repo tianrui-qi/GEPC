@@ -19,3 +19,4 @@ dependencies:
   - gxx >= 12.2
   - spyder >= 5.0
   - mamba >= 1.2
+  - pandas >= 1.5
