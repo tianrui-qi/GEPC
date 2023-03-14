@@ -49,12 +49,12 @@ simulated_data_folder = f"/projectnb/dunlop/{username}/deepcellcontrol/assets/si
 base_folder = simulated_data_folder + f"/{cell_class_type.__name__}/{time.strftime('%Y-%m-%d_%H-%M-%S')}_simulated_{uuid.uuid4()}"
 
 # Training parameters:
-training_cells = 10 # 10_000
+training_cells = 10_000 # 10_000
 timepoints = 36*12 # 36*12 How much time to simulate
 nostim_start = 3*12 # 3*12 Timepoints with light off
 
 # Evaluation parameters:
-eval_cells = 10 #1_000
+eval_cells = 1000 #1_000
 eval_cutoff = 24*12 # 24*12 # Number of past timepoints
 eval_future_realizations = 1000 #1_000 # Number of future realizations per cell
 eval_horizon = 4*12 # 4*12 # Number of future timepoints
