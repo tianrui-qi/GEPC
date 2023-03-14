@@ -59,14 +59,13 @@ job_id = qsub.submit(
 
 #%% Submit scripts
 
-cell_class = 'CcaSR_gillespie'
+cell_class = 'CcaSR_Cascade'
 
-new_params_list = [{'h1': 0.0710/25*10, 'h2': 0.0303/50*10},
-                   {'h1': 0.0710/25/10, 'h2': 0.0303/50/10},
-                   {'h1': 0.0710/25*10, 'h2': 0.0303/50*1},
-                   {'h1': 0.0710/25/10, 'h2': 0.0303/50*1},
-                   {'h1': 0.0710/25*1, 'h2': 0.0303/50*10},
-                   {'h1': 0.0710/25*1, 'h2': 0.0303/50/10},
+WORKERS=8
+
+new_params_list = [{'Ki': 0.04852},
+                   {'Ki': 0.4852},
+                   {'Ki': 4.852},
                    ]
 
 for new_params in new_params_list:
@@ -76,11 +75,11 @@ for new_params in new_params_list:
     # ARGS: cell_class (str), workers (int, default None), new_params_dir (str, optional)
     job_id = qsub.submit(
         dcc_repo_path + "scripts/get_training_eval_sets.py",
-        conda_env="delta_env",
-        args = [cell_class, None, new_params_dir,],
+        conda_env="dcc_env_shared",
+        args = [cell_class, WORKERS, new_params_dir,],
         hardware_requirements = dict(
-            time_limit = 16, #2
-            cores=2, #4
+            time_limit = 4, #2 (have used 16 for hard to simulate systems)
+            cores=8, #4
             gpus=1,
             mem_per_core=4,
             )
