@@ -69,7 +69,7 @@ def get_params(simul_id):
 #%% Get information about simulations
 
 simul_dir_list = glob.glob(dcc_repo_path + '/assets/models/2023-03-0[789]*') + \
-                 glob.glob(dcc_repo_path + '/assets/models/2023-03-1*')
+                 glob.glob(dcc_repo_path + '/assets/models/2023-03-1[12]*')
                  
 simul_id_list = [simul_dir.split('/')[-1] for simul_dir in simul_dir_list]
 horizon_list = []
@@ -139,7 +139,6 @@ df_past = df_meta.loc[simul_slice].sort_values(by=['cell_class','h1','h2']).rese
 
 fig, axes = plt.subplots(1,2, figsize=(8,3), sharey=True)
 for i in range(len(df_past)):
-    
     
     cell_class = df_past.loc[i,'cell_class']
     plt_idx = models_list.index(cell_class)
@@ -237,3 +236,31 @@ for i in range(2):
 axes[0].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
 plt.tight_layout()
 plt.savefig(dcc_repo_path+'/assets/figures/effect_of_h2.png', dpi=600)
+
+#%% Just look at CcaSR_gillespie
+
+markersize=3
+cell_class = 'CcaSR_gillespie'
+simul_slice = default_training_size & default_past_steps & default_horizon
+
+df_past = df_meta.loc[(simul_slice)&(df_meta['cell_class']==cell_class)].sort_values(by=['h1','h2']).reset_index(drop=True)
+
+plt.figure(figsize=(10,4))
+for i in range(len(df_past)):
+    
+    h1 = df_past.loc[i,'h1']
+    h2 = df_past.loc[i,'h2']
+    h1h2 = h1 / h2
+    simul_id = df_past.loc[i, 'simul_id']
+    
+    fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+    RMSE = np.median(np.sqrt((fluo - fluo_pred)**2)/fluo, axis=0)
+    t = [x/12. for x in range(len(RMSE))]
+    plt.plot(t, RMSE, 
+             model_style_dict[cell_class], 
+             markersize=markersize,
+             label=f'h1={h1:.2e}, h2={h2:.2e}, h1/h2={h1h2:.2e}')
+    
+plt.legend(bbox_to_anchor=(1,1))
+plt.tight_layout()
+plt.savefig(dcc_repo_path + '/assets/figures/all_gillespie_simul.png', dpi=600)

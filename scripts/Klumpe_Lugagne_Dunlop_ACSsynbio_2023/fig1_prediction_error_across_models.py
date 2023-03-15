@@ -18,9 +18,9 @@ import matplotlib.pyplot as plt
 username='hklumpe'
 dcc_repo_path = f"/projectnb/dunlop/{username}/deepcellcontrol/"
 
-# Make sure the proper path is used:
-sys.path.insert(0,dcc_repo_path)
-import deepcellcontrol as dcc
+# # Make sure the proper path is used:
+# sys.path.insert(0,dcc_repo_path)
+# import deepcellcontrol as dcc
 
 # Import data
 def get_fluo_and_pred(simul_id):
@@ -109,6 +109,48 @@ df_meta.drop(df_meta[df_meta['epochs']<200].index, inplace=True)
 default_horizon = df_meta['horizon']==24
 default_past_steps = df_meta['past_steps']==36
 default_training_size = df_meta['training_sets']=='training_set'
+
+#%% For each model, plot best and worst predictions?
+
+model_list = ['CcaSR_gillespie_simple_noE', 
+              'CcaSR_gillespie_simple',
+              'CcaSR_gillespie',]
+
+model = model_list[0]
+
+default_models = default_training_size & default_past_steps & default_horizon
+simul_id = df_meta.loc[default_models & (df_meta['cell_class']==model), 'simul_id'].values[-1]
+
+fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+RMSE_sum_across_time = np.sum(np.sqrt((fluo - fluo_pred)**2), axis=1)
+max_index = np.argmax(RMSE_sum_across_time)
+min_index = np.argmin(RMSE_sum_across_time)
+
+fig, axes = plot.subplots(2,1, figsize=(5,10))
+
+plot_past = 3*12 # Only plot the past 3 hours (even though whole past is used)
+for c in [max_index, min_index]:
+    plt.figure(1)
+    dcc.utilities.OptoPlotBackground(
+        stims[c,cutoff-plot_past:cutoff+params["horizon"]],
+        x=np.arange(-plot_past, params["horizon"])/12,
+        ymax = 4095
+        )
+    plt.plot(np.arange(-plot_past, 0)/12, past_fluo[c, -plot_past:],"k")
+    dcc.utilities.plotq(
+        futures_fluo[c,:,:params["horizon"]],
+        x = np.arange(0, params["horizon"])/12,
+        color="k"
+        )
+    plt.plot(np.arange(0, params["horizon"])/12, yhat[c]*4095, "b")
+    plt.plot([-0.5/12, -0.5/12], [0, 4095], color="gray")
+    plt.xlabel("time (h)")
+    plt.ylabel("Fluorescence (a.u.)")
+    plt.xlim([-plot_past/12,params["horizon"]/12])
+    plt.ylim([0,4095])
+
+
+
 
 #%% Plot error as function of horizon 
 color_dict = {'CcaSR_gillespie_simple_noE': 'r',
