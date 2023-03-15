@@ -1086,36 +1086,40 @@ class CcaSR_FeedforwardPositive(CcaSR_gillespie):
         
         # Alter the reactions network:
         self.params = {
-            'alpha': 5, # ratio of H production (per unit light) to dilution
-            'beta': 5, # ratio of E production (per amount of H) to dilution
-            'gamma': 5, # ratio of F production to dilution
-            'kappa_i': 5, # ratio of I to H activation strengths, raised to power of I cooperativity
-            'kappa_j': 5, # ratio of J to H activation strengths, raised to power of J cooperativity
-            'nh': 2, # cooperativity of I activation by H
-            'ni': 2, # cooperativity of F, J activation by I
-            'nj': 2, # cooperativity of F activation by J
+            'c2': 0.0631, # dilution of all proteins (midpoint of c2, b, h2 from Chait)
+            'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
+            'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
+            'a': 0.2827, # production of F per unit E (tunes hysteresis)
+            'nh': 3.6, # cooperativity of F activation by H (from Chait)
+            'Kh': 0.4851, # Hill threshold (sort of, H->I)
+            'ni': 3.6, # cooperativity of F, J activation by I (to match nh)
+            'Ki': 0.4851, # Hill threshold (sort of, I->F,J)
+            'nj': 3.6, # cooperativity of F activation by J (to match nh)
+            'Kj': 0.4851, # Hill threshold (sort of, J->F)
+            'b': 0.0104, # Dilution of I, J, and F
             'tau':12 # Response delay
             }
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
-            'I': 0, # Intermediate I
-            'J': 0, # Intermediate J
-            'F':0, # GFP
+            'I':0., # Intermediate
+            'J':0., # Intermediate
+            # "Extrinsic noise / responsiveness"
+            'E': round(np.random.poisson(self.params['h1'] / self.params['h2'])),
+            'F': 0,  # GFP
             }
         self.reactions = (
-            Reaction('beta', {'E': 1}), # "Extrinsic" creation
-            Reaction('E', {'E': -1}), # "Extrinsic" dilution
-            Reaction('alpha*U', {'H': 1}), # CcaSR activation
-            Reaction('H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('gamma*E * (H**nh)/(1+H**nh)', {'I': 1}), # Intermediate I creation
-            Reaction('I', {'I': -1}), # Intermediate I dilution            
-            Reaction('gamma*E * (I**ni)/(kappa_i+I**ni)', {'J': 1}), # Intermediate J creation
-            Reaction('J', {'J': -1}), # Intermediate J dilution
-            Reaction('gamma*E/2 * (I**ni)/(kappa_i+I**ni)', {'F': 1}), # GFP creation by I
-            Reaction('gamma*E/2 * (J**nj)/(kappa_j+J**nj)', {'F': 1}), # GFP creation by J
-            Reaction('F', {'F': -1}), # GFP dilution
+            Reaction('h1', {'E': 1}), # "Extrinsic" creation
+            Reaction('h2*E', {'E': -1}), # "Extrinsic" dilution
+            Reaction('U', {'H': 1}), # CcaSR activation
+            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E * (c2*H)**nh/(Kh+(c2*H)**nh)', {'I': 1}), # Intermediate I creation by H
+            Reaction('b*I', {'I': -1}), # Intermediate I dilution
+            Reaction('a*E * (c2*I)**ni/(Ki+(c2*I)**ni)', {'J': 1}), # Intermediate J creation by I
+            Reaction('b*J', {'J': -1}), # Intermediate J dilution
+            Reaction('a*E * (c2*I)**ni/(Ki+(c2*I)**ni)', {'F': 1}), # GFP creation by I
+            Reaction('a*E * (c2*J)**nj/(Kj+(c2*J)**nj)', {'F': 1}), # GFP creation by J
+            Reaction('b*F', {'F': -1}), # GFP dilution
             )
 
 class CcaSR_FeedforwardNegative(CcaSR_gillespie):
