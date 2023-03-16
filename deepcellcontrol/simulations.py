@@ -138,33 +138,32 @@ class CcaSR_gillespie():
         # responsiveness in our data.
         # We also treat the light-activation dynamics (species H) as stochastic
         # instead of the original deterministic implementation.
+        # Alter the reactions network:
         self.params = {
-            'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
-            'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
-            'c2':0.0631, # Hill normalization parameter
-            'a':0.2827, # PcpcG2 promoter rate
-            'b':0.0104, # Proteins dilution rate
-            's':0.9958, # Not used in the end
-            'nh':3.6655, # Hill coefficient
-            'K':0.4851, # Hill threshold (sort of)
+            'eta':1, # production of H
+            'nu': 0.01, # Dilution of proteins
+            'h1': 4e-2, # Production of E
+            'h2': 1e-3, # Dilution of E
+            'a':0.025, # PcpcG2 promoter rate
+            'K_H': 90/1.5, # Hill threshold
+            'nh':3.6, # Hill coefficient
             'tau':12 # Response delay
             }
         "Parameters used in the propensity calculations"
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
+            'E':round(self.params['h1']/self.params['h2']), # steady state E
             'F':0 # GFP
             }
-        "System species"
         self.reactions = (
-            Reaction('h1', {'E': 1}), # "Extrinsic" creation
-            Reaction('h2*E', {'E': -1}), # "Extrinsic" dilution
-            Reaction('U', {'H': 1}), # CcaSR activation
-            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*E*((c2*H)**nh)/(K+(c2*H)**nh)', {'F': 1}), # GFP creation
-            Reaction('b*F', {'F': -1}), # GFP dilution
-            )
+            Reaction('h1', {'E': 1}), # Responsiveness increase
+            Reaction('h2*E', {'E': -1}), # Responsiveness decrease
+            Reaction('eta*U', {'H': 1}), # CcaSR activation
+            Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E* H**nh/(K_H**nh + H**nh)', {'F': 1}), # GFP creation
+            Reaction('nu*F', {'F': -1}), # GFP dilution
+            )  
         "List of reactions in system"
         self.sampling = SAMPLING 
         "Sampling interval (in minutes)"
@@ -706,24 +705,27 @@ class CcaSR_gillespie_simple_noE(CcaSR_gillespie):
         
         # Alter the reactions network:
         self.params = {
-            'c2':0.0631, # Hill normalization parameter
-            'a':0.2827, # PcpcG2 promoter rate
-            'b':0.0104, # Proteins dilution rate
-            'nh':3.6655, # Hill coefficient
-            'K':0.4851, # Hill threshold (sort of)
+            'eta':1, # production of H
+            'nu': 0.01, # Dilution of proteins
+            'h1': 4e-2, # Production of E
+            'h2': 1e-3, # Dilution of E
+            'a':0.025, # PcpcG2 promoter rate
+            'K_H': 90, # Hill threshold
+            'nh':3.6, # Hill coefficient
             'tau':12 # Response delay
             }
         "Parameters used in the propensity calculations"
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
+            'E':round(self.params['h1']/self.params['h2']), # steady state E
             'F':0 # GFP
             }
         self.reactions = (
-            Reaction('U', {'H': 1}), # CcaSR activation
-            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*((c2*H)**nh)/(K+(c2*H)**nh)', {'F': 1}), # GFP creation
-            Reaction('b*F', {'F': -1}), # GFP dilution
+            Reaction('eta*U', {'H': 1}), # CcaSR activation
+            Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E* H**nh/(K_H**nh + H**nh)', {'F': 1}), # GFP creation
+            Reaction('nu*F', {'F': -1}), # GFP dilution
             )  
         
 class CcaSR_gillespie_simple(CcaSR_gillespie):
@@ -744,28 +746,27 @@ class CcaSR_gillespie_simple(CcaSR_gillespie):
         
         # Alter the reactions network:
         self.params = {
-            'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
-            'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
-            'c2':0.0631, # Hill normalization parameter
-            'a':0.2827, # PcpcG2 promoter rate
-            'b':0.0104, # Proteins dilution rate
-            's':0.9958, # Not used in the end
-            'nh':3.6655, # Hill coefficient
-            'K':0.4851, # Hill threshold (sort of)
+            'eta':1, # production of H
+            'nu': 0.01, # Dilution of proteins
+            'h1': 4e-2, # Production of E
+            'h2': 1e-3, # Dilution of E
+            'a':0.025, # PcpcG2 promoter rate
+            'K_H': 90/1.5, # Hill threshold
+            'nh':3.6, # Hill coefficient
             'tau':12 # Response delay
             }
         "Parameters used in the propensity calculations"
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
+            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # steady state E
             'F':0 # GFP
             }
         self.reactions = (
-            Reaction('U', {'H': 1}), # CcaSR activation
-            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*E*((c2*H)**nh)/(K+(c2*H)**nh)', {'F': 1}), # GFP creation
-            Reaction('b*F', {'F': -1}), # GFP dilution
+            Reaction('eta*U', {'H': 1}), # CcaSR activation
+            Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E* H**nh/(K_H**nh + H**nh)', {'F': 1}), # GFP creation
+            Reaction('nu*F', {'F': -1}), # GFP dilution
             ) 
 
 class CcaSR_gillespie_full(CcaSR_gillespie):
@@ -891,35 +892,35 @@ class CcaSR_Cascade(CcaSR_gillespie):
         
         # Alter the reactions network:
         self.params = {
-            'c2': 0.0631, # dilution of all proteins (midpoint of c2, b, h2 from Chait)
-            'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
-            'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
-            'a': 0.2827, # production of F per unit E (tunes hysteresis)
-            'nh': 3.6, # cooperativity of F activation by H (from Chait)
-            'Kh': 0.4851, # Hill threshold (sort of, H->I)
-            'ni': 3.6, # cooperativity of F activation by F (to match nh)
-            'Ki': 0.4851, # Hill threshold (sort of, I-> F)
-            'b': 0.0104, # Dilution of I and F
+            'eta':1, # production of H
+            'nu': 0.01, # Dilution of proteins
+            'h1': 4e-2, # Production of E
+            'h2': 1e-3, # Dilution of E
+            'a':0.025, # PcpcG2 promoter rate
+            'K_H': 90/2, # Hill threshold
+            'nh':3.6, # Hill coefficient
+            'K_I': 90/1, # Hill threshold
+            'ni':3.6, # Hill coefficient
             'tau':12 # Response delay
             }
+        "Parameters used in the propensity calculations"
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'I':0., # Intermediate
-            # "Extrinsic noise / responsiveness"
-            'E': round(np.random.poisson(self.params['h1'] / self.params['h2'])),
-            'F': 0,  # GFP
+            'E':round(self.params['h1']/self.params['h2']), # steady state E
+            'I': 0., # Intermediate
+            'F':0 # GFP
             }
         self.reactions = (
-            Reaction('h1', {'E': 1}), # "Extrinsic" creation
-            Reaction('h2*E', {'E': -1}), # "Extrinsic" dilution
-            Reaction('U', {'H': 1}), # CcaSR activation
-            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*E * (c2*H)**nh/(Kh+(c2*H)**nh)', {'I': 1}), # Intermediate creation by H
-            Reaction('b*I', {'I': -1}), # Intermediate dilution
-            Reaction('a*E * (c2*I)**ni/(Ki+(c2*I)**ni)', {'F': 1}), # GFP creation by itself
-            Reaction('b*F', {'F': -1}), # GFP dilution
-            )
+            Reaction('h1', {'E': 1}), # Responsiveness increase
+            Reaction('h2*E', {'E': -1}), # Responsiveness decrease
+            Reaction('eta*U', {'H': 1}), # CcaSR activation
+            Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E* H**nh/(K_H**nh + H**nh)', {'I': 1}), # Intermediate creation
+            Reaction('nu*I', {'I': -1}), # Intermediate dilution
+            Reaction('a*E* I**ni/(K_I**ni + I**ni)', {'F': 1}), # GFP creation
+            Reaction('nu*F', {'F': -1}), # GFP dilution
+            )  
 
 class CcaSR_Autoactivation(CcaSR_gillespie):
     """
@@ -1086,41 +1087,41 @@ class CcaSR_FeedforwardPositive(CcaSR_gillespie):
         
         # Alter the reactions network:
         self.params = {
-            'c2': 0.0631, # dilution of all proteins (midpoint of c2, b, h2 from Chait)
-            'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
-            'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
-            'a': 0.2827, # production of F per unit E (tunes hysteresis)
-            'nh': 3.6, # cooperativity of F activation by H (from Chait)
-            'Kh': 0.4851, # Hill threshold (sort of, H->I)
-            'ni': 3.6, # cooperativity of F, J activation by I (to match nh)
-            'Ki': 0.4851, # Hill threshold (sort of, I->F,J)
-            'nj': 3.6, # cooperativity of F activation by J (to match nh)
-            'Kj': 0.4851, # Hill threshold (sort of, J->F)
-            'b': 0.0104, # Dilution of I, J, and F
+            'eta':1, # production of H
+            'nu': 0.01, # Dilution of proteins
+            'h1': 4e-2, # Production of E
+            'h2': 1e-3, # Dilution of E
+            'a':0.025, # PcpcG2 promoter rate
+            'K_H': 90/2, # Hill threshold
+            'nh':3.6, # Hill coefficient
+            'K_I': 90/2, # Hill threshold
+            'ni':3.6, # Hill coefficient
+            'K_J': 90/2, # Hill threshold
+            'nj':3.6, # Hill coefficient
             'tau':12 # Response delay
             }
+        "Parameters used in the propensity calculations"
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'I':0., # Intermediate
-            'J':0., # Intermediate
-            # "Extrinsic noise / responsiveness"
-            'E': round(np.random.poisson(self.params['h1'] / self.params['h2'])),
-            'F': 0,  # GFP
+            'E':round(self.params['h1']/self.params['h2']), # steady state E
+            'I': 0., # Intermediate
+            'J': 0., # Intermediate
+            'F':0 # GFP
             }
         self.reactions = (
-            Reaction('h1', {'E': 1}), # "Extrinsic" creation
-            Reaction('h2*E', {'E': -1}), # "Extrinsic" dilution
-            Reaction('U', {'H': 1}), # CcaSR activation
-            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*E * (c2*H)**nh/(Kh+(c2*H)**nh)', {'I': 1}), # Intermediate I creation by H
-            Reaction('b*I', {'I': -1}), # Intermediate I dilution
-            Reaction('a*E * (c2*I)**ni/(Ki+(c2*I)**ni)', {'J': 1}), # Intermediate J creation by I
-            Reaction('b*J', {'J': -1}), # Intermediate J dilution
-            Reaction('a*E * (c2*I)**ni/(Ki+(c2*I)**ni)', {'F': 1}), # GFP creation by I
-            Reaction('a*E * (c2*J)**nj/(Kj+(c2*J)**nj)', {'F': 1}), # GFP creation by J
-            Reaction('b*F', {'F': -1}), # GFP dilution
-            )
+            Reaction('h1', {'E': 1}), # Responsiveness increase
+            Reaction('h2*E', {'E': -1}), # Responsiveness decrease
+            Reaction('eta*U', {'H': 1}), # CcaSR activation
+            Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E* H**nh/(K_H**nh + H**nh)', {'I': 1}), # Intermediate creation
+            Reaction('nu*I', {'I': -1}), # Intermediate dilution
+            Reaction('a*E* I**ni/(K_I**ni + I**ni)', {'J': 1}), # J creation
+            Reaction('nu*J', {'J': -1}), # J dilution
+            Reaction('a*E/2 * I**ni/(K_I**ni + I**ni)', {'F': 1}), # GFP creation
+            Reaction('a*E/2 * J**nj/(K_J**nj + J**nj)', {'F': 1}), # GFP creation
+            Reaction('nu*F', {'F': -1}), # GFP dilution
+            ) 
 
 class CcaSR_FeedforwardNegative(CcaSR_gillespie):
     """
