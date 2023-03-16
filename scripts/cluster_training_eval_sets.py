@@ -41,6 +41,7 @@ def params_change(params):
     # Return path to json file:
     return foldername+"parameters.json"
 
+
 #%% Submit single script
 cell_class = 'CcaSR_gillespie_simple_noE'
 WORKERS = 0 #8, script interprets 0 as None
@@ -57,18 +58,49 @@ job_id = qsub.submit(
         )
     )
 
-#%% Submit scripts
-
-cell_class = 'CcaSR_Cascade'
+#%% Submit scripts for simple activation cases
 
 WORKERS=8
+cell_class_list = ['CcaSR_gillespie_simple_noE',
+                   'CcaSR_gillespie_simple',
+                   'CcaSR_gillespie']
 
-new_params_list = [{'Ki': 0.04852},
-                   {'Ki': 0.4852},
-                   {'Ki': 4.852},
-                   ]
+simple_params_list = [{'h1': 4e-2, 'h2': 1e-3},
+                    {'h1': (4e-2)*10, 'h2': (1e-3)*10},
+                    {'h1': (4e-2)/10, 'h2': (1e-3)/10},
+                    {'h1': (4e-2)*1.5, 'h2': 1e-3},
+                    {'h1': (4e-2)/1.5, 'h2': 1e-3},
+                    ]
 
-for new_params in new_params_list:
+for cell_class in cell_class_list:
+    for new_params in simple_params_list:
+        new_params_dir = params_change(new_params)
+        
+        # Submit qsub request for single job:
+        # ARGS: cell_class (str), workers (int, default None), new_params_dir (str, optional)
+        job_id = qsub.submit(
+            dcc_repo_path + "scripts/get_training_eval_sets.py",
+            conda_env="dcc_env_shared",
+            args = [cell_class, WORKERS, new_params_dir,],
+            hardware_requirements = dict(
+                time_limit = 4, #2 (have used 16 for hard to simulate systems without parallel processing)
+                cores=8, #4
+                gpus=1,
+                mem_per_core=4,
+                )
+            )
+
+#%% Submit scripts for cascade
+
+WORKERS=8
+cell_class = 'CcaSR_Cascade'
+
+cascade_params_list = [{'K_I': 45},
+                   {'K_I': 45/2},
+                   {'K_I': 45*1.5},
+                    ]
+
+for new_params in cascade_params_list:
     new_params_dir = params_change(new_params)
     
     # Submit qsub request for single job:
@@ -78,7 +110,36 @@ for new_params in new_params_list:
         conda_env="dcc_env_shared",
         args = [cell_class, WORKERS, new_params_dir,],
         hardware_requirements = dict(
-            time_limit = 4, #2 (have used 16 for hard to simulate systems)
+            time_limit = 4, #2 (have used 16 for hard to simulate systems without parallel processing)
+            cores=8, #4
+            gpus=1,
+            mem_per_core=4,
+            )
+        )
+
+#%% Submit scripts for feedforward
+
+WORKERS=8
+cell_class = 'CcaSR_FeedforwardPositive'
+
+fold=1.5
+ff_params_list = [{'K_I': 45, 'K_J': 45},
+                   {'K_I': 45*fold, 'K_J': 45},
+                   {'K_I': 45, 'K_J': 45*fold},
+                   {'K_I': 45*fold, 'K_J': 45*fold},
+                    ]
+
+for new_params in ff_params_list:
+    new_params_dir = params_change(new_params)
+    
+    # Submit qsub request for single job:
+    # ARGS: cell_class (str), workers (int, default None), new_params_dir (str, optional)
+    job_id = qsub.submit(
+        dcc_repo_path + "scripts/get_training_eval_sets.py",
+        conda_env="dcc_env_shared",
+        args = [cell_class, WORKERS, new_params_dir,],
+        hardware_requirements = dict(
+            time_limit = 4, #2 (have used 16 for hard to simulate systems without parallel processing)
             cores=8, #4
             gpus=1,
             mem_per_core=4,

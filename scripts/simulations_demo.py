@@ -15,10 +15,10 @@ import deepcellcontrol as dcc
 light_sequence = [0]*24 + [1]*120 + [0, 1]*120 + [0] * 120 + [0, 1] * 120
 
 # Cell we will re-use through the script (but of course they can be re-instanciated)
-refcell = dcc.simulations.CcaSR_Autoactivation()
+refcell = dcc.simulations.CcaSR_Cascade()
 refcell.species["E"] = refcell.params['h1'] / refcell.params['h2']
-refcell.params['h2'] = 1e-30 # if ==0 then propensities throw div by 0 error
-refcell.params['h1'] = 1e-30
+# refcell.params['h2'] = 1e-30 # if ==0 then propensities throw div by 0 error
+# refcell.params['h1'] = 1e-30
 refcell.set_light_events(light_sequence)
 
 # For plots:
@@ -26,31 +26,78 @@ x = [t/12. for t in range(len(light_sequence)+1)]
 
 #%% Deterministic run:
 
-cell = refcell.copy()
-series = cell.run(len(light_sequence)*5, solver="ode")
+fold = 1.5
+new_params_list = [{'K_I': 45, 'K_J': 45},
+                   {'K_I': 45*fold, 'K_J': 45},
+                   {'K_I': 45, 'K_J': 45*fold},
+                   {'K_I': 45*fold, 'K_J': 45*fold},
+                    ]
 
-dcc.utilities.OptoPlotBackground(light_sequence, ymax=100, x=x)
-plt.plot(x, [state["F"] for state in series],color="b")
-plt.xlabel("time (hours)")
-plt.ylabel("proteins (#)")
-plt.ylim(0,100)
-plt.title("Deterministic")
-plt.show()
+# new_params_list = [{'ni': 3.6, 'K_I': 45},
+#                    {'ni': 2, 'K_I': 45},
+#                    {'ni': 3.6, 'K_I': 45*fold},
+#                    {'ni': 2, 'K_I': 45*fold},
+#                     ]
+
+for new_params in new_params_list:
+    # cell = refcell.copy()
+    cell = dcc.simulations.CcaSR_FeedforwardPositive()
+    cell.update_params(new_params)
+    cell.set_light_events(light_sequence) 
+    
+    series = cell.run(len(light_sequence)*5, solver="ode")
+    
+    dcc.utilities.OptoPlotBackground(light_sequence, ymax=150, x=x)
+    states = ['H','F','I','J']
+    colors = ['r', 'b','#FFA500','g']
+    for s, state_s in enumerate(states):
+        plt.plot(x, [state[state_s] for state in series],
+                 color=colors[s], 
+                 label=state_s)
+    plt.legend()
+    plt.xlabel("time (hours)")
+    plt.ylabel("proteins (#)")
+    plt.ylim(0,150)
+    # plt.title(f"Deterministic, h1={new_params['h1']:.2e}, h2={new_params['h2']:.2e}")
+    plt.show()
 
 #%% Original SSA implementation run:
+    
+for new_params in new_params_list:
+    cell = dcc.simulations.CcaSR_FeedforwardPositive()
+    cell.update_params(new_params)
+    cell.set_light_events(light_sequence) 
+    
+    series_list = cell.run(len(light_sequence)*5, 
+                           solver="original", 
+                           realizations=30)
+    
+    for series in series_list:
+    
+        dcc.utilities.OptoPlotBackground(light_sequence, ymax=150, x=x)
+        plt.plot(x, [state['F'] for state in series],
+                     color=colors[states.index('F')],
+                     alpha=.5, lw=.5)
+    plt.xlabel("time (hours)")
+    plt.ylabel("proteins (#)")
+    plt.ylim(0,150)
+    # plt.title(f"Original SSA, K_I={new_params['K_I']:.2e}")
+    plt.show()
 
-cell = refcell.copy()
-series_list = cell.run(len(light_sequence)*5, solver="original", realizations=100)
+# cell = refcell.copy()
+# series_list = cell.run(len(light_sequence)*5, 
+#                        solver="original", 
+#                        realizations=100)
 
-F = [[state["F"] for state in series] for series in series_list]
-dcc.utilities.OptoPlotBackground(light_sequence, ymax=100, x=x)
-for series in series_list:
-    plt.plot(x, [state["F"] for state in series], color="b", alpha=.2, lw=.5)
-plt.xlabel("time (hours)")
-plt.ylabel("proteins (#)")
-plt.ylim(0,100)
-plt.title("Original SSA")
-plt.show()
+# F = [[state["F"] for state in series] for series in series_list]
+# dcc.utilities.OptoPlotBackground(light_sequence, ymax=100, x=x)
+# for series in series_list:
+#     plt.plot(x, [state["F"] for state in series], color="b", alpha=.2, lw=.5)
+# plt.xlabel("time (hours)")
+# plt.ylabel("proteins (#)")
+# plt.ylim(0,100)
+# plt.title("Original SSA")
+# plt.show()
 
 #%% GillesPy2 implementation run:
 
