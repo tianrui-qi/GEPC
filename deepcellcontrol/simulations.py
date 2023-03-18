@@ -672,9 +672,18 @@ class CcaSR_gillespie():
         self._odemodel = None
         self._gp2model = None
 
+    def _resample_species(self):
+        
+        self.species = {
+            'U':0, # Optogenetic input
+            'H':0., # CcaS-CcaR
+            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # steady state E
+            'F':0 # GFP
+            }
+    
     def update_params(self, new_params):
         """
-        Update parameters of Gillespie simulation
+        Update parameters (or species) of Gillespie simulation
 
         Parameters
         ----------
@@ -687,7 +696,14 @@ class CcaSR_gillespie():
 
         """
         for key in new_params.keys():
-            self.params[key] = new_params[key]
+            if key in self.params.keys():
+                self.params[key] = new_params[key]
+            elif key in self.species.keys():
+                self.species[key] = new_params[key]
+            elif key=='resample_species':
+                self._resample_species()
+            else:
+                print('Suggested new parameter is not in either species or parameter list.')
         
 
 class CcaSR_gillespie_simple_noE(CcaSR_gillespie):
@@ -769,6 +785,15 @@ class CcaSR_gillespie_simple(CcaSR_gillespie):
             Reaction('a*E* H**nh/(K_H**nh + H**nh)', {'F': 1}), # GFP creation
             Reaction('nu*F', {'F': -1}), # GFP dilution
             ) 
+        
+    def _resample_species(self):
+        self.species = {
+            'U':0, # Optogenetic input
+            'H':0., # CcaS-CcaR
+            'E':round(np.random.normal(loc=self.params['mu'],
+                                       scale=self.params['sigma'])), # steady state E
+            'F':0 # GFP
+            }
 
 class CcaSR_gillespie_full(CcaSR_gillespie):
     """
