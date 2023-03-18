@@ -35,14 +35,11 @@ params["save_folder"] = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_simulated_{uuid.u
 save_path = params["models_folder"]+ "/" + params["save_folder"]
 
 # Load cell parameters for record-keeping:
-cellparams = []
-for tset in params["training_sets"]:
-    with open(params["datasets_folder"] +"/" + tset + "/cell.json", "r") as f:
-         cellparams.append(json.load(f))
-params["cell parameters"] = cellparams
+with open(params["datasets_folder"] + "/model_parameters.json", "r") as f:
+     params["cell parameters"] = json.load(f)
 
 # Save to file:
-dcc.utilities.csvrecord(params)
+dcc.utilities.csvrecord(params, params["centralized_records"])
 
 print(f'Save path: {save_path}')
 
