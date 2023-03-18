@@ -7,6 +7,7 @@ Created on Thu Sep 10 16:14:23 2020
 """
 import os
 
+import pandas
 import numpy as np
 from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
@@ -601,3 +602,46 @@ def color_img(I, vmin=0.1, vmax=0.7, cmap=gfpmap):
     I = cmap(I)[:,:,:3]
     
     return I
+
+def csvrecord(params, filename):
+    """
+    Record training data to a csv file
+
+    Parameters
+    ----------
+    params : dict
+        Training parameters to record in the CSV.
+    filename : str or Path
+        The CSV file to write the records to. Will be created if it doesn't
+        already exist.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    # Turn params into df:
+    new_record = pandas.DataFrame([params])
+    
+    # If CSV already exists, load, update fileds if necessary, and concatenate:
+    if os.path.exists(filename):
+    
+        old_record = pandas.read_csv(filename)    
+    
+        for colname in set(old_record.columns).difference(new_record.columns):
+            new_record = new_record.assign(**{colname: [None]*len(new_record)})
+        
+        for colname in set(new_record.columns).difference(old_record.columns):
+            old_record = old_record.assign(**{colname: [None]*len(old_record)})
+        
+        new_record = pandas.concat((old_record, new_record))
+    
+    # Write df to csv:
+    new_record.to_csv(filename, index=False)
+    
+    # Make sure other users can read and write:
+    os.chmod(filename, 0o666)
+
+    
+    
