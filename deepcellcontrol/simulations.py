@@ -145,7 +145,7 @@ class CcaSR_gillespie():
             'h1': 4e-2, # Production of E
             'h2': 1e-3, # Dilution of E
             'a':0.025, # PcpcG2 promoter rate
-            'K_H': 90/1.5, # Hill threshold
+            'K_H': 45, # Hill threshold
             'nh':3.6, # Hill coefficient
             'tau':12 # Response delay
             }
@@ -153,7 +153,7 @@ class CcaSR_gillespie():
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'E':round(self.params['h1']/self.params['h2']), # steady state E
+            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # steady state E
             'F':0 # GFP
             }
         self.reactions = (
@@ -710,7 +710,7 @@ class CcaSR_gillespie_simple_noE(CcaSR_gillespie):
             'h1': 4e-2, # Production of E
             'h2': 1e-3, # Dilution of E
             'a':0.025, # PcpcG2 promoter rate
-            'K_H': 90, # Hill threshold
+            'K_H': 45, # Hill threshold
             'nh':3.6, # Hill coefficient
             'tau':12 # Response delay
             }
@@ -748,10 +748,10 @@ class CcaSR_gillespie_simple(CcaSR_gillespie):
         self.params = {
             'eta':1, # production of H
             'nu': 0.01, # Dilution of proteins
-            'h1': 4e-2, # Production of E
-            'h2': 1e-3, # Dilution of E
+            'mu': 4e-2 / 1e-3, # Average E
+            'sigma': 2, # Spread of E
             'a':0.025, # PcpcG2 promoter rate
-            'K_H': 90/1.5, # Hill threshold
+            'K_H': 45, # Hill threshold
             'nh':3.6, # Hill coefficient
             'tau':12 # Response delay
             }
@@ -759,7 +759,8 @@ class CcaSR_gillespie_simple(CcaSR_gillespie):
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # steady state E
+            'E':round(np.random.normal(loc=self.params['mu'],
+                                       scale=self.params['sigma'])), # steady state E
             'F':0 # GFP
             }
         self.reactions = (
@@ -897,17 +898,19 @@ class CcaSR_Cascade(CcaSR_gillespie):
             'h1': 4e-2, # Production of E
             'h2': 1e-3, # Dilution of E
             'a':0.025, # PcpcG2 promoter rate
-            'K_H': 90/2, # Hill threshold
+            'K_H': 45, # Hill threshold
             'nh':3.6, # Hill coefficient
-            'K_I': 90/1, # Hill threshold
+            'K_I': 60, # Hill threshold
             'ni':3.6, # Hill coefficient
+            'a_I': 1, # Correction for I production
+            'a_F': 1, # Correction for F production
             'tau':12 # Response delay
             }
         "Parameters used in the propensity calculations"
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'E':round(self.params['h1']/self.params['h2']), # steady state E
+            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # steady state E
             'I': 0., # Intermediate
             'F':0 # GFP
             }
@@ -916,9 +919,9 @@ class CcaSR_Cascade(CcaSR_gillespie):
             Reaction('h2*E', {'E': -1}), # Responsiveness decrease
             Reaction('eta*U', {'H': 1}), # CcaSR activation
             Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*E* H**nh/(K_H**nh + H**nh)', {'I': 1}), # Intermediate creation
+            Reaction('a_I * a*E* H**nh/(K_H**nh + H**nh)', {'I': 1}), # Intermediate creation
             Reaction('nu*I', {'I': -1}), # Intermediate dilution
-            Reaction('a*E* I**ni/(K_I**ni + I**ni)', {'F': 1}), # GFP creation
+            Reaction('a_F * a*E* I**ni/(K_I**ni + I**ni)', {'F': 1}), # GFP creation
             Reaction('nu*F', {'F': -1}), # GFP dilution
             )  
 
@@ -1092,19 +1095,20 @@ class CcaSR_FeedforwardPositive(CcaSR_gillespie):
             'h1': 4e-2, # Production of E
             'h2': 1e-3, # Dilution of E
             'a':0.025, # PcpcG2 promoter rate
-            'K_H': 90/2, # Hill threshold
+            'K_H': 45, # Hill threshold
             'nh':3.6, # Hill coefficient
-            'K_I': 90/2, # Hill threshold
+            'K_I': 70, # Hill threshold
             'ni':3.6, # Hill coefficient
-            'K_J': 90/2, # Hill threshold
+            'K_J': 70, # Hill threshold
             'nj':3.6, # Hill coefficient
+            'a_F': 1, # modification of gene induction to maintain steadystate
             'tau':12 # Response delay
             }
         "Parameters used in the propensity calculations"
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'E':round(self.params['h1']/self.params['h2']), # steady state E
+            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # steady state E
             'I': 0., # Intermediate
             'J': 0., # Intermediate
             'F':0 # GFP
@@ -1118,8 +1122,8 @@ class CcaSR_FeedforwardPositive(CcaSR_gillespie):
             Reaction('nu*I', {'I': -1}), # Intermediate dilution
             Reaction('a*E* I**ni/(K_I**ni + I**ni)', {'J': 1}), # J creation
             Reaction('nu*J', {'J': -1}), # J dilution
-            Reaction('a*E/2 * I**ni/(K_I**ni + I**ni)', {'F': 1}), # GFP creation
-            Reaction('a*E/2 * J**nj/(K_J**nj + J**nj)', {'F': 1}), # GFP creation
+            Reaction('a_F* a*E/2 * I**ni/(K_I**ni + I**ni)', {'F': 1}), # GFP creation
+            Reaction('a_F * a*E/2 * J**nj/(K_J**nj + J**nj)', {'F': 1}), # GFP creation
             Reaction('nu*F', {'F': -1}), # GFP dilution
             ) 
 
@@ -1285,7 +1289,7 @@ def camera_sim(fluo, camera_mult=40,camera_max=4095,camera_offset=100,noise_perc
             )
 
 def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie, 
-                 num_workers = None, new_params=None):
+                 num_workers = None, new_params=None, solver="original"):
     """
     Generate training set from Gillespie model and pre-determined stimulations
 
@@ -1302,6 +1306,9 @@ def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie,
     new_params: dict, optional
         Key-value pairs for updated parameter values for Gillespie simulation. 
         The default is None.
+    solver: str, optional
+        Which solver to use for simulating cell trajectories
+        The default is 'original'
 
     Returns
     -------
@@ -1320,6 +1327,7 @@ def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie,
                     itertools.repeat(cell_class),
                     itertools.repeat(None),
                     itertools.repeat(new_params),
+                    itertools.repeat(solver),
                     )
                 )
             fluo = np.concatenate(res, axis=0)
@@ -1332,7 +1340,7 @@ def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie,
         if new_params:
             cell.update_params(new_params)
         cell.set_light_events(stims[l]) # Set future light events
-        ts = cell.run(stims.shape[1]*sampling) # Run until the end
+        ts = cell.run(stims.shape[1]*sampling, solver=solver) # Run until the end
         fluo.append([x['F'] for x in ts[1:]]) # Append fluorescence to list (skip first timepoint before any stim)
         print('%d/%d cells simulated'% (l+1,stims.shape[0]))
         
@@ -1352,6 +1360,7 @@ def evaluation_set(
         sampling=SAMPLING, 
         num_workers=8,
         new_params=None,
+        solver='original',
         ):
     """
     Generate evaluation set with multiple future realization of the cell 
@@ -1376,6 +1385,9 @@ def evaluation_set(
     new_params: dict, optional
         Key-value pairs of new parameter values for Gillespie simulation. The 
         default is None.
+    solver: str, optional
+        Which solver to use for simulating cell trajectories
+        The default is 'original'
 
     Returns
     -------
@@ -1392,7 +1404,13 @@ def evaluation_set(
         for s, stim in enumerate(stims):
             print(f"{s}/{stims.shape[0]} cells")
             res.append(
-                _evaluation(stim, cut_off, future_realizations, sampling, cell_class, new_params)
+                _evaluation(stim, 
+                            cut_off, 
+                            future_realizations, 
+                            sampling, 
+                            cell_class, 
+                            new_params, 
+                            solver)
                 )
         return res
     
@@ -1407,6 +1425,7 @@ def evaluation_set(
                 itertools.repeat(sampling),
                 itertools.repeat(cell_class),
                 itertools.repeat(new_params),
+                itertools.repeat(solver),
                 )
             )
     
@@ -1418,7 +1437,8 @@ def _evaluation(stims,
                 future_realizations, 
                 sampling, 
                 cell_class,
-                new_params=None):
+                new_params=None,
+                solver='original'):
     """
     This function implements the actual evaluation routine for a specific cell.
     It has to be a top-level function otherwise the parallel processing 
@@ -1439,6 +1459,10 @@ def _evaluation(stims,
         The type of cell to simulate. The default is CcaSR_gillespie
     new_params: dict, optional
         Key-value pairs for new model parameter values
+        Default is None.
+    solver: str, optional
+        Which solver to use for simulating cell trajectories
+        The default is 'original'
 
     Returns
     -------
@@ -1454,7 +1478,7 @@ def _evaluation(stims,
     if new_params:
         cell.update_params(new_params)
     cell.set_light_events(stims) # Set future light events
-    ts = cell.run(cut_off*sampling) # Run until cut off between "Past" and "Future"
+    ts = cell.run(cut_off*sampling, solver=solver) # Run until cut off between "Past" and "Future"
     Past = np.array([x['F'] for x in ts[1:]]) # Append fluorescence time-series to the "Past" of the cell
     Past = camera_sim(Past)
     # Run thousands of potential futures for the cell:
