@@ -34,6 +34,13 @@ if len(sys.argv) > 1:
 params["save_folder"] = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_simulated_{uuid.uuid4()}"
 save_path = params["models_folder"]+ "/" + params["save_folder"]
 
+# Load cell parameters for record-keeping:
+with open(params["datasets_folder"] + "/model_parameters.json", "r") as f:
+     params["cell parameters"] = json.load(f)
+
+# Save to file:
+dcc.utilities.csvrecord(params, params["centralized_records"])
+
 print(f'Save path: {save_path}')
 
 #%% Timeseries predictor training:
