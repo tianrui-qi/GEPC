@@ -91,7 +91,7 @@ def get_fluo_and_pred(simul_id):
     stims, past_fluo, futures_fluo = get_eval_data(simul_id)
     
     # Keep only first realization, and as many time point as in the prediction
-    fluo = futures_fluo[:,0,:np.shape(fluo_pred)[1]]
+    fluo = futures_fluo[:,:,:np.shape(fluo_pred)[1]]
     
     return fluo, fluo_pred
 
@@ -310,7 +310,7 @@ for p, new_params in enumerate(new_params_list):
     axes[p].set_title(f"h1={new_params['h1']:.2e}, h2={new_params['h2']:.2e}")
     
 plt.tight_layout()
-plt.savefig(f'{fig_path}/fig2_varh1h2_sample_responses.png', dpi=300)
+# plt.savefig(f'{fig_path}/fig2_varh1h2_sample_responses.png', dpi=300)
 
 #%% FFT of pure ON dynamics
 
@@ -352,7 +352,7 @@ for d, dataset in enumerate(datasets_list):
 plt.yscale('log')
 
 
-#%% Plot MEDIAN error as function of horizon 
+#%% Plot MEAN error as function of horizon 
 
 # Which cell class, h1, and horizon values to plot
 cell_class = 'CcaSR_gillespie'
@@ -376,9 +376,10 @@ for h, h1 in enumerate(h1_vals):
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
         h2 = df_past.loc[df_index, 'h2'].values[0]
     
-        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
-        t = [x/12. for x in range(len(RMSE))]
+        fluo, fluo_pred = get_fluo_and_pred(simul_id)
+        fluo_pred = np.repeat(fluo_pred[:, np.newaxis], fluo.shape[0], axis=1)
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=(0,1)))
+        t = [x/12. for x in range(RMSE.shape[0])]
         axes[h].plot(t, RMSE, '.', 
                      color = horizon_color_dict[horizon],
                      alpha=alpha,
@@ -387,11 +388,12 @@ for h, h1 in enumerate(h1_vals):
     axes[h].set_title(f'h1={h1:.2e}, h2={h2:.2e}')
     axes[h].legend()
     axes[h].set_xlabel('time (h)')
-    axes[h].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
+    axes[h].set_ylabel(f'RMSE\n{np.shape(fluo)[0]} cells')
+    axes[h].grid(True, "both", "both")
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_horizon.png', dpi=600)
 
-#%% Plot MEDIAN error as function of past steps 
+#%% Plot MEAN error as function of past steps 
 
 # Which cell class, h1, and horizon values to plot
 cell_class = 'CcaSR_gillespie'
@@ -416,7 +418,9 @@ for h, h1 in enumerate(h1_vals):
         h2 = df_past.loc[df_index, 'h2'].values[0]
     
         fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
+        fluo_pred = np.repeat(fluo_pred[:, np.newaxis], fluo.shape[0], axis=1)
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=(0,1)))
+        # RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
         t = [x/12. for x in range(len(RMSE))]
         axes[h].plot(t, RMSE, '.', 
                      color = past_steps_color_dict[past_steps],
@@ -426,7 +430,8 @@ for h, h1 in enumerate(h1_vals):
     axes[h].set_title(f'h1={h1:.2e}, h2={h2:.2e}')
     axes[h].legend()
     axes[h].set_xlabel('time (h)')
-    axes[h].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
+    axes[h].set_ylabel(f'RMSE\n{np.shape(fluo)[0]} cells')
+    axes[h].grid(True, "both", "both")
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_past_steps.png', dpi=600)
 
@@ -504,7 +509,7 @@ for p, new_params in enumerate(new_params_list):
 plt.tight_layout()
 plt.savefig(f'{fig_path}/fig2_{cell_class}_example_responses.png', dpi=300)
 
-#%% MEDIAN error (Gillespie simple) x training_set_size
+#%% MEAN error (Gillespie simple) x training_set_size
 
 cell_class = 'CcaSR_gillespie_simple'
 simul_slice = default_past_steps & default_horizon
@@ -527,7 +532,9 @@ for i in range(len(df_past)):
 
     
     fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-    RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
+    fluo_pred = np.repeat(fluo_pred[:, np.newaxis], fluo.shape[0], axis=1)
+    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=(0,1)))
+    # RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
     t = [x/12. for x in range(len(RMSE))]
     axes[sigma_list.index(sigma)].plot(t, RMSE, 
                     training_style_dict[training_set_size], 
@@ -538,7 +545,8 @@ for i in range(len(df_past)):
 for i in range(len(sigma_list)):
     axes[i].set_xlabel('time (h)')
     axes[i].set_title(f'sigma={sigma_list[i]}')
-    axes[i].set_ylim([0,300])
-    axes[i].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
+    axes[i].set_ylim([150,450])
+    axes[i].set_ylabel(f'RMSE\n{np.shape(fluo)[0]} cells')
+    axes[i].grid(True, "both", "both")
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_training_set_size.png', dpi=600)
