@@ -17,34 +17,81 @@ import matplotlib.pyplot as plt
 
 username='hklumpe'
 dcc_repo_path = f"/projectnb/dunlop/{username}/deepcellcontrol/"
+fig_path = dcc_repo_path+'/assets/figures/'
 
-# # Make sure the proper path is used:
-# sys.path.insert(0,dcc_repo_path)
-# import deepcellcontrol as dcc
+# Make sure the proper path is used:
+sys.path.insert(0,dcc_repo_path)
+import deepcellcontrol as dcc
 
-# Import data
+#%% Function definitions
+
+def get_eval_data(simul_id):
+    """
+    Function to get evaluation data
+    
+    Parameters
+    ----------
+    simul_id : str
+        fname of model
+        
+    Returns
+    -------
+    stims : arr (n_cells, n_timepoints)
+    
+    past_fluo: arr (n_cells, n_past_timepoints)
+    
+    futures_fluo: arr (n_cells, n_futures, n_future_timepoints)
+
+    """
+    simul_dir = glob.glob(dcc_repo_path + f'/assets/models/{simul_id}*')[0]+'/'
+    
+    with open(simul_dir+'training_parameters.json','r') as f:
+        training_params = json.load(f)
+        
+    # Load evaluation data
+    eval_sets = training_params['eval_sets'][0]
+    futures_fluo = np.load(f"{training_params['datasets_folder']}/{eval_sets}/futures_fluo.npy")
+    past_fluo = np.load(f"{training_params['datasets_folder']}/{eval_sets}/past_fluo.npy")
+    stims = np.load(f"{training_params['datasets_folder']}/{eval_sets}/stims.npy")
+    
+    return stims, past_fluo, futures_fluo
+
+def get_fluo_pred(simul_id):
+    """
+    Funtion to get predicted futures
+
+    Parameters
+    ----------
+    simul_id : str
+        fname of model
+        
+    Returns
+    -------
+    fluo_pred : arr
+
+    """
+    simul_dir = glob.glob(dcc_repo_path + f'/assets/models/{simul_id}*')[0]+'/'
+        
+    # Load predictions
+    fluo_pred = 4095 * np.load(f'{simul_dir}/evaluation/predictions.npy')
+    
+    return fluo_pred
+    
 def get_fluo_and_pred(simul_id):
     """
     Given a simul_id (str), return the fluo (arr, (n_cells, len(future)))
     and fluo_pred (arr, (n_cells, len(future))) for each individual evaluation
     cell
     """
-
-    simul_dir = glob.glob(dcc_repo_path + f'/assets/models/{simul_id}*')[0]+'/'
-    
-    with open(simul_dir+'training_parameters.json','r') as f:
-        training_params = json.load(f)
         
     # Load predictions
-    fluo_pred = 4095 * np.load(f'{simul_dir}/evaluation/predictions.npy')
+    fluo_pred = get_fluo_pred(simul_id)
 
     # Load data
-    eval_sets = training_params['eval_sets'][0]
-    fluo = np.load(f"{training_params['datasets_folder']}/{eval_sets}/futures_fluo.npy")
+    stims, past_fluo, futures_fluo = get_eval_data(simul_id)
     
     # Keep only first realization, and as many time point as in the prediction
-    fluo = fluo[:,0,:np.shape(fluo_pred)[1]]
-
+    fluo = futures_fluo[:,0,:np.shape(fluo_pred)[1]]
     
     return fluo, fluo_pred
 
@@ -53,8 +100,8 @@ def get_params(simul_id):
     Given: 
         simul_id: str (some unique part of file name in /assets/models/) 
     Returns:
-        training_params: dict
         model parameters: dict
+        training_params: dict
     """
     simul_dir = glob.glob(dcc_repo_path + f'/assets/models/{simul_id}*')[0]+'/'
 
@@ -64,25 +111,67 @@ def get_params(simul_id):
     with open(training_params['datasets_folder']+'/model_parameters.json', 'r') as f:
         model_params = json.load(f)
         
-    return training_params, model_params
+    return model_params, training_params
+
+
+#%% Global plot styles
+
+model_color_dict = {'CcaSR_gillespie_simple_noE': 'r',
+              'CcaSR_gillespie': 'k'}
+model_list = [key for key in model_color_dict.keys()]
+
+
+
+#%% Check training data
+
+plot_list = ['CcaSR_gillespie_simple_noE', 
+              'CcaSR_gillespie']
+alpha = 0.3
+
+for c, cell_class in enumerate(plot_list):
+    plt.figure()
+    
+    training_data_dir_list = glob.glob(dcc_repo_path + f'/assets/simulated/data/{cell_class}/2023*')#_10-55*')
+    
+    for t, training_dir in enumerate(np.sort(np.array(training_data_dir_list))):
+        fluo_training = np.load(training_dir+'/training_set/fluo1.npy')
+        
+        plt.hist(fluo_training.ravel(), 
+                     bins = np.linspace(0, 4095+1, 50),
+                     alpha=alpha, 
+                     histtype='step',
+                     linewidth=2,
+                     density=True, 
+                     label=str(t))
+        
+    plt.legend()
+    plt.ylim([0,0.008])
+    plt.title(cell_class)
+    plt.ylabel('Frequency')
+    plt.xlabel('fluorescence')
+    plt.tight_layout()
+    
+
 
 #%% Get information about simulations
 
-simul_dir_list = glob.glob(dcc_repo_path + '/assets/models/2023-03-07_23*') + \
-                    glob.glob(dcc_repo_path + '/assets/models/2023-03-08*') + \
-                    glob.glob(dcc_repo_path + '/assets/models/2023-03-09*')
+simul_dir_list = glob.glob(dcc_repo_path + '/assets/models/2023*')
                     
 simul_id_list = [simul_dir.split('/')[-1] for simul_dir in simul_dir_list]
 horizon_list = []
 training_folder_list = []
+solver_list = []
+camera_sim_list = []
 past_steps_list = []
 cell_class_list = []
 epochs_list = []
 datasets_list = []
+h1_list = []
+h2_list = []
 
 for simul_id in simul_id_list:
     
-    training_params, model_params = get_params(simul_id)
+    model_params, training_params = get_params(simul_id)
     
     horizon_list += [training_params['horizon']]
     past_steps_list += [training_params['past_steps']]
@@ -91,16 +180,38 @@ for simul_id in simul_id_list:
     epochs_list += [training_params['training_parameters']['epochs']]
     datasets_list += [training_params['datasets_folder']]
     
+    if 'h1' in model_params.keys():
+        h1_list += [model_params['h1']]
+    else:
+        h1_list += [np.nan]
+    if 'h2' in model_params.keys():
+        h2_list += [model_params['h2']]
+    else: 
+        h2_list += [np.nan]
+    if 'solver' in model_params.keys():
+        solver_list += [model_params['solver']]
+    else:
+        solver_list += ['original']
+    if 'camera_sim' in model_params.keys():
+        camera_sim_list += [model_params['camera_sim']]
+    else:
+        camera_sim_list += [True]
+    
 df_meta = pd.DataFrame({'simul_id': simul_id_list,
                         'horizon': horizon_list,
                         'past_steps': past_steps_list,
+                        'camera_sim': camera_sim_list,
+                        'solver': solver_list,
+                        'h1': h1_list,
+                        'h2': h2_list,
+                        'cell_class': cell_class_list,
                         'training_sets': training_folder_list,
                         'epochs': epochs_list,
-                        'datasets_folder': datasets_list,
-                        'cell_class': cell_class_list,})
+                        'datasets_folder': datasets_list,})
 
 # Drop repeats
-df_meta = df_meta.drop_duplicates()
+df_meta = df_meta.sort_values(by=['simul_id','past_steps','horizon','h1','h2'])
+df_meta = df_meta.drop_duplicates(subset=[col for col in df_meta.columns[1:]], keep='last')
 
 # Only keep fully trained models
 df_meta.drop(df_meta[df_meta['epochs']<200].index, inplace=True)
@@ -110,145 +221,257 @@ default_horizon = df_meta['horizon']==24
 default_past_steps = df_meta['past_steps']==36
 default_training_size = df_meta['training_sets']=='training_set'
 
-#%% For each model, plot best and worst predictions?
+_h1 = 4e-2
+_h2 = 1e-3
+_h1h2 = _h1 / _h2
+default_h1 = np.abs((df_meta['h1'] - _h1) / _h1) < 0.01
+default_h2 = np.abs((df_meta['h2'] - _h2) / _h2) < 0.01
+default_h1h2 = np.abs(((df_meta['h1'] / df_meta['h2']) - _h1h2) / _h1h2) < 0.01
 
-model_list = ['CcaSR_gillespie_simple_noE', 
-              'CcaSR_gillespie_simple',
-              'CcaSR_gillespie',]
+df_simul_config = pd.DataFrame({'camera_sim': [True, True, False],
+                                'solver': ['original','ode', 'ode'],
+                                'color': ['b', 'g', 'r']}
+                            )
 
-model = model_list[0]
+
+#%% Plot responses to pure light
+
+n_hours = 4
+n_cells = 3
+alpha = 0.5
+lw = 2
+
+# Get light
+random_bit = dcc.utilities.random_stimulations(
+                        timepoints=3*n_hours*12,
+                        nostim_timepoints=0,
+                        total_simulations=7)[0]
+
+light_sequence = [1]*12*n_hours + [0]*12*n_hours + [int(bit) for bit in random_bit]
+# light_sequence = [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24
+x = [t/12. for t in range(len(light_sequence)+1)]
+
+# Only for plot title, not instantiation
+plt.figure()
+cell_class = 'CcaSR_gillespie_simple_noE'
+
+for c in range(len(df_simul_config)):
+    
+    config = df_simul_config.loc[c]
+    
+    # Plot light
+    dcc.utilities.OptoPlotBackground(light_sequence, ymax=4095, x=x)
+
+    for i in range(n_cells):
+        cell = dcc.simulations.CcaSR_gillespie_simple_noE()
+        cell.set_light_events(light_sequence) 
+        
+        series = cell.run(len(light_sequence)*5, 
+                               solver=config['solver'])
+        
+        fluo = [state['F'] for state in series]
+            
+        fluo = np.array(fluo)
+        if config['camera_sim']: 
+            fluo = dcc.simulations.camera_sim(fluo)
+        else:
+            fluo = dcc.simulations.camera_sim(fluo, noise_perc=0)
+    
+        # Plot results
+        plt.plot(x, fluo, 
+                  lw=lw, 
+                  alpha=alpha,
+                  color=config['color'])
+        
+plt.xlabel('time (h)')
+plt.ylabel('Fluorescence (AU)')
+plt.title(cell_class)
+plt.tight_layout()
+plt.savefig(f'{fig_path}/fig1_{cell_class}_off-on_camera_noise_stochasticity.png',
+            dpi=300)
+
+# Only for plot title, not instantiation
+plt.figure()
+cell_class = 'CcaSR_gillespie'
+
+for c in range(len(df_simul_config)):
+    
+    config = df_simul_config.loc[c]    
+    
+    # Plot light
+    dcc.utilities.OptoPlotBackground(light_sequence, ymax=4095, x=x)
+
+    for i in range(n_cells):
+        cell = dcc.simulations.CcaSR_gillespie_simple_noE()
+        cell.set_light_events(light_sequence) 
+        
+        series = cell.run(len(light_sequence)*5, 
+                               solver=config['solver'])
+        
+        fluo = [state['F'] for state in series]
+            
+        fluo = np.array(fluo)
+        if config['camera_sim']: 
+            fluo = dcc.simulations.camera_sim(fluo)
+        else:
+            fluo = dcc.simulations.camera_sim(fluo, noise_perc=0)
+    
+        # Plot results
+        plt.plot(x, fluo, 
+                  lw=lw, 
+                  alpha=alpha,
+                  color=config['color'])
+        
+plt.xlabel('time (h)')
+plt.ylabel('Fluorescence (AU)')
+plt.title(cell_class)
+plt.tight_layout()
+plt.savefig(f'{fig_path}/fig1_{cell_class}_off-on_camera_noise_stochasticity.png',
+            dpi=300)
+
+
+
+#%% Plot select predictions
+
+default_models = default_training_size & default_past_steps & default_horizon & default_h1 & default_h2
+
+for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
+        
+    df_cc = df_meta.loc[default_models & (df_meta['cell_class']==cell_class)].reset_index()
+    
+    for c in range(len(df_cc)):
+        simul_id = df_cc.loc[c,'simul_id']
+        camera_sim = df_cc.loc[c,'camera_sim']
+        solver = df_cc.loc[c,'solver']
+        color = df_simul_config.loc[(df_simul_config['camera_sim']==camera_sim)&(df_simul_config['solver']==solver),'color'].values[0]
+
+        # Find best and worst error, arbitrarily relative to the first cell future
+        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+        RMSE_sum_across_time = np.sum(np.sqrt((fluo - fluo_pred)**2), axis=1)
+        sorted_error = np.argsort(RMSE_sum_across_time)
+        
+        percentile = [50, 500, 950]
+        plot_list = [sorted_error[i] for i in percentile]
+        
+        stims, past_fluo, futures_fluo = get_eval_data(simul_id)
+        model_params, training_params = get_params(simul_id)
+        
+        plot_past = 3*12 # Only plot the past 3 hours (even though whole past is used)
+        cutoff = past_fluo.shape[1]
+        
+        fig, axes = plt.subplots(len(plot_list), 1,
+                                 figsize=(4, 3*len(plot_list)),
+                                 sharex=True)
+        for i, pl in enumerate(plot_list):
+                
+            # Stimulations
+            plt.sca(axes[i])
+            dcc.utilities.OptoPlotBackground(
+                stims[pl,cutoff-plot_past:cutoff+training_params["horizon"]],
+                x=np.arange(-plot_past, training_params["horizon"])/12,
+                ymax = 4095
+                )
+            
+            # Past
+            axes[i].plot(np.arange(-plot_past, 0)/12, 
+                         past_fluo[pl, -plot_past:],
+                         "k")
+            
+            # Future
+            axes[i].plot(np.arange(0, training_params["horizon"])/12, 
+                     futures_fluo[pl, 0, :training_params['horizon']], 
+                     "k")
+            
+            # Prediction
+            axes[i].plot(np.arange(0, training_params["horizon"])/12, 
+                     fluo_pred[pl],
+                     "b")
+            
+            # Prediction starts line
+            axes[i].plot([-0.5/12, -0.5/12], [0, 4095], color="gray")
+            
+            # Limits and labels
+            axes[i].set_ylim([0,4095])
+            # plt.title(f'Cell {c}')
+            axes[i].set_xlabel("time (h)")
+            axes[i].set_ylabel("Fluorescence (a.u.)")
+            axes[i].set_title(f'{100 * percentile[i] / len(sorted_error):.0f}th percentile')
+        axes[-1].set_xlim([-plot_past/12, training_params["horizon"]/12])
+        plt.suptitle(f'{cell_class}, camera_sim {camera_sim}, solver:{solver}')
+        plt.tight_layout()
+        plt.savefig(fig_path+f'/fig1_{cell_class}_predictions_percentiles_config_{color}.png', dpi=300)
+
+
+
+#%% Violin plots of error
+
+a = 0.05
+q_range = [a, 1-a]
+default_models = default_training_size & default_past_steps & default_horizon & default_h1 & default_h2
+
+for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
+    plt.figure(figsize=(13,3))
+        
+    df_cc = df_meta.loc[default_models & (df_meta['cell_class']==cell_class)].reset_index()
+    
+    for c in range(len(df_cc)):
+        simul_id = df_cc.loc[c,'simul_id']
+        camera_sim = df_cc.loc[c,'camera_sim']
+        solver = df_cc.loc[c,'solver']
+        color = df_simul_config.loc[(df_simul_config['camera_sim']==camera_sim)&(df_simul_config['solver']==solver),'color']
+        
+        # Find best and worst error, arbitrarily relative to the first cell future
+        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        
+        for i in range(np.shape(RMSE)[1]):
+            
+            RMSE_i = RMSE[:,i]
+            quantiles = np.quantile(RMSE_i, q_range)
+            y = RMSE_i[(RMSE_i > quantiles[0]) & ((RMSE_i < quantiles[1]))]
+            
+            violins = plt.violinplot(y, 
+                            positions=[(i+c/4)/12,], 
+                            widths=1/12/4, 
+                            showmeans=False,
+                            showmedians=True,
+                            showextrema=False)
+            
+            violins['cmedians'].set_color(color)
+            for v in violins['bodies']:
+                v.set_facecolor(color)
+                v.set_edgecolor(color)
+                
+    plt.xlabel('time (h)')
+    plt.ylabel(f'RMSE\n{int(q_range[0]*100)} to {int(q_range[1]*100)}th percentile')
+    plt.title(cell_class)
+    plt.tight_layout()
+    plt.savefig(f'{fig_path}/fig1_{cell_class}_err_dist_over_time.png', dpi=300)
+
+#%% Plot err v. value
+
+alpha=0.03
+markersize=5
 
 default_models = default_training_size & default_past_steps & default_horizon
-simul_id = df_meta.loc[default_models & (df_meta['cell_class']==model), 'simul_id'].values[-1]
 
-fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-RMSE_sum_across_time = np.sum(np.sqrt((fluo - fluo_pred)**2), axis=1)
-max_index = np.argmax(RMSE_sum_across_time)
-min_index = np.argmin(RMSE_sum_across_time)
+fig, axes = plt.subplots(1, len(model_list), figsize=(12,3), sharey=True)
+for m, model in enumerate(model_list):
 
-fig, axes = plot.subplots(2,1, figsize=(5,10))
-
-plot_past = 3*12 # Only plot the past 3 hours (even though whole past is used)
-for c in [max_index, min_index]:
-    plt.figure(1)
-    dcc.utilities.OptoPlotBackground(
-        stims[c,cutoff-plot_past:cutoff+params["horizon"]],
-        x=np.arange(-plot_past, params["horizon"])/12,
-        ymax = 4095
-        )
-    plt.plot(np.arange(-plot_past, 0)/12, past_fluo[c, -plot_past:],"k")
-    dcc.utilities.plotq(
-        futures_fluo[c,:,:params["horizon"]],
-        x = np.arange(0, params["horizon"])/12,
-        color="k"
-        )
-    plt.plot(np.arange(0, params["horizon"])/12, yhat[c]*4095, "b")
-    plt.plot([-0.5/12, -0.5/12], [0, 4095], color="gray")
-    plt.xlabel("time (h)")
-    plt.ylabel("Fluorescence (a.u.)")
-    plt.xlim([-plot_past/12,params["horizon"]/12])
-    plt.ylim([0,4095])
-
-
-
-
-#%% Plot error as function of horizon 
-color_dict = {'CcaSR_gillespie_simple_noE': 'r',
-              'CcaSR_gillespie_simple': 'g',
-              'CcaSR_gillespie': 'k'}
-model_list = [key for key in color_dict.keys()]
-
-horizon_style_dict = {12: '.', 24: 'x', 48: '_'}
-
-simul_slice = default_training_size & default_past_steps
-
-df_past = df_meta.loc[simul_slice].sort_values(by=['cell_class','horizon']).reset_index(drop=True)
-
-plt.figure(figsize=(8,3))
-for i in range(len(df_past)):
-    cell_class = df_past.loc[i,'cell_class']
-    horizon = df_past.loc[i,'horizon']
-    simul_id = df_past.loc[i, 'simul_id']
+    simul_id = df_meta.loc[default_models & (df_meta['cell_class']==model), 'simul_id'].values[-1]
     
+    # Find best and worst error, arbitrarily relative to the first cell future
     fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-    RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
-    t = [x/12. for x in range(len(RMSE))]
-    plt.plot(t, RMSE, horizon_style_dict[horizon], 
-             label=f'{cell_class}, horizon={horizon}',
-             color=color_dict[cell_class])
-
-plt.legend(bbox_to_anchor=(1,1))
-plt.xlabel('time (h)')
-plt.ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
-plt.tight_layout()
-plt.savefig(dcc_repo_path+'/assets/figures/effect_of_horizon.png', dpi=600)
-
-
-#%% Plot past steps results
-
-past_steps_style_dict = {12: '_', 24: 'x', 36: '.'}
-
-simul_slice = default_training_size & default_horizon
-
-df_past = df_meta.loc[simul_slice].sort_values(by=['cell_class','past_steps']).reset_index(drop=True)
-
-fig, axes = plt.subplots(1,3,figsize=(12,3), sharey=True)
-for i in range(len(df_past)):
-    cell_class = df_past.loc[i,'cell_class']
-    plt_idx = model_list.index(cell_class)
-    past_steps = df_past.loc[i,'past_steps']
-    simul_id = df_past.loc[i, 'simul_id']
+    RMSE = np.sqrt((fluo - fluo_pred)**2)
     
-    fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-    RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
-    t = [x/12. for x in range(len(RMSE))]
-    axes[plt_idx].plot(t, RMSE, past_steps_style_dict[past_steps], 
-             label=f'{past_steps} past_steps',
-             color=color_dict[cell_class])
-
-for i in range(len(model_list)):
-    axes[i].legend()
-    axes[i].set_xlabel('time (h)')
-    axes[i].set_title(model_list[i])
-axes[0].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
-plt.tight_layout()
-plt.savefig(dcc_repo_path+'/assets/figures/effect_of_past_steps.png', dpi=600)
-
-#%% Plot error as function of training set size 
-
-simul_slice = default_past_steps & default_horizon
-df_past = df_meta.loc[simul_slice].sort_values(by=['cell_class','training_sets']).reset_index(drop=True)
-
-training_style_dict = {100: '_', 300: '+', 1000: 'x', 10000: '.'}
-
-fig, axes = plt.subplots(1,3,figsize=(12,4), sharey=True)
-markersize=4
-for i in range(len(df_past)):
-    cell_class = df_past.loc[i,'cell_class']
-    plt_idx = model_list.index(cell_class)
-    training_folder = df_past.loc[i,'training_sets']
-    if training_folder == 'training_set':
-        training_set_size = 10000
-    else:
-        training_set_size = int(training_folder.split('_')[-2])
-    simul_id = df_past.loc[i, 'simul_id']
+    axes[m].plot(fluo, RMSE, '.', 
+                     alpha=alpha,
+                     markersize=markersize,
+                     color = model_color_dict[model])
     
-    if training_set_size==300:
-        continue
+    axes[m].set_ylim([0, 2000])
+    axes[m].set_xlim([0, 4095])     
+    axes[m].set_xlabel('simulated fluo')
+    axes[m].set_title(model)
     
-    fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-    RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
-    t = [x/12. for x in range(len(RMSE))]
-    axes[plt_idx].plot(t, RMSE, 
-                    training_style_dict[training_set_size], 
-                    markersize=markersize,
-                    label=f'trained on {training_set_size}cells',
-                    color=color_dict[cell_class])
-
-for i in range(len(model_list)):
-    axes[i].legend(fontsize=4)
-    axes[i].set_xlabel('time (h)')
-    axes[i].set_title(model_list[i])
-axes[0].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
-plt.tight_layout()
-plt.savefig(dcc_repo_path+'/assets/figures/effect_of_training_set_size.png', dpi=600)
+axes[0].set_ylabel('RMSE')

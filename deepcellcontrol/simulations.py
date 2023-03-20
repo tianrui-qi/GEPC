@@ -138,33 +138,32 @@ class CcaSR_gillespie():
         # responsiveness in our data.
         # We also treat the light-activation dynamics (species H) as stochastic
         # instead of the original deterministic implementation.
+        # Alter the reactions network:
         self.params = {
-            'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
-            'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
-            'c2':0.0631, # Hill normalization parameter
-            'a':0.2827, # PcpcG2 promoter rate
-            'b':0.0104, # Proteins dilution rate
-            's':0.9958, # Not used in the end
-            'nh':3.6655, # Hill coefficient
-            'K':0.4851, # Hill threshold (sort of)
+            'eta':1, # production of H
+            'nu': 0.01, # Dilution of proteins
+            'h1': 4e-2, # Production of E
+            'h2': 1e-3, # Dilution of E
+            'a':0.025, # PcpcG2 promoter rate
+            'K_H': 45, # Hill threshold
+            'nh':3.6, # Hill coefficient
             'tau':12 # Response delay
             }
         "Parameters used in the propensity calculations"
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
+            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # steady state E
             'F':0 # GFP
             }
-        "System species"
         self.reactions = (
-            Reaction('h1', {'E': 1}), # "Extrinsic" creation
-            Reaction('h2*E', {'E': -1}), # "Extrinsic" dilution
-            Reaction('U', {'H': 1}), # CcaSR activation
-            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*E*((c2*H)**nh)/(K+(c2*H)**nh)', {'F': 1}), # GFP creation
-            Reaction('b*F', {'F': -1}), # GFP dilution
-            )
+            Reaction('h1', {'E': 1}), # Responsiveness increase
+            Reaction('h2*E', {'E': -1}), # Responsiveness decrease
+            Reaction('eta*U', {'H': 1}), # CcaSR activation
+            Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E* H**nh/(K_H**nh + H**nh)', {'F': 1}), # GFP creation
+            Reaction('nu*F', {'F': -1}), # GFP dilution
+            )  
         "List of reactions in system"
         self.sampling = SAMPLING 
         "Sampling interval (in minutes)"
@@ -238,14 +237,14 @@ class CcaSR_gillespie():
         for r in self.reactions:
             for name, value in r.stoichiometry.items():
                 system[name] += f"{'+' if value > 0 else '-'}{abs(value)}*{r.propensity} "
-        
+                        
         # Compile equations for faster execution:
         compiled = {}
         for name, value in system.items():
             if len(value) == 0:
                 system[name] = '0'
             compiled[name] = compile(system[name], f"d{name}_dt", "eval")
-        
+                
         print("done.")
         
         return system, compiled
@@ -673,9 +672,18 @@ class CcaSR_gillespie():
         self._odemodel = None
         self._gp2model = None
 
+    def _resample_species(self):
+        
+        self.species = {
+            'U':0, # Optogenetic input
+            'H':0., # CcaS-CcaR
+            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # steady state E
+            'F':0 # GFP
+            }
+    
     def update_params(self, new_params):
         """
-        Update parameters of Gillespie simulation
+        Update parameters (or species) of Gillespie simulation
 
         Parameters
         ----------
@@ -688,7 +696,14 @@ class CcaSR_gillespie():
 
         """
         for key in new_params.keys():
-            self.params[key] = new_params[key]
+            if key in self.params.keys():
+                self.params[key] = new_params[key]
+            elif key in self.species.keys():
+                self.species[key] = new_params[key]
+            elif key=='resample_species':
+                self._resample_species()
+            else:
+                print('Suggested new parameter is not in either species or parameter list.')
         
 
 class CcaSR_gillespie_simple_noE(CcaSR_gillespie):
@@ -706,24 +721,27 @@ class CcaSR_gillespie_simple_noE(CcaSR_gillespie):
         
         # Alter the reactions network:
         self.params = {
-            'c2':0.0631, # Hill normalization parameter
-            'a':0.2827, # PcpcG2 promoter rate
-            'b':0.0104, # Proteins dilution rate
-            'nh':3.6655, # Hill coefficient
-            'K':0.4851, # Hill threshold (sort of)
+            'eta':1, # production of H
+            'nu': 0.01, # Dilution of proteins
+            'h1': 4e-2, # Production of E
+            'h2': 1e-3, # Dilution of E
+            'a':0.025, # PcpcG2 promoter rate
+            'K_H': 45, # Hill threshold
+            'nh':3.6, # Hill coefficient
             'tau':12 # Response delay
             }
         "Parameters used in the propensity calculations"
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
+            'E':round(self.params['h1']/self.params['h2']), # steady state E
             'F':0 # GFP
             }
         self.reactions = (
-            Reaction('U', {'H': 1}), # CcaSR activation
-            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*((c2*H)**nh)/(K+(c2*H)**nh)', {'F': 1}), # GFP creation
-            Reaction('b*F', {'F': -1}), # GFP dilution
+            Reaction('eta*U', {'H': 1}), # CcaSR activation
+            Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E* H**nh/(K_H**nh + H**nh)', {'F': 1}), # GFP creation
+            Reaction('nu*F', {'F': -1}), # GFP dilution
             )  
         
 class CcaSR_gillespie_simple(CcaSR_gillespie):
@@ -744,29 +762,38 @@ class CcaSR_gillespie_simple(CcaSR_gillespie):
         
         # Alter the reactions network:
         self.params = {
-            'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
-            'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
-            'c2':0.0631, # Hill normalization parameter
-            'a':0.2827, # PcpcG2 promoter rate
-            'b':0.0104, # Proteins dilution rate
-            's':0.9958, # Not used in the end
-            'nh':3.6655, # Hill coefficient
-            'K':0.4851, # Hill threshold (sort of)
+            'eta':1, # production of H
+            'nu': 0.01, # Dilution of proteins
+            'mu': 4e-2 / 1e-3, # Average E
+            'sigma': 2, # Spread of E
+            'a':0.025, # PcpcG2 promoter rate
+            'K_H': 45, # Hill threshold
+            'nh':3.6, # Hill coefficient
             'tau':12 # Response delay
             }
         "Parameters used in the propensity calculations"
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
+            'E':round(np.random.normal(loc=self.params['mu'],
+                                       scale=self.params['sigma'])), # steady state E
             'F':0 # GFP
             }
         self.reactions = (
-            Reaction('U', {'H': 1}), # CcaSR activation
-            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*E*((c2*H)**nh)/(K+(c2*H)**nh)', {'F': 1}), # GFP creation
-            Reaction('b*F', {'F': -1}), # GFP dilution
+            Reaction('eta*U', {'H': 1}), # CcaSR activation
+            Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E* H**nh/(K_H**nh + H**nh)', {'F': 1}), # GFP creation
+            Reaction('nu*F', {'F': -1}), # GFP dilution
             ) 
+        
+    def _resample_species(self):
+        self.species = {
+            'U':0, # Optogenetic input
+            'H':0., # CcaS-CcaR
+            'E':round(np.random.normal(loc=self.params['mu'],
+                                       scale=self.params['sigma'])), # steady state E
+            'F':0 # GFP
+            }
 
 class CcaSR_gillespie_full(CcaSR_gillespie):
     """
@@ -779,48 +806,119 @@ class CcaSR_gillespie_full(CcaSR_gillespie):
         
         # Alter the reactions network:
         self.params = {
-            'c2':0.0631, # Hill normalization parameter
-            'a':0.2827, # PcpcG2 promoter rate
-            'nh':3.6655, # Hill coefficient
-            'K':0.4851, # Hill threshold (sort of)
-            'alpha': 10, # translation initiations / min
-            'beta': 5, # translations / min / mRNA
+            'alpha': 5, # 10 transcription initiations / min
             'gamma':0.02, # Protein dilution rate, assuming 30min doubling time
+            'rho': 0.1, # Phos / min / light / S protein
             'kf': 0.001, # dimers / molecule / minute (per fL cell), for 1e7/M/s
             'kr': 0.000000001, # dissociation (for 1uM KD)
+            'a': 0.025*40, # Inducible promoter activity
+            'K_SR': 90, # Close to what is used for H, which has similar ss values?
+            'nh': 3.6, # Chait approximation
             'tau':0 # Response delay: none for system that accounts for dimerization
             }
         "Parameters used in the propensity calculations"
         self.species = {
-            'U':0, # Optogenetic input
-            'Sm': 0, # CcaS mRNA
+            'U': 0, # Light
             'Sp': 0, # CcaS protein
-            'Sp_p': 0, # CcaS phosphorylated
-            'Rm': 0, # CcaR mRNA
+            'Sp_p': 0, # Phos'd protein
             'Rp': 0, # CcaR protein
             'SR': 0, # CcaSR dimer
-            'Fm': 0, # GFP mRNA
-            'Fp': 0, # GFP protein
+            'F': 0, # GFP protein
             }
         self.reactions = (
-            Reaction('alpha', {'Sm': 1}), # CcaS transcription
-            Reaction('gamma*Sm', {'Sm': -1}), # CcaS mRNA loss
-            Reaction('alpha', {'Rm': 1}), # CcaR transcription
-            Reaction('gamma*Rm', {'Rm': -1}), # CcaR mRNA loss
-            Reaction('beta*Sm', {'Sp': 1}), # CcaS translation
+            Reaction('alpha', {'Sp': 1}), # CcaS translation
             Reaction('gamma*Sp', {'Sp': -1}), # CcaS protein loss
-            Reaction('beta*Rm', {'Rp': 1}), # CcaR translation
+            Reaction('alpha', {'Rp': 1}), # CcaR translation
             Reaction('gamma*Rp', {'Rp': -1}), # CcaR protein loss            
-            Reaction('U*Sp', {'Sp_p': 1}), # CcaS phosphorylation
+            Reaction('rho*U*Sp', {'Sp_p': 1, 'Sp': -1}), # CcaS phosphorylation
             Reaction('gamma*Sp_p', {'Sp_p': -1}), # Phos CcaS loss
-            Reaction('kf*Sp_p*Rp', {'SR': 1}), # CcaSR dimerization
+            Reaction('kf*Sp_p*Rp', {'SR': 1, 'Sp_p': -1, 'Rp': -1}), # CcaSR dimerization
             Reaction('kr*SR', {'SR': -1}), # CcaSR dissociation
             Reaction('gamma*SR', {'SR': -1}), # CcaSR dilution
-            Reaction('a*((c2*SR)**nh)/(K+(c2*SR)**nh)', {'Fm': 1}), # GFP transcription
-            Reaction('gamma*Fm', {'Fm': -1}), # GFP mRNA loss
-            Reaction('beta*Fm', {'Fp': 1}), # GFP translation
-            Reaction('gamma*Fp', {'Fp': -1}), # GFP protein dilution
-            ) 
+            Reaction('a*(SR**nh)/(K_SR**nh+SR**nh)', {'F': 1}), # GFP production
+            Reaction('gamma*F', {'F': -1}), # GFP protein dilution
+            )
+        
+        # # Alter the reactions network:
+        # self.params = {
+        #     'rho': 0.5, # phosphorylation / min / light / S protein
+        #     'a':0.2827, # PcpcG2 promoter rate
+        #     'nh':3.6655, # Hill coefficient
+        #     'K_SR': 90, # Hill threshold (sort of)
+        #     'alpha': 10, # transcription initiations / min
+        #     'beta': 5, # translations / min / mRNA
+        #     'gamma':0.02, # Protein dilution rate, assuming 30min doubling time
+        #     'kf': 0.001, # dimers / molecule / minute (per fL cell), for 1e7/M/s
+        #     'kr': 0.000000001, # dissociation (for 1uM KD)
+        #     'tau':0 # Response delay: none for system that accounts for dimerization
+        #     }
+        # "Parameters used in the propensity calculations"
+        # self.species = {
+        #     'U':0, # Optogenetic input
+        #     'Sp': 0, # CcaS protein
+        #     'Sp_p': 0, # CcaS phosphorylated
+        #     'Rp': 0, # CcaR protein
+        #     'SR': 0, # CcaSR dimer
+        #     'Fp': 0, # GFP protein
+        #     }
+        # self.reactions = (
+        #     Reaction('alpha', {'Sp': 1}), # CcaS translation
+        #     Reaction('gamma*Sp', {'Sp': -1}), # CcaS protein loss
+        #     Reaction('alpha', {'Rp': 1}), # CcaR translation
+        #     Reaction('gamma*Rp', {'Rp': -1}), # CcaR protein loss            
+        #     Reaction('rho*U*Sp', {'Sp_p': 1, 'Sp': -1}), # CcaS phosphorylation
+        #     Reaction('gamma*Sp_p', {'Sp_p': -1}), # Phos CcaS loss
+        #     Reaction('kf*Sp_p*Rp', {'SR': 1, 'Sp_p': -1, 'Rp': -1}), # CcaSR dimerization
+        #     Reaction('kr*SR', {'SR': -1}), # CcaSR dissociation
+        #     Reaction('gamma*SR', {'SR': -1}), # CcaSR dilution
+        #     Reaction('a*(SR**nh)/(K_SR**nh+SR**nh)', {'Fp': 1}), # GFP production
+        #     Reaction('gamma*Fp', {'Fp': -1}), # GFP protein dilution
+        #     ) 
+        
+        # # Alter the reactions network:
+        # self.params = {
+        #     'c2':0.0631, # Hill normalization parameter
+        #     'a':0.2827, # PcpcG2 promoter rate
+        #     'nh':3.6655, # Hill coefficient
+        #     'K':0.4851, # Hill threshold (sort of)
+        #     'alpha': 10, # transcription initiations / min
+        #     'beta': 5, # translations / min / mRNA
+        #     'gamma':0.02, # Protein dilution rate, assuming 30min doubling time
+        #     'kf': 0.001, # dimers / molecule / minute (per fL cell), for 1e7/M/s
+        #     'kr': 0.000000001, # dissociation (for 1uM KD)
+        #     'tau':0 # Response delay: none for system that accounts for dimerization
+        #     }
+        # "Parameters used in the propensity calculations"
+        # self.species = {
+        #     'U':0, # Optogenetic input
+        #     'Sm': 0, # CcaS mRNA
+        #     'Sp': 0, # CcaS protein
+        #     'Sp_p': 0, # CcaS phosphorylated
+        #     'Rm': 0, # CcaR mRNA
+        #     'Rp': 0, # CcaR protein
+        #     'SR': 0, # CcaSR dimer
+        #     'Fm': 0, # GFP mRNA
+        #     'Fp': 0, # GFP protein
+        #     }
+        # self.reactions = (
+        #     Reaction('alpha', {'Sm': 1}), # CcaS transcription
+        #     Reaction('gamma*Sm', {'Sm': -1}), # CcaS mRNA loss
+        #     Reaction('alpha', {'Rm': 1}), # CcaR transcription
+        #     Reaction('gamma*Rm', {'Rm': -1}), # CcaR mRNA loss
+        #     Reaction('beta*Sm', {'Sp': 1}), # CcaS translation
+        #     Reaction('gamma*Sp', {'Sp': -1}), # CcaS protein loss
+        #     Reaction('beta*Rm', {'Rp': 1}), # CcaR translation
+        #     Reaction('gamma*Rp', {'Rp': -1}), # CcaR protein loss            
+        #     Reaction('U*Sp', {'Sp_p': 1}), # CcaS phosphorylation
+        #     Reaction('gamma*Sp_p', {'Sp_p': -1}), # Phos CcaS loss
+        #     Reaction('kf*Sp_p*Rp', {'SR': 1}), # CcaSR dimerization
+        #     Reaction('kr*SR', {'SR': -1}), # CcaSR dissociation
+        #     Reaction('gamma*SR', {'SR': -1}), # CcaSR dilution
+        #     Reaction('a*((c2*SR)**nh)/(K+(c2*SR)**nh)', {'Fm': 1}), # GFP transcription
+        #     Reaction('gamma*Fm', {'Fm': -1}), # GFP mRNA loss
+        #     Reaction('beta*Fm', {'Fp': 1}), # GFP translation
+        #     Reaction('gamma*Fp', {'Fp': -1}), # GFP protein dilution
+        #     ) 
         
 class CcaSR_Inverter(CcaSR_gillespie):
     """
@@ -891,35 +989,37 @@ class CcaSR_Cascade(CcaSR_gillespie):
         
         # Alter the reactions network:
         self.params = {
-            'c2': 0.0631, # dilution of all proteins (midpoint of c2, b, h2 from Chait)
-            'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
-            'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
-            'a': 0.2827, # production of F per unit E (tunes hysteresis)
-            'nh': 3.6, # cooperativity of F activation by H (from Chait)
-            'Kh': 0.4851, # Hill threshold (sort of, H->I)
-            'ni': 3.6, # cooperativity of F activation by F (to match nh)
-            'Ki': 0.4851, # Hill threshold (sort of, I-> F)
-            'b': 0.0104, # Dilution of I and F
+            'eta':1, # production of H
+            'nu': 0.01, # Dilution of proteins
+            'h1': 4e-2, # Production of E
+            'h2': 1e-3, # Dilution of E
+            'a':0.025, # PcpcG2 promoter rate
+            'K_H': 45, # Hill threshold
+            'nh':3.6, # Hill coefficient
+            'K_I': 60, # Hill threshold
+            'ni':3.6, # Hill coefficient
+            'a_I': 1, # Correction for I production
+            'a_F': 1, # Correction for F production
             'tau':12 # Response delay
             }
+        "Parameters used in the propensity calculations"
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'I':0., # Intermediate
-            # "Extrinsic noise / responsiveness"
-            'E': round(np.random.poisson(self.params['h1'] / self.params['h2'])),
-            'F': 0,  # GFP
+            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # steady state E
+            'I': 0., # Intermediate
+            'F':0 # GFP
             }
         self.reactions = (
-            Reaction('h1', {'E': 1}), # "Extrinsic" creation
-            Reaction('h2*E', {'E': -1}), # "Extrinsic" dilution
-            Reaction('U', {'H': 1}), # CcaSR activation
-            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*E * (c2*H)**nh/(Kh+(c2*H)**nh)', {'I': 1}), # Intermediate creation by H
-            Reaction('b*I', {'I': -1}), # Intermediate dilution
-            Reaction('a*E * (c2*I)**ni/(Ki+(c2*I)**ni)', {'F': 1}), # GFP creation by itself
-            Reaction('b*F', {'F': -1}), # GFP dilution
-            )
+            Reaction('h1', {'E': 1}), # Responsiveness increase
+            Reaction('h2*E', {'E': -1}), # Responsiveness decrease
+            Reaction('eta*U', {'H': 1}), # CcaSR activation
+            Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a_I * a*E* H**nh/(K_H**nh + H**nh)', {'I': 1}), # Intermediate creation
+            Reaction('nu*I', {'I': -1}), # Intermediate dilution
+            Reaction('a_F * a*E* I**ni/(K_I**ni + I**ni)', {'F': 1}), # GFP creation
+            Reaction('nu*F', {'F': -1}), # GFP dilution
+            )  
 
 class CcaSR_Autoactivation(CcaSR_gillespie):
     """
@@ -1086,37 +1186,42 @@ class CcaSR_FeedforwardPositive(CcaSR_gillespie):
         
         # Alter the reactions network:
         self.params = {
-            'alpha': 5, # ratio of H production (per unit light) to dilution
-            'beta': 5, # ratio of E production (per amount of H) to dilution
-            'gamma': 5, # ratio of F production to dilution
-            'kappa_i': 5, # ratio of I to H activation strengths, raised to power of I cooperativity
-            'kappa_j': 5, # ratio of J to H activation strengths, raised to power of J cooperativity
-            'nh': 2, # cooperativity of I activation by H
-            'ni': 2, # cooperativity of F, J activation by I
-            'nj': 2, # cooperativity of F activation by J
+            'eta':1, # production of H
+            'nu': 0.01, # Dilution of proteins
+            'h1': 4e-2, # Production of E
+            'h2': 1e-3, # Dilution of E
+            'a':0.025, # PcpcG2 promoter rate
+            'K_H': 45, # Hill threshold
+            'nh':3.6, # Hill coefficient
+            'K_I': 70, # Hill threshold
+            'ni':3.6, # Hill coefficient
+            'K_J': 70, # Hill threshold
+            'nj':3.6, # Hill coefficient
+            'a_F': 1, # modification of gene induction to maintain steadystate
             'tau':12 # Response delay
             }
+        "Parameters used in the propensity calculations"
         self.species = {
             'U':0, # Optogenetic input
             'H':0., # CcaS-CcaR
-            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
-            'I': 0, # Intermediate I
-            'J': 0, # Intermediate J
-            'F':0, # GFP
+            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # steady state E
+            'I': 0., # Intermediate
+            'J': 0., # Intermediate
+            'F':0 # GFP
             }
         self.reactions = (
-            Reaction('beta', {'E': 1}), # "Extrinsic" creation
-            Reaction('E', {'E': -1}), # "Extrinsic" dilution
-            Reaction('alpha*U', {'H': 1}), # CcaSR activation
-            Reaction('H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('gamma*E * (H**nh)/(1+H**nh)', {'I': 1}), # Intermediate I creation
-            Reaction('I', {'I': -1}), # Intermediate I dilution            
-            Reaction('gamma*E * (I**ni)/(kappa_i+I**ni)', {'J': 1}), # Intermediate J creation
-            Reaction('J', {'J': -1}), # Intermediate J dilution
-            Reaction('gamma*E/2 * (I**ni)/(kappa_i+I**ni)', {'F': 1}), # GFP creation by I
-            Reaction('gamma*E/2 * (J**nj)/(kappa_j+J**nj)', {'F': 1}), # GFP creation by J
-            Reaction('F', {'F': -1}), # GFP dilution
-            )
+            Reaction('h1', {'E': 1}), # Responsiveness increase
+            Reaction('h2*E', {'E': -1}), # Responsiveness decrease
+            Reaction('eta*U', {'H': 1}), # CcaSR activation
+            Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a*E* H**nh/(K_H**nh + H**nh)', {'I': 1}), # Intermediate creation
+            Reaction('nu*I', {'I': -1}), # Intermediate dilution
+            Reaction('a*E* I**ni/(K_I**ni + I**ni)', {'J': 1}), # J creation
+            Reaction('nu*J', {'J': -1}), # J dilution
+            Reaction('a_F* a*E/2 * I**ni/(K_I**ni + I**ni)', {'F': 1}), # GFP creation
+            Reaction('a_F * a*E/2 * J**nj/(K_J**nj + J**nj)', {'F': 1}), # GFP creation
+            Reaction('nu*F', {'F': -1}), # GFP dilution
+            ) 
 
 class CcaSR_FeedforwardNegative(CcaSR_gillespie):
     """
@@ -1279,8 +1384,13 @@ def camera_sim(fluo, camera_mult=40,camera_max=4095,camera_offset=100,noise_perc
                 camera_max
             )
 
-def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie, 
-                 num_workers = None, new_params=None):
+def training_set(stims, 
+                 sampling=SAMPLING, 
+                 cell_class = CcaSR_gillespie, 
+                 num_workers = None, 
+                 new_params=None, 
+                 solver="original",
+                 do_camera_sim=True):
     """
     Generate training set from Gillespie model and pre-determined stimulations
 
@@ -1297,6 +1407,12 @@ def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie,
     new_params: dict, optional
         Key-value pairs for updated parameter values for Gillespie simulation. 
         The default is None.
+    solver: str, optional
+        Which solver to use for simulating cell trajectories
+        The default is 'original'
+    do_camera_sim: bool, optional
+        Whether or not to simulate camera noise
+        The default is True.
 
     Returns
     -------
@@ -1315,6 +1431,8 @@ def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie,
                     itertools.repeat(cell_class),
                     itertools.repeat(None),
                     itertools.repeat(new_params),
+                    itertools.repeat(solver),
+                    itertools.repeat(do_camera_sim),
                     )
                 )
             fluo = np.concatenate(res, axis=0)
@@ -1327,14 +1445,17 @@ def training_set(stims, sampling=SAMPLING, cell_class = CcaSR_gillespie,
         if new_params:
             cell.update_params(new_params)
         cell.set_light_events(stims[l]) # Set future light events
-        ts = cell.run(stims.shape[1]*sampling) # Run until the end
+        ts = cell.run(stims.shape[1]*sampling, solver=solver) # Run until the end
         fluo.append([x['F'] for x in ts[1:]]) # Append fluorescence to list (skip first timepoint before any stim)
         print('%d/%d cells simulated'% (l+1,stims.shape[0]))
         
     fluo = np.array(fluo)
     
     # Simulate camera/measurement noise:
-    fluo = camera_sim(fluo)
+    if do_camera_sim: 
+        fluo = camera_sim(fluo)
+    else:
+        fluo = camera_sim(fluo, noise_perc=0)
     
     return fluo
 
@@ -1347,6 +1468,8 @@ def evaluation_set(
         sampling=SAMPLING, 
         num_workers=8,
         new_params=None,
+        solver='original',
+        do_camera_sim=True,
         ):
     """
     Generate evaluation set with multiple future realization of the cell 
@@ -1371,6 +1494,12 @@ def evaluation_set(
     new_params: dict, optional
         Key-value pairs of new parameter values for Gillespie simulation. The 
         default is None.
+    solver: str, optional
+        Which solver to use for simulating cell trajectories
+        The default is 'original'
+    do_camera_sim: bool, optional
+        Whether or not to simulate camera noise
+        The default is True.
 
     Returns
     -------
@@ -1387,7 +1516,14 @@ def evaluation_set(
         for s, stim in enumerate(stims):
             print(f"{s}/{stims.shape[0]} cells")
             res.append(
-                _evaluation(stim, cut_off, future_realizations, sampling, cell_class, new_params)
+                _evaluation(stim, 
+                            cut_off, 
+                            future_realizations, 
+                            sampling, 
+                            cell_class, 
+                            new_params, 
+                            solver,
+                            do_camera_sim)
                 )
         return res
     
@@ -1402,6 +1538,8 @@ def evaluation_set(
                 itertools.repeat(sampling),
                 itertools.repeat(cell_class),
                 itertools.repeat(new_params),
+                itertools.repeat(solver),
+                itertools.repeat(do_camera_sim),
                 )
             )
     
@@ -1413,7 +1551,9 @@ def _evaluation(stims,
                 future_realizations, 
                 sampling, 
                 cell_class,
-                new_params=None):
+                new_params=None,
+                solver='original',
+                do_camera_sim=True):
     """
     This function implements the actual evaluation routine for a specific cell.
     It has to be a top-level function otherwise the parallel processing 
@@ -1434,6 +1574,13 @@ def _evaluation(stims,
         The type of cell to simulate. The default is CcaSR_gillespie
     new_params: dict, optional
         Key-value pairs for new model parameter values
+        Default is None.
+    solver: str, optional
+        Which solver to use for simulating cell trajectories
+        The default is 'original'
+    do_camera_sim: bool, optional
+        Whether or not to simulate camera noise
+        The default is True.
 
     Returns
     -------
@@ -1449,15 +1596,25 @@ def _evaluation(stims,
     if new_params:
         cell.update_params(new_params)
     cell.set_light_events(stims) # Set future light events
-    ts = cell.run(cut_off*sampling) # Run until cut off between "Past" and "Future"
+    ts = cell.run(cut_off*sampling, solver=solver) # Run until cut off between "Past" and "Future"
     Past = np.array([x['F'] for x in ts[1:]]) # Append fluorescence time-series to the "Past" of the cell
-    Past = camera_sim(Past)
+    
+    if do_camera_sim:
+        Past = camera_sim(Past)
+    else:
+        Past = camera_sim(Past, noise_perc=0)
+    
+    
     # Run thousands of potential futures for the cell:
     Future = np.empty((future_realizations,stims.shape[0]-cut_off)) # Allocate "empty" future
     for s in range(future_realizations):
         clone = copy.deepcopy(cell) # Copy "Past" cell ("Present" species state and time are also copied)
-        ts = clone.run(stims.shape[0]*sampling) # Run this potential "future"
+        ts = clone.run(stims.shape[0]*sampling, solver=solver) # Run this potential "future"
         Future[s,:] = [x['F'] for x in ts[1:]] # Save fluorescence time-series to "future" array (Don't need first time-point as it's always the same)
-    Future = camera_sim(np.array(Future))
+    
+    if do_camera_sim:
+        Future = camera_sim(np.array(Future))
+    else:
+        Future = camera_sim(np.array(Future), noise_perc=0)
 
     return Past, Future

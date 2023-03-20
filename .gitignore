@@ -140,6 +140,9 @@ cython_debug/
 # Do not touch assets subfolder
 assets/
 
+# Ignore sandbox scrips
+scripts/scratch.py
+
 # Do not touch local config file:
 config.py
 
