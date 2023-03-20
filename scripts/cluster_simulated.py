@@ -6,6 +6,7 @@ import os
 import sys
 import copy
 import glob
+import numpy as np
 
 sys.path.insert(0,'/project/dunlop/shared_python_packages/')
 import qsub
@@ -39,51 +40,396 @@ def params_change(params):
     # Return path to json file:
     return foldername+"parameters.json"
 
-#%% Launch single training:
+#%% Train simple activation models with standard settings (e.g. past, future, training set size)
+
+# Cell class: in training data path, and name of class in dcc.simulations
+cell_class_list = ['CcaSR_gillespie_simple_noE',
+                   'CcaSR_gillespie']
+
+for cell_class in cell_class_list:
+        
+    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023-03-19*/training*")
     
+    # # Keep only those with base parameter values (3/16 first, all on 3/19)
+    # training_dir = np.sort(np.array(training_dir_list))[0]
+    
+    for training_dir in training_dir_list:
+        
+        training_file = training_dir.split('/')[-1]
+        datasets_folder = '/'.join(training_dir.split('/')[:-1])
+        
+                
+        # Fields to change in config.py:
+        # Training epochs, locations of training and evaluation datsets,
+        # which cell class to use for simulations
+        config = dict(
+            training_parameters = dict(
+                epochs = 200, # 200 is typically enough
+                ),
+            datasets_folder = datasets_folder, # Point to generated sets folder
+            training_sets = (training_file,), # Training subfolder(s)
+            eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+            features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
+            cell_class = cell_class, # Cell class to use in dcc.simulations
+            models_folder = dcc_repo_path + '/assets/models/',
+            )
+        
+        # Updated config and save it to disk:
+        saved_config_file = params_change(config)
+        
+        # Submit qsub request for single job:
+        job_id = qsub.submit(
+            dcc_repo_path + "scripts/simulated_pipeline.py",
+            args = [saved_config_file],
+            conda_env="dcc_env_shared",
+            hardware_requirements = dict(
+                time_limit = 5, #2
+                cores=6, #4
+                gpus=1,
+                mem_per_core=4,
+                )
+            )
+
+
+
+#%% E dynamics (Gillespie) x [past, future]
+
+# Cell class: in training data path, and name of class in dcc.simulations
+cell_class = 'CcaSR_gillespie'
+
+horizon_list = [12, 24, 48]
+
+for horizon in horizon_list:
+        
+    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training*")
+    training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
+    
+    for training_dir in training_dir_list:
+        
+        training_file = training_dir.split('/')[-1]
+        datasets_folder = '/'.join(training_dir.split('/')[:-1])
+                        
+        # Fields to change in config.py:
+        # Training epochs, locations of training and evaluation datsets,
+        # which cell class to use for simulations
+        config = dict(
+            training_parameters = dict(
+                epochs = 200, # 200 is typically enough
+                ),
+            datasets_folder = datasets_folder, # Point to generated sets folder
+            training_sets = (training_file,), # Training subfolder(s)
+            eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+            features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
+            cell_class = cell_class, # Cell class to use in dcc.simulations
+            models_folder = dcc_repo_path + '/assets/models/',
+            horizon = horizon,
+            )
+        
+        # Updated config and save it to disk:
+        saved_config_file = params_change(config)
+        
+        # Submit qsub request for single job:
+        job_id = qsub.submit(
+            dcc_repo_path + "scripts/simulated_pipeline.py",
+            args = [saved_config_file],
+            conda_env="dcc_env_shared",
+            hardware_requirements = dict(
+                time_limit = 5, #2
+                cores=6, #4
+                gpus=1,
+                mem_per_core=4,
+                )
+            )
+        
+past_steps_list = [12, 24, 36]
+
+for past_steps in past_steps_list:
+        
+    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training*")
+    training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
+    
+    for training_dir in training_dir_list:
+        
+        training_file = training_dir.split('/')[-1]
+        datasets_folder = '/'.join(training_dir.split('/')[:-1])
+                        
+        # Fields to change in config.py:
+        # Training epochs, locations of training and evaluation datsets,
+        # which cell class to use for simulations
+        config = dict(
+            training_parameters = dict(
+                epochs = 200, # 200 is typically enough
+                ),
+            datasets_folder = datasets_folder, # Point to generated sets folder
+            training_sets = (training_file,), # Training subfolder(s)
+            eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+            features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
+            cell_class = cell_class, # Cell class to use in dcc.simulations
+            models_folder = dcc_repo_path + '/assets/models/',
+            past_steps = past_steps,
+            )
+        
+        # Updated config and save it to disk:
+        saved_config_file = params_change(config)
+        
+        # Submit qsub request for single job:
+        job_id = qsub.submit(
+            dcc_repo_path + "scripts/simulated_pipeline.py",
+            args = [saved_config_file],
+            conda_env="dcc_env_shared",
+            hardware_requirements = dict(
+                time_limit = 5, #2
+                cores=6, #4
+                gpus=1,
+                mem_per_core=4,
+                )
+            )
+
+
+#%% Gillespie simple (E sampled) for different training set sizes
+
+# Cell class: in training data path, and name of class in dcc.simulations
 cell_class = 'CcaSR_gillespie_simple'
+        
+cell_class_dir = f'{dcc_repo_path}/assets/simulated/data/{cell_class}/'
+training_dir_list = glob.glob(cell_class_dir + '2023-03-18*3d5*/training*') + \
+                    glob.glob(cell_class_dir + '2023-03-18*413*/training*')
+training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
+
+for training_dir in training_dir_list:
     
-datasets_folder = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*")[0]
-
-# Fields to change in config.py:
-# Training epochs, locations of training and evaluation datsets,
-# which cell class to use for simulations
-config = dict(
-    training_parameters = dict(
-        epochs = 20, # 200 is typically enough
-        ),
-    datasets_folder = datasets_folder, # Point to generated sets folder
-    training_sets = ("training_set",), # Training subfolder(s)
-    eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
-    features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
-    cell_class = cell_class, # Cell class to use in dcc.simulations
-    horizon = 24, # 24 default
-    )
-
-# Updated config and save it to disk:
-saved_config_file = params_change(config)
-
-# Submit qsub request for single job:
-job_id = qsub.submit(
-    dcc_repo_path + "scripts/simulated_pipeline.py",
-    args = [saved_config_file],
-    conda_env="delta_env",
-    hardware_requirements = dict(
-        time_limit = 1, #2
-        cores=4, #4
-        gpus=1,
-        mem_per_core=4,
+    training_file = training_dir.split('/')[-1]
+    datasets_folder = '/'.join(training_dir.split('/')[:-1])
+            
+    # Fields to change in config.py:
+    # Training epochs, locations of training and evaluation datsets,
+    # which cell class to use for simulations
+    config = dict(
+        training_parameters = dict(
+            epochs = 200, # 200 is typically enough
+            ),
+        datasets_folder = datasets_folder, # Point to generated sets folder
+        training_sets = (training_file,), # Training subfolder(s)
+        eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+        features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
+        cell_class = cell_class, # Cell class to use in dcc.simulations
+        models_folder = dcc_repo_path + '/assets/models/',
         )
-    )
     
+    # Updated config and save it to disk:
+    saved_config_file = params_change(config)
+    
+    # Submit qsub request for single job:
+    job_id = qsub.submit(
+        dcc_repo_path + "scripts/simulated_pipeline.py",
+        args = [saved_config_file],
+        conda_env="dcc_env_shared",
+        hardware_requirements = dict(
+            time_limit = 5, #2
+            cores=6, #4
+            gpus=1,
+            mem_per_core=4,
+            )
+        )
 
 
 
+#%% Cascade x [past, future]
 
+# Cell class: in training data path, and name of class in dcc.simulations
+cell_class = 'CcaSR_Cascade'
+
+horizon_list = [12, 48]
+
+for horizon in horizon_list:
+        
+    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training*")
+    training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
+    
+    for training_dir in training_dir_list:
+        
+        training_file = training_dir.split('/')[-1]
+        datasets_folder = '/'.join(training_dir.split('/')[:-1])
+        
+        print(datasets_folder)
+        print(training_file)
+                        
+        # Fields to change in config.py:
+        # Training epochs, locations of training and evaluation datsets,
+        # which cell class to use for simulations
+        config = dict(
+            training_parameters = dict(
+                epochs = 200, # 200 is typically enough
+                ),
+            datasets_folder = datasets_folder, # Point to generated sets folder
+            training_sets = (training_file,), # Training subfolder(s)
+            eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+            features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
+            cell_class = cell_class, # Cell class to use in dcc.simulations
+            models_folder = dcc_repo_path + '/assets/models/',
+            horizon = horizon,
+            )
+        
+        # Updated config and save it to disk:
+        saved_config_file = params_change(config)
+        
+        # Submit qsub request for single job:
+        job_id = qsub.submit(
+            dcc_repo_path + "scripts/simulated_pipeline.py",
+            args = [saved_config_file],
+            conda_env="dcc_env_shared",
+            hardware_requirements = dict(
+                time_limit = 5, #2
+                cores=6, #4
+                gpus=1,
+                mem_per_core=4,
+                )
+            )
+        
+past_steps_list = [12, 24, 36]
+
+for past_steps in past_steps_list:
+        
+    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training*")
+    training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
+    
+    for training_dir in training_dir_list:
+        
+        training_file = training_dir.split('/')[-1]
+        datasets_folder = '/'.join(training_dir.split('/')[:-1])
+                        
+        # Fields to change in config.py:
+        # Training epochs, locations of training and evaluation datsets,
+        # which cell class to use for simulations
+        config = dict(
+            training_parameters = dict(
+                epochs = 200, # 200 is typically enough
+                ),
+            datasets_folder = datasets_folder, # Point to generated sets folder
+            training_sets = (training_file,), # Training subfolder(s)
+            eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+            features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
+            cell_class = cell_class, # Cell class to use in dcc.simulations
+            models_folder = dcc_repo_path + '/assets/models/',
+            past_steps = past_steps,
+            )
+        
+        # Updated config and save it to disk:
+        saved_config_file = params_change(config)
+        
+        # Submit qsub request for single job:
+        job_id = qsub.submit(
+            dcc_repo_path + "scripts/simulated_pipeline.py",
+            args = [saved_config_file],
+            conda_env="dcc_env_shared",
+            hardware_requirements = dict(
+                time_limit = 5, #2
+                cores=6, #4
+                gpus=1,
+                mem_per_core=4,
+                )
+            )
+        
+#%% Feedforward Positive x [past, future]
+
+# Cell class: in training data path, and name of class in dcc.simulations
+cell_class = 'CcaSR_FeedforwardPositive'
+
+horizon_list = [12, 48]
+
+for horizon in horizon_list:
+        
+    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training*")
+    training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
+    
+    for training_dir in training_dir_list:
+        
+        training_file = training_dir.split('/')[-1]
+        datasets_folder = '/'.join(training_dir.split('/')[:-1])
+        
+        print(datasets_folder)
+        print(training_file)
+                        
+        # Fields to change in config.py:
+        # Training epochs, locations of training and evaluation datsets,
+        # which cell class to use for simulations
+        config = dict(
+            training_parameters = dict(
+                epochs = 200, # 200 is typically enough
+                ),
+            datasets_folder = datasets_folder, # Point to generated sets folder
+            training_sets = (training_file,), # Training subfolder(s)
+            eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+            features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
+            cell_class = cell_class, # Cell class to use in dcc.simulations
+            models_folder = dcc_repo_path + '/assets/models/',
+            horizon = horizon,
+            )
+        
+        # Updated config and save it to disk:
+        saved_config_file = params_change(config)
+        
+        # Submit qsub request for single job:
+        job_id = qsub.submit(
+            dcc_repo_path + "scripts/simulated_pipeline.py",
+            args = [saved_config_file],
+            conda_env="dcc_env_shared",
+            hardware_requirements = dict(
+                time_limit = 5, #2
+                cores=6, #4
+                gpus=1,
+                mem_per_core=4,
+                )
+            )
+        
+past_steps_list = [12, 24, 36]
+
+for past_steps in past_steps_list:
+        
+    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training*")
+    training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
+    
+    for training_dir in training_dir_list:
+        
+        training_file = training_dir.split('/')[-1]
+        datasets_folder = '/'.join(training_dir.split('/')[:-1])
+                        
+        # Fields to change in config.py:
+        # Training epochs, locations of training and evaluation datsets,
+        # which cell class to use for simulations
+        config = dict(
+            training_parameters = dict(
+                epochs = 200, # 200 is typically enough
+                ),
+            datasets_folder = datasets_folder, # Point to generated sets folder
+            training_sets = (training_file,), # Training subfolder(s)
+            eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+            features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
+            cell_class = cell_class, # Cell class to use in dcc.simulations
+            models_folder = dcc_repo_path + '/assets/models/',
+            past_steps = past_steps,
+            )
+        
+        # Updated config and save it to disk:
+        saved_config_file = params_change(config)
+        
+        # Submit qsub request for single job:
+        job_id = qsub.submit(
+            dcc_repo_path + "scripts/simulated_pipeline.py",
+            args = [saved_config_file],
+            conda_env="dcc_env_shared",
+            hardware_requirements = dict(
+                time_limit = 5, #2
+                cores=6, #4
+                gpus=1,
+                mem_per_core=4,
+                )
+            )
+        
 #%% Launch several single trainings (change horizon, past steps, or training set size):
     
 # Cell class: in training data path, and name of class in dcc.simulations
-cell_class_list = ['CcaSR_gillespie_simple',
+cell_class_list = ['CcaSR_gillespie_simple_noE',
                    'CcaSR_gillespie']
 
 # horizon_list = [12, 24, 48]
