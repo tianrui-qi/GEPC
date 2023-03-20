@@ -12,44 +12,40 @@ import numpy as np
 import deepcellcontrol as dcc
 
 # Optogenetic input sequence
-light_sequence = [0]*24 + [1]*120 + [0, 1]*120 + [0] * 120 + [0, 1] * 120
+# light_sequence = [0]*24 + [1]*180 + [0, 1]*180 + [0] * 180 + [0, 1] * 180
+light_sequence = [0]*4*12 + [1]*4*12
 
 # Cell we will re-use through the script (but of course they can be re-instanciated)
-refcell = dcc.simulations.CcaSR_Cascade()
-refcell.species["E"] = refcell.params['h1'] / refcell.params['h2']
+# refcell = dcc.simulations.CcaSR_gillespie_full()
 # refcell.params['h2'] = 1e-30 # if ==0 then propensities throw div by 0 error
 # refcell.params['h1'] = 1e-30
-refcell.set_light_events(light_sequence)
+# refcell.set_light_events(light_sequence)
 
 # For plots:
 x = [t/12. for t in range(len(light_sequence)+1)]
 
 #%% Deterministic run:
 
-fold = 1.5
-new_params_list = [{'K_I': 45, 'K_J': 45},
-                   {'K_I': 45*fold, 'K_J': 45},
-                   {'K_I': 45, 'K_J': 45*fold},
-                   {'K_I': 45*fold, 'K_J': 45*fold},
+
+new_params_list = [{'tau': 12},
                     ]
 
-# new_params_list = [{'ni': 3.6, 'K_I': 45},
-#                    {'ni': 2, 'K_I': 45},
-#                    {'ni': 3.6, 'K_I': 45*fold},
-#                    {'ni': 2, 'K_I': 45*fold},
-#                     ]
-
 for new_params in new_params_list:
-    # cell = refcell.copy()
-    cell = dcc.simulations.CcaSR_FeedforwardPositive()
-    cell.update_params(new_params)
-    cell.set_light_events(light_sequence) 
+
+    cell = dcc.simulations.CcaSR_gillespie_simple_noE()
+        
+    # print(new_params)
+    # cell.update_params(new_params)
+    
+    # Simulate
+    cell.set_light_events(light_sequence)
+    # cell.species["E"] = cell.params['h1'] / cell.params['h2']
     
     series = cell.run(len(light_sequence)*5, solver="ode")
     
     dcc.utilities.OptoPlotBackground(light_sequence, ymax=150, x=x)
-    states = ['H','F','I','J']
-    colors = ['r', 'b','#FFA500','g']
+    states = ['F']#,'E','I','J']
+    colors = ['b']#,'k','#FFA500','g']
     for s, state_s in enumerate(states):
         plt.plot(x, [state[state_s] for state in series],
                  color=colors[s], 
@@ -63,24 +59,37 @@ for new_params in new_params_list:
 
 #%% Original SSA implementation run:
     
-for new_params in new_params_list:
-    cell = dcc.simulations.CcaSR_FeedforwardPositive()
-    cell.update_params(new_params)
-    cell.set_light_events(light_sequence) 
+new_params_list = [{'tau': 0},
+                    ]
     
+for new_params in new_params_list:
+    cell = dcc.simulations.CcaSR_gillespie_full()
+    # cell.update_params(new_params)
+    
+    
+    cell.set_light_events(light_sequence)     
+
     series_list = cell.run(len(light_sequence)*5, 
                            solver="original", 
-                           realizations=30)
+                           realizations=20)
     
-    for series in series_list:
+    species = ['Sp','Rp','Sp_p','SR','F']
+    colors = ['tab:purple','g','k', 'r', 'b']
+
+    dcc.utilities.OptoPlotBackground(light_sequence, ymax=400, x=x)
+
+    for s, series in enumerate(series_list):
     
-        dcc.utilities.OptoPlotBackground(light_sequence, ymax=150, x=x)
-        plt.plot(x, [state['F'] for state in series],
-                     color=colors[states.index('F')],
-                     alpha=.5, lw=.5)
+        
+        for i, specie in enumerate(species):
+            
+            plt.plot(x, [state[specie] for state in series],
+                          color=colors[i], label=specie,
+                          alpha=.5, lw=.5)
+            
     plt.xlabel("time (hours)")
     plt.ylabel("proteins (#)")
-    plt.ylim(0,150)
+    plt.ylim(0,300)
     # plt.title(f"Original SSA, K_I={new_params['K_I']:.2e}")
     plt.show()
 
@@ -98,6 +107,43 @@ for new_params in new_params_list:
 # plt.ylim(0,100)
 # plt.title("Original SSA")
 # plt.show()
+
+
+
+#%% Random stimulations
+
+# new_params = new_params_list[3]
+n_cells = 13
+stims_all = dcc.utilities.random_stimulations(
+                        timepoints=36*12,
+                        nostim_timepoints=3*12,
+                        total_simulations=n_cells)
+x = [t/12. for t in range(np.shape(stims_all)[1]+1)]
+
+
+for i in range(n_cells):
+    plt.figure()
+    cell = dcc.simulations.CcaSR_gillespie()
+    # cell.update_params(new_params)
+    
+    light_sequence = stims_all[i]
+
+    cell.set_light_events(light_sequence) 
+
+    series = cell.run(len(light_sequence)*5, 
+                           solver="ode", 
+                           realizations=1)
+
+    
+    dcc.utilities.OptoPlotBackground(light_sequence, ymax=150, x=x)
+
+    plt.plot(x, [state['F'] for state in series],
+                 color='b')
+    plt.xlabel("time (hours)")
+    plt.ylabel("proteins (#)")
+    plt.ylim(0,150)
+    # plt.title(f"Original SSA, K_I={new_params['K_I']:.2e}")
+    plt.show()
 
 #%% GillesPy2 implementation run:
 
