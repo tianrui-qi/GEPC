@@ -20,14 +20,32 @@ import numpy as np
 sys.path.insert(0,'./../')
 import deepcellcontrol as dcc
 
-# Class of simulation model
+# Training parameters:
+training_cells = 10_000 # 10_000
+timepoints = 36*12 # 36*12 How much time to simulate
+nostim_start = 3*12 # 3*12 Timepoints with light off
+
+# Evaluation parameters:
+eval_cells = 1_000 #1_000
+eval_cutoff = 24*12 # 24*12 # Number of past timepoints
+eval_future_realizations = 1000 #1_000 # Number of future realizations per cell
+eval_horizon = 4*12 # 4*12 # Number of future timepoints
+
+#%% Kwargs of submission
+
+# # Class of simulation model
 cell_class = 'CcaSR_gillespie'
 if len(sys.argv) > 1:
     cell_class = sys.argv[1]
 cell_class_type = getattr(dcc.simulations, cell_class)
 cell_class_object = cell_class_type()
 
-# Have note checked that this works
+# Datasets folder (index with simulation data):
+username="hklumpe"
+simulated_data_folder = f"/projectnb/dunlop/{username}/deepcellcontrol/assets/simulated/data/"
+base_folder = simulated_data_folder + f"/{cell_class_type.__name__}/{time.strftime('%Y-%m-%d_%H-%M-%S')}_simulated_{uuid.uuid4()}"
+
+# # Parallel processing
 WORKERS = None # NOne, 4, 8, 12 etc depending on number of cores
 if len(sys.argv) > 2:
     WORKERS = int(sys.argv[2])
@@ -36,31 +54,26 @@ if len(sys.argv) > 2:
     if WORKERS==0:
         WORKERS = None
 
-# Update parameters, if passed as new argument
-new_params = {'h1': 0.0710/25, 
-              'h2': 0.0303/50}
+# # Update parameters, if passed as new argument
+new_params = {'eta': 1}
 if len(sys.argv) > 3:
     with open(sys.argv[3], 'r') as f:
         new_params = json.load(f)
 
-# Datasets folder (index with simulation data):
-username="hklumpe"
-simulated_data_folder = f"/projectnb/dunlop/{username}/deepcellcontrol/assets/simulated/data/"
-base_folder = simulated_data_folder + f"/{cell_class_type.__name__}/{time.strftime('%Y-%m-%d_%H-%M-%S')}_simulated_{uuid.uuid4()}"
 
-# Training parameters:
-training_cells = 10_000 # 10_000
-timepoints = 36*12 # 36*12 How much time to simulate
-nostim_start = 3*12 # 3*12 Timepoints with light off
-
-# Evaluation parameters:
-eval_cells = 1000 #1_000
-eval_cutoff = 24*12 # 24*12 # Number of past timepoints
-eval_future_realizations = 1000 #1_000 # Number of future realizations per cell
-eval_horizon = 4*12 # 4*12 # Number of future timepoints
-
+# # Which solver
+solver = 'original' # 'original' or 'ode'
+if len(sys.argv) > 4:
+    solver = sys.argv[4]
+    
+# # Add noise from camera
+do_camera_sim = True 
+if len(sys.argv) > 5:
+    do_camera_sim = bool(int(sys.argv[5]))
+    
 print(cell_class)
-print(new_params)
+print(solver)
+print(do_camera_sim)
 
 #%% Generate training set
 
@@ -77,6 +90,8 @@ fluorescence = dcc.simulations.training_set(
     cell_class = cell_class_type,
     num_workers = WORKERS,
     new_params = new_params,
+    solver = solver,
+    do_camera_sim = do_camera_sim,
     )
 
 # Save to disk:
@@ -88,6 +103,7 @@ np.save(save_folder+"/stims.npy", stims)
 # Stash model parameters
 cell_class_object.update_params(new_params)
 model_params = getattr(cell_class_object, 'params')
+model_params.update({'solver': solver, 'camera_sim': do_camera_sim})
 with open(base_folder+'/model_parameters.json','w') as params_file:
     json.dump(model_params, params_file, indent=4)
 
@@ -106,6 +122,8 @@ eval_sims = dcc.simulations.evaluation_set(
     future_realizations = eval_future_realizations,
     num_workers = WORKERS,
     new_params = new_params,
+    solver = solver,
+    do_camera_sim = do_camera_sim,
     )
 
 # Reformat a little bit:
