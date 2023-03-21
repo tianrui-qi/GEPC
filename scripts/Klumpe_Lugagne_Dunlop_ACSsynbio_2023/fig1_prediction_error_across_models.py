@@ -77,11 +77,23 @@ def get_fluo_pred(simul_id):
     
     return fluo_pred
     
-def get_fluo_and_pred(simul_id):
+def get_fluo_and_pred(simul_id, return_all=False):
     """
-    Given a simul_id (str), return the fluo (arr, (n_cells, len(future)))
-    and fluo_pred (arr, (n_cells, len(future))) for each individual evaluation
-    cell
+    Inputs
+    ------
+    simul_id: str (unique identifier of folder in `assets/models`)
+    return_all: bool, optional
+        Whether to return all possible futures
+        Default is false
+    
+    Outputs
+    -------
+    fluo: arr, (n_cells, len(future))
+        Evaluation data, future fluorescence
+        if return_all==True, then fluo has shape: (n_cells, n_futures, len(future))
+    fluo_pred: arr, (n_cells, len(future))
+        Predicted future fluorescence
+    
     """
         
     # Load predictions
@@ -91,7 +103,11 @@ def get_fluo_and_pred(simul_id):
     stims, past_fluo, futures_fluo = get_eval_data(simul_id)
     
     # Keep only first realization, and as many time point as in the prediction
-    fluo = futures_fluo[:,0,:np.shape(fluo_pred)[1]]
+    if return_all:
+        fluo = futures_fluo[:,:,:np.shape(fluo_pred)[1]]
+        fluo_pred = np.repeat(fluo_pred[:, np.newaxis], fluo.shape[0], axis=1)
+    else:
+        fluo = futures_fluo[:,0,:np.shape(fluo_pred)[1]]
     
     return fluo, fluo_pred
 
@@ -401,7 +417,103 @@ for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
         plt.tight_layout()
         plt.savefig(fig_path+f'/fig1_{cell_class}_predictions_percentiles_config_{color}.png', dpi=300)
 
+#%% Q-plot of error  v. fluorescence(better for overlay?)
 
+n_bins=200
+q = 0.5
+default_models = default_training_size & default_past_steps & default_horizon & default_h1 & default_h2
+
+for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
+    fig, axes = plt.subplots(1,2, figsize=(10,3), sharey=True)
+                                           
+    df_cc = df_meta.loc[default_models & (df_meta['cell_class']==cell_class)].reset_index()
+    
+    for c in range(len(df_cc)):
+        simul_id = df_cc.loc[c,'simul_id']
+        camera_sim = df_cc.loc[c,'camera_sim']
+        solver = df_cc.loc[c,'solver']
+        color = df_simul_config.loc[(df_simul_config['camera_sim']==camera_sim)&(df_simul_config['solver']==solver),'color'].values[0]
+    
+        for i in range(2):    
+            # Look at one hour
+            fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+            fluo = fluo[:,:,i*12:(i+1)*12]
+            fluo_pred = fluo_pred[:,:,i*12:(i+1)*12]
+        
+            # Calulate error
+            RMSE = np.sqrt((fluo - fluo_pred)**2)
+            bins = np.linspace(0,4100, n_bins+1)
+            RMSE_median_bins = np.zeros((n_bins,))
+            RMSE_extrema_bins = np.zeros((n_bins, 2))
+            
+            # Look at error in each bin
+            for b in range(n_bins):
+                
+                RMSE_bin = RMSE[(fluo>bins[b])&(fluo<bins[b+1])]
+                RMSE_median_bins[b] = np.median(RMSE_bin)
+                RMSE_extrema_bins[b] = np.nanquantile(RMSE_bin, [0.5-q/2, 0.5+q/2])
+        
+            axes[i].plot(bins[:-1], RMSE_median_bins,
+                          '.-', color=color, 
+                          label=f'camera noise {camera_sim}, solver: {solver}')
+            axes[i].fill_between(
+                bins[:-1],
+                RMSE_extrema_bins[:,0],
+                RMSE_extrema_bins[:,1],
+                color=color,
+                alpha=.2,
+                )
+        
+            axes[i].legend()   
+            axes[i].set_title(f'hour {i+1}')
+            axes[i].set_xlabel('fluorescence')
+            axes[i].set_ylabel(f'RMSE ({np.shape(fluo)[1]} futures of {np.shape(fluo)[0]} cells)\nMiddle {q*100:.0f}%')
+            axes[i].set_ylim([0,600])
+    plt.tight_layout()
+    plt.savefig(f'{fig_path}/fig1_{cell_class}_qplot_err_across_diff_noise.png',dpi=300)
+    
+#%% Q-plot of error  v. time (better for overlay?)
+
+q = 0.5
+default_models = default_training_size & default_past_steps & default_horizon & default_h1 & default_h2
+
+for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
+    plt.figure()
+                                           
+    df_cc = df_meta.loc[default_models & (df_meta['cell_class']==cell_class)].reset_index()
+    
+    for c in range(len(df_cc)):
+        simul_id = df_cc.loc[c,'simul_id']
+        camera_sim = df_cc.loc[c,'camera_sim']
+        solver = df_cc.loc[c,'solver']
+        color = df_simul_config.loc[(df_simul_config['camera_sim']==camera_sim)&(df_simul_config['solver']==solver),'color'].values[0]
+
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True)
+        fluo = np.reshape(fluo,(-1,np.shape(fluo)[-1]))
+        fluo_pred = np.reshape(fluo_pred,(-1,np.shape(fluo_pred)[-1]))
+        x = np.arange(np.shape(fluo)[-1])/12
+            
+        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        
+        plt.plot(x, np.median(RMSE, axis=0),
+                      '.-', color=color, 
+                      label=f'camera noise {camera_sim}, solver: {solver}')
+        plt.fill_between(
+            x,
+            np.nanquantile(RMSE, axis=0, q=0.5-q/2),
+            np.nanquantile(RMSE, axis=0, q=0.5+q/2),
+            color=color,
+            alpha=.2,
+            )
+        
+        plt.legend()   
+        plt.title(cell_class)
+        plt.xlabel('time( h)')
+        plt.ylabel(f'RMSE: Middle {q*100:.0f}%')
+        plt.ylim([0,450])
+        plt.grid(True, 'both','both')
+    plt.tight_layout()
+    plt.savefig(f'{fig_path}/fig1_{cell_class}_qplot_err_across_diff_noise_over_time.png',dpi=300)
 
 #%% Violin plots of error
 

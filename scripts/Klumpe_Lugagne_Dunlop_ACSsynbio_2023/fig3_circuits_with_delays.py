@@ -77,11 +77,23 @@ def get_fluo_pred(simul_id):
     
     return fluo_pred
     
-def get_fluo_and_pred(simul_id):
+def get_fluo_and_pred(simul_id, return_all=False):
     """
-    Given a simul_id (str), return the fluo (arr, (n_cells, len(future)))
-    and fluo_pred (arr, (n_cells, len(future))) for each individual evaluation
-    cell
+    Inputs
+    ------
+    simul_id: str (unique identifier of folder in `assets/models`)
+    return_all: bool, optional
+        Whether to return all possible futures
+        Default is false
+    
+    Outputs
+    -------
+    fluo: arr, (n_cells, len(future))
+        Evaluation data, future fluorescence
+        if return_all==True, then fluo has shape: (n_cells, n_futures, len(future))
+    fluo_pred: arr, (n_cells, len(future))
+        Predicted future fluorescence
+    
     """
         
     # Load predictions
@@ -91,7 +103,11 @@ def get_fluo_and_pred(simul_id):
     stims, past_fluo, futures_fluo = get_eval_data(simul_id)
     
     # Keep only first realization, and as many time point as in the prediction
-    fluo = futures_fluo[:,0,:np.shape(fluo_pred)[1]]
+    if return_all:
+        fluo = futures_fluo[:,:,:np.shape(fluo_pred)[1]]
+        fluo_pred = np.repeat(fluo_pred[:, np.newaxis], fluo.shape[0], axis=1)
+    else:
+        fluo = futures_fluo[:,0,:np.shape(fluo_pred)[1]]
     
     return fluo, fluo_pred
 
@@ -382,6 +398,71 @@ default_horizon = df_meta['horizon']==24
 default_past_steps = df_meta['past_steps']==36
 default_training_size = df_meta['training_sets']=='training_set'
 
+
+#%% Cascade: error in each fluorescence bin
+
+n_bins=200
+q = 0.5
+
+# Which cell class, h1, and horizon values to plot
+cell_class = 'CcaSR_Cascade'
+KI_vals = [40, 60, 90]
+color_list = ['r','g','b']
+
+# Keep simulations with default training size, default past, and same h1/h2 ratio
+simul_slice = default_training_size & default_past_steps & default_horizon
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+df_past = df_past.sort_values(by=['K_I',])
+
+fig, axes = plt.subplots(1, 2, figsize=(9,5), sharey=True)
+alpha=0.5
+# Rather than plotting everything, just plot one replicate of each trained model
+for k, K_I in enumerate(KI_vals):
+    
+    df_index = (df_past['K_I']==K_I)
+    simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+    
+    for i in range(2):    
+        # Look at one hour
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        fluo = fluo[:,:,i*12:(i+1)*12]
+        fluo_pred = fluo_pred[:,:,i*12:(i+1)*12]
+    
+        # Calulate error
+        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        bins = np.linspace(0,4100, n_bins+1)
+        RMSE_median_bins = np.zeros((n_bins,))
+        RMSE_extrema_bins = np.zeros((n_bins, 2))
+        
+        # Look at error in each bin
+        for b in range(n_bins):
+            
+            RMSE_bin = RMSE[(fluo>bins[b])&(fluo<bins[b+1])]
+            RMSE_median_bins[b] = np.median(RMSE_bin)
+            RMSE_extrema_bins[b] = np.nanquantile(RMSE_bin, [0.5-q/2, 0.5+q/2])
+    
+        axes[i].plot(bins[:-1], RMSE_median_bins,
+                      '.-', color=color_list[k], 
+                      label=f'K_I = {K_I}')
+        axes[i].fill_between(
+            bins[:-1],
+            RMSE_extrema_bins[:,0],
+            RMSE_extrema_bins[:,1],
+            color=color_list[k],
+            alpha=.2,
+            )
+    
+        axes[i].legend()   
+        axes[i].grid(True, 'both','both')
+        axes[i].set_title(f'hour {i+1}')
+        axes[i].set_xlabel('fluorescence')
+        axes[i].set_ylabel(f'RMSE ({np.shape(fluo)[1]} futures of {np.shape(fluo)[0]} cells)\nMiddle {q*100:.0f}%')
+        axes[i].set_ylim([0,800])
+    plt.tight_layout()
+    plt.savefig(f'{fig_path}/fig3_{cell_class}_qplot_err_fluor_bin.png',dpi=300)
+    
+
 #%% Cascade x horizon
 
 # Which cell class, h1, and horizon values to plot
@@ -404,15 +485,16 @@ for k, K_I in enumerate(KI_vals):
         df_index = (df_past['K_I']==K_I)&(df_past['horizon']==horizon)
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
     
-        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
-        t = [x/12. for x in range(len(RMSE))]
-        axes[k].plot(t, RMSE, '.', 
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        t = [x/12. for x in range(np.shape(RMSE)[-1])]
+        axes[k].plot(t, np.median(RMSE,axis=[0,1]), '.', 
                      color = horizon_color_dict[horizon],
                      alpha=alpha,
                      label=f'horizon={horizon}')
     
     axes[k].set_title(f'K_I={K_I}')
+    axes[k].grid(True, 'both', 'both')
     axes[k].legend()
     axes[k].set_xlabel('time (h)')
     axes[k].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
@@ -440,10 +522,10 @@ for k, K_I in enumerate(KI_vals):
         df_index = (df_past['K_I']==K_I)&(df_past['past_steps']==past_steps)
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
     
-        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
-        t = [x/12. for x in range(len(RMSE))]
-        axes[k].plot(t, RMSE, '.', 
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        t = [x/12. for x in range(np.shape(RMSE)[-1])]
+        axes[k].plot(t, np.median(RMSE, axis=[0,1]), '.', 
                      color = past_steps_color_dict[past_steps],
                      alpha=alpha,
                      label=f'past steps={past_steps}')
@@ -452,8 +534,79 @@ for k, K_I in enumerate(KI_vals):
     axes[k].legend()
     axes[k].set_xlabel('time (h)')
     axes[k].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
+    axes[k].grid(True, 'both', 'both')
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_past_steps.png', dpi=600)
+
+#%% FF+ error binned by fluorescence
+
+n_bins=20
+q = 0.5
+
+# Which cell class, h1, and horizon values to plot
+cell_class = 'CcaSR_FeedforwardPositive'
+params_list = [{'K_I': 120, 'K_J': 120},
+                   {'K_I': 120, 'K_J': 30},
+                   {'K_I': 60, 'K_J': 120},
+                   {'K_I': 60, 'K_J': 30},
+                    ]
+color_list = ['b','tab:purple','r','#db6837']
+
+# Keep simulations with default training size, default past, and same h1/h2 ratio
+simul_slice = default_training_size & default_past_steps & default_horizon
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+df_past = df_past.sort_values(by=['K_I','K_J'])
+
+fig, axes = plt.subplots(1, 2, figsize=(9,5), sharey=True)
+alpha=0.5
+# Rather than plotting everything, just plot one replicate of each trained model
+for p, params in enumerate(params_list):
+    
+    K_I = params['K_I']
+    K_J = params['K_J']
+    
+    df_index = (df_past['K_I']==K_I)&(df_past['K_J']==K_J)
+    simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+    
+    for i in range(2):    
+        # Look at one hour
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        fluo = fluo[:,:,i*12:(i+1)*12]
+        fluo_pred = fluo_pred[:,:,i*12:(i+1)*12]
+    
+        # Calulate error
+        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        bins = np.linspace(0,4100, n_bins+1)
+        RMSE_median_bins = np.zeros((n_bins,))
+        RMSE_extrema_bins = np.zeros((n_bins, 2))
+        
+        # Look at error in each bin
+        for b in range(n_bins):
+            
+            RMSE_bin = RMSE[(fluo>bins[b])&(fluo<bins[b+1])]
+            RMSE_median_bins[b] = np.median(RMSE_bin)
+            RMSE_extrema_bins[b] = np.nanquantile(RMSE_bin, [0.5-q/2, 0.5+q/2])
+    
+        axes[i].plot(bins[:-1], RMSE_median_bins,
+                      '.-', color=color_list[p], 
+                      label=f'K_I = {K_I}, K_J={K_J}')
+        axes[i].fill_between(
+            bins[:-1],
+            RMSE_extrema_bins[:,0],
+            RMSE_extrema_bins[:,1],
+            color=color_list[p],
+            alpha=.2,
+            )
+    
+        axes[i].legend()   
+        axes[i].set_title(f'hour {i+1}')
+        axes[i].set_xlabel('fluorescence')
+        axes[i].set_ylabel(f'RMSE ({np.shape(fluo)[1]} futures of {np.shape(fluo)[0]} cells)\nMiddle {q*100:.0f}%')
+        axes[i].set_ylim([0,800])
+    plt.tight_layout()
+    plt.savefig(f'{fig_path}/fig3_{cell_class}_qplot_err_fluor_bin.png',dpi=300)
+    
 
 #%% FF x horizon
 
@@ -482,15 +635,16 @@ for p, params in enumerate(params_list):
         df_index = (df_past['K_I']==K_I)&(df_past['K_J']==K_J)&(df_past['horizon']==horizon)
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
     
-        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
-        t = [x/12. for x in range(len(RMSE))]
-        axes[p].plot(t, RMSE, '.', 
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        t = [x/12. for x in range(np.shape(RMSE)[-1])]
+        axes[p].plot(t, np.median(RMSE, axis=[0,1]), '.', 
                       color = horizon_color_dict[horizon],
                       alpha=alpha,
                       label=f'horizon={horizon}')
     
     axes[p].set_title(f'K_I={K_I}, K_J={K_J}')
+    axes[p].grid(True, 'both','both')
     axes[p].legend()
     axes[p].set_xlabel('time (h)')
     axes[p].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
@@ -524,15 +678,16 @@ for p, params in enumerate(params_list):
         df_index = (df_past['K_I']==K_I)&(df_past['K_J']==K_J)&(df_past['past_steps']==past_steps)
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
     
-        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
-        t = [x/12. for x in range(len(RMSE))]
-        axes[p].plot(t, RMSE, '.', 
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        t = [x/12. for x in range(np.shape(RMSE)[-1])]
+        axes[p].plot(t, np.median(RMSE, axis=[0,1]), '.', 
                       color = past_steps_color_dict[past_steps],
                       alpha=alpha,
                       label=f'past steps={past_steps}')
     
     axes[p].set_title(f'K_I={K_I}, K_J={K_J}')
+    axes[p].grid(True, 'both','both')
     axes[p].legend()
     axes[p].set_xlabel('time (h)')
     axes[p].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
