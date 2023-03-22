@@ -192,15 +192,17 @@ for past_steps in past_steps_list:
 cell_class = 'CcaSR_gillespie_simple'
         
 cell_class_dir = f'{dcc_repo_path}/assets/simulated/data/{cell_class}/'
-training_dir_list = glob.glob(cell_class_dir + '2023-03-18*3d5*/training*') + \
-                    glob.glob(cell_class_dir + '2023-03-18*413*/training*')
+# training_dir_list = glob.glob(cell_class_dir + '2023-03-18*3d5*/training*') + \
+#                     glob.glob(cell_class_dir + '2023-03-18*413*/training*')
+training_dir_list = glob.glob(cell_class_dir + '2023-03-18_11-48*/*_10_*') + \
+                    glob.glob(cell_class_dir + '2023-03-18_11-48*/*_2_*')
 training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
 
 for training_dir in training_dir_list:
     
     training_file = training_dir.split('/')[-1]
     datasets_folder = '/'.join(training_dir.split('/')[:-1])
-            
+                
     # Fields to change in config.py:
     # Training epochs, locations of training and evaluation datsets,
     # which cell class to use for simulations

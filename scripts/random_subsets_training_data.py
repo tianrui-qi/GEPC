@@ -18,8 +18,10 @@ rng = np.random.default_rng(103122)
 
 training_set_id_list = ['*03-18*3d5*','*03-18*413*']
 cell_class_list = ['CcaSR_gillespie_simple','CcaSR_gillespie_simple']
-subset_size_list = [1_000, 100]
-n_samples = 3
+# subset_size_list = [1_000, 100]
+# n_samples = 3
+subset_size_list = [2, 10]
+n_samples = 1
 
 for c, cell_class in enumerate(cell_class_list):
     training_set_id = training_set_id_list[c]
