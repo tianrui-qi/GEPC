@@ -77,11 +77,23 @@ def get_fluo_pred(simul_id):
     
     return fluo_pred
     
-def get_fluo_and_pred(simul_id):
+def get_fluo_and_pred(simul_id, return_all=False):
     """
-    Given a simul_id (str), return the fluo (arr, (n_cells, len(future)))
-    and fluo_pred (arr, (n_cells, len(future))) for each individual evaluation
-    cell
+    Inputs
+    ------
+    simul_id: str (unique identifier of folder in `assets/models`)
+    return_all: bool, optional
+        Whether to return all possible futures
+        Default is false
+    
+    Outputs
+    -------
+    fluo: arr, (n_cells, len(future))
+        Evaluation data, future fluorescence
+        if return_all==True, then fluo has shape: (n_cells, n_futures, len(future))
+    fluo_pred: arr, (n_cells, len(future))
+        Predicted future fluorescence
+    
     """
         
     # Load predictions
@@ -91,7 +103,11 @@ def get_fluo_and_pred(simul_id):
     stims, past_fluo, futures_fluo = get_eval_data(simul_id)
     
     # Keep only first realization, and as many time point as in the prediction
-    fluo = futures_fluo[:,0,:np.shape(fluo_pred)[1]]
+    if return_all:
+        fluo = futures_fluo[:,:,:np.shape(fluo_pred)[1]]
+        fluo_pred = np.repeat(fluo_pred[:, np.newaxis], fluo.shape[0], axis=1)
+    else:
+        fluo = futures_fluo[:,0,:np.shape(fluo_pred)[1]]
     
     return fluo, fluo_pred
 
@@ -168,18 +184,19 @@ for c, cell_class in enumerate(plot_list):
 #%% Cascade: responses to pure light, to show delays
 
 n_hours = 6
-n_cells = 40
+n_cells = 50
 random_bit = dcc.utilities.random_stimulations(
                         timepoints=n_hours*12*2,
                         nostim_timepoints=0,
                         total_simulations=7)[0]
 
 light_sequence = [1]*12*2*n_hours + [0]*12*n_hours + [int(bit) for bit in random_bit]
-# light_sequence = [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24
+light_sequence = [1]*12*6 + [0]*12*6
 x = [t/12. for t in range(len(light_sequence)+1)]
 
 # Find new parameters
 K_I_new_list = [60/1.5, 60, 60*1.5]
+# K_I_new_list = [20, 40, 80, 160]
 refcell = dcc.simulations.CcaSR_Cascade()
 
 cascade_params_list = []
@@ -200,30 +217,34 @@ for K_I_new in K_I_new_list:
 # plot
 fig, axes = plt.subplots(1, len(cascade_params_list), 
                          figsize=(5*len(cascade_params_list),4))
-alpha=0.3
-lw = 1
+alpha=0.2
+lw = 2
 
 for p, new_params in enumerate(cascade_params_list):
-    
-    # Simulate cell
-    cell = dcc.simulations.CcaSR_Cascade()
-    cell.update_params(new_params)
-    cell.set_light_events(light_sequence)     
-    series_list = cell.run(len(light_sequence)*5, 
-                           solver="original", 
-                           realizations=n_cells)
     
     # Plot results
     plt.sca(axes[p])
     dcc.utilities.OptoPlotBackground(light_sequence, ymax=250, x=x)
-    for series in series_list:
+    for i in range(n_cells):
+        # Simulate cell
+        cell = dcc.simulations.CcaSR_Cascade()
+        cell.update_params(new_params)
+        cell.set_light_events(light_sequence)     
+        series = cell.run(len(light_sequence)*5, 
+                               solver="original")
     
+        # axes[p].plot(x, [state['H'] for state in series],
+        #               color='r',
+        #               alpha=alpha, lw=lw)
+        # axes[p].plot(x, [state['E'] for state in series],
+        #               color='g',
+        #               alpha=alpha, lw=lw)
         axes[p].plot(x, [state['I'] for state in series],
-                      color='tab:purple',
+                      color='#6d418a',
                       alpha=alpha, lw=lw)
         axes[p].plot(x, [state['F'] for state in series],
-                     color='b',
-                     alpha=alpha, lw=lw)
+                      color='b',
+                      alpha=alpha, lw=lw)
     axes[p].set_xlabel("time (hours)")
     axes[p].set_ylabel("proteins (#)")
     axes[p].set_ylim(0,150)
@@ -284,24 +305,26 @@ fig, axes = plt.subplots(1, len(new_params_list),
 
 for p, new_params in enumerate(new_params_list):
     
-    # Simulate cell
-    cell = dcc.simulations.CcaSR_FeedforwardPositive()
-    cell.update_params(new_params)
-    cell.set_light_events(light_sequence)     
-    series_list = cell.run(len(light_sequence)*5, 
-                           solver="original", 
-                           realizations=n_cells)
+    
     
     # Plot results
     plt.sca(axes[p])
     dcc.utilities.OptoPlotBackground(light_sequence, ymax=250, x=x)
-    for series in series_list:
+    
+    for i in range(n_cells):
+        # Simulate cell
+        cell = dcc.simulations.CcaSR_FeedforwardPositive()
+        cell.update_params(new_params)
+        cell.set_light_events(light_sequence)     
+        series = cell.run(len(light_sequence)*5, 
+                               solver="original")
+    
     
         axes[p].plot(x, [state['I'] for state in series],
-                      color='tab:purple',
+                      color='#6d418a',
                       alpha=alpha, lw=lw)
         axes[p].plot(x, [state['J'] for state in series],
-                      color = '#577ebd',
+                      color = '#9c065d',
                       alpha=alpha, lw=lw)
         axes[p].plot(x, [state['F'] for state in series],
                      color='b',
@@ -382,6 +405,72 @@ default_horizon = df_meta['horizon']==24
 default_past_steps = df_meta['past_steps']==36
 default_training_size = df_meta['training_sets']=='training_set'
 
+
+#%% Cascade: error in each fluorescence bin
+
+n_bins=20
+q = 0.5
+
+# Which cell class, h1, and horizon values to plot
+cell_class = 'CcaSR_Cascade'
+KI_vals = [40, 60, 90]
+color_list = ['r','g','b']
+
+# Keep simulations with default training size, default past, and same h1/h2 ratio
+simul_slice = default_training_size & default_past_steps & default_horizon
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+df_past = df_past.sort_values(by=['K_I',])
+
+fig, axes = plt.subplots(1, 2, figsize=(9,5), sharey=True)
+alpha=0.5
+# Rather than plotting everything, just plot one replicate of each trained model
+for k, K_I in enumerate(KI_vals):
+    
+    df_index = (df_past['K_I']==K_I)
+    simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+    
+    for i in range(2):    
+        # Look at one hour
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        fluo = fluo[:,:,i*12:(i+1)*12]
+        fluo_pred = fluo_pred[:,:,i*12:(i+1)*12]
+    
+        # Calulate error
+        SE = (fluo - fluo_pred)**2
+        bins = np.linspace(0,4100, n_bins+1)
+        RMSE_bins = np.zeros((n_bins, 
+                                np.shape(SE)[0]))
+        
+        # Look at error in each bin
+        for b in range(n_bins):
+            
+            SE_bin = np.nan*np.ones_like(SE)
+            SE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = SE[(fluo>bins[b])&(fluo<bins[b+1])]
+            # Median across each cell's future and time points?
+            RMSE_bins[b] = np.sqrt(np.nanmean(SE_bin, axis=[1,2]))
+                
+        axes[i].plot(bins[:-1], 
+                     np.nanmedian(RMSE_bins, axis=[1,]),
+                      '.-', color=color_list[k], 
+                      label=f'K_I = {K_I}')
+        axes[i].fill_between(
+            bins[:-1],
+            np.nanquantile(RMSE_bins, axis=1, q=0.5-q/2),
+            np.nanquantile(RMSE_bins, axis=1, q=0.5+q/2),
+            color=color_list[k],
+            alpha=.2,
+            )
+    
+        axes[i].legend()   
+        axes[i].grid(True, 'both','both')
+        axes[i].set_title(f'hour {i+1}')
+        axes[i].set_xlabel('fluorescence')
+        axes[i].set_ylabel(f'RMSE ({np.shape(fluo)[1]} futures of {np.shape(fluo)[0]} cells)\nMiddle {q*100:.0f}%')
+    plt.tight_layout()
+    plt.savefig(f'{fig_path}/fig3_{cell_class}_qplot_err_fluor_bin.png',dpi=300)
+    
+
 #%% Cascade x horizon
 
 # Which cell class, h1, and horizon values to plot
@@ -397,6 +486,7 @@ df_past = df_past.sort_values(by=['K_I','horizon'])
 
 fig, axes = plt.subplots(1, len(KI_vals), figsize=(10,3), sharey=True)
 alpha=0.5
+q = 0.5
 # Rather than plotting everything, just plot one replicate of each trained model
 for k, K_I in enumerate(KI_vals):
     
@@ -404,15 +494,22 @@ for k, K_I in enumerate(KI_vals):
         df_index = (df_past['K_I']==K_I)&(df_past['horizon']==horizon)
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
     
-        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
-        t = [x/12. for x in range(len(RMSE))]
-        axes[k].plot(t, RMSE, '.', 
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        t = [x/12. for x in range(np.shape(RMSE)[-1])]
+        axes[k].plot(t, np.median(RMSE,axis=[0,]), '.', 
                      color = horizon_color_dict[horizon],
-                     alpha=alpha,
                      label=f'horizon={horizon}')
+        axes[k].fill_between(
+            t,
+            np.nanquantile(RMSE, axis=[0], q=0.5-q/2),
+            np.nanquantile(RMSE, axis=[0], q=0.5+q/2),
+            color=horizon_color_dict[horizon],
+            alpha=alpha,
+            )
     
     axes[k].set_title(f'K_I={K_I}')
+    axes[k].grid(True, 'both', 'both')
     axes[k].legend()
     axes[k].set_xlabel('time (h)')
     axes[k].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
@@ -440,20 +537,100 @@ for k, K_I in enumerate(KI_vals):
         df_index = (df_past['K_I']==K_I)&(df_past['past_steps']==past_steps)
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
     
-        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
-        t = [x/12. for x in range(len(RMSE))]
-        axes[k].plot(t, RMSE, '.', 
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        t = [x/12. for x in range(np.shape(RMSE)[-1])]
+        axes[k].plot(t, np.median(RMSE,axis=[0,]), '.', 
                      color = past_steps_color_dict[past_steps],
-                     alpha=alpha,
                      label=f'past steps={past_steps}')
+        axes[k].fill_between(
+            t,
+            np.nanquantile(RMSE, axis=[0], q=0.5-q/2),
+            np.nanquantile(RMSE, axis=[0], q=0.5+q/2),
+            color=past_steps_color_dict[past_steps],
+            alpha=alpha,
+            )
     
     axes[k].set_title(f'K_I={K_I}')
     axes[k].legend()
     axes[k].set_xlabel('time (h)')
     axes[k].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
+    axes[k].grid(True, 'both', 'both')
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_past_steps.png', dpi=600)
+
+
+#%% FF+ error binned by fluorescence
+
+n_bins=20
+q = 0.5
+
+# Which cell class, h1, and horizon values to plot
+cell_class = 'CcaSR_FeedforwardPositive'
+params_list = [{'K_I': 120, 'K_J': 120},
+                   {'K_I': 120, 'K_J': 30},
+                   {'K_I': 60, 'K_J': 120},
+                   {'K_I': 60, 'K_J': 30},
+                    ]
+color_list = ['b','tab:purple','r','#db6837']
+
+# Keep simulations with default training size, default past, and same h1/h2 ratio
+simul_slice = default_training_size & default_past_steps & default_horizon
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+df_past = df_past.sort_values(by=['K_I','K_J'])
+
+fig, axes = plt.subplots(1, 2, figsize=(9,5), sharey=True)
+alpha=0.5
+# Rather than plotting everything, just plot one replicate of each trained model
+for p, params in enumerate(params_list):
+    
+    K_I = params['K_I']
+    K_J = params['K_J']
+    
+    df_index = (df_past['K_I']==K_I)&(df_past['K_J']==K_J)
+    simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+    
+    for i in range(2):    
+        # Look at one hour
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        fluo = fluo[:,:,i*12:(i+1)*12]
+        fluo_pred = fluo_pred[:,:,i*12:(i+1)*12]
+    
+        # Calulate error
+        SE = (fluo - fluo_pred)**2
+        bins = np.linspace(0,4100, n_bins+1)
+        RMSE_bins = np.zeros((n_bins, 
+                                np.shape(SE)[0]))
+        
+        # Look at error in each bin
+        for b in range(n_bins):
+            
+            SE_bin = np.nan*np.ones_like(SE)
+            SE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = SE[(fluo>bins[b])&(fluo<bins[b+1])]
+            # Median across each cell's future and time points?
+            RMSE_bins[b] = np.sqrt(np.nanmean(SE_bin, axis=[1,2]))
+         
+        axes[i].plot(bins[:-1], 
+                     np.nanmedian(RMSE_bins, axis=[1,]),
+                      '.-', color=color_list[p], 
+                      label=f'K_I = {K_I}, K_J={K_J}')
+        axes[i].fill_between(
+            bins[:-1],
+            np.nanquantile(RMSE_bins, axis=1, q=0.5-q/2),
+            np.nanquantile(RMSE_bins, axis=1, q=0.5+q/2),
+            color=color_list[p],
+            alpha=.2,
+            )
+    
+        axes[i].legend()   
+        axes[i].set_title(f'hour {i+1}')
+        axes[i].set_xlabel('fluorescence')
+        axes[i].set_ylabel(f'RMSE ({np.shape(fluo)[1]} futures of {np.shape(fluo)[0]} cells)\nMiddle {q*100:.0f}%')
+        axes[i].grid(True, 'both','both')
+    plt.tight_layout()
+    plt.savefig(f'{fig_path}/fig3_{cell_class}_qplot_err_fluor_bin.png',dpi=300)
+    
 
 #%% FF x horizon
 
@@ -482,22 +659,29 @@ for p, params in enumerate(params_list):
         df_index = (df_past['K_I']==K_I)&(df_past['K_J']==K_J)&(df_past['horizon']==horizon)
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
     
-        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
-        t = [x/12. for x in range(len(RMSE))]
-        axes[p].plot(t, RMSE, '.', 
-                      color = horizon_color_dict[horizon],
-                      alpha=alpha,
-                      label=f'horizon={horizon}')
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        t = [x/12. for x in range(np.shape(RMSE)[-1])]
+        axes[k].plot(t, np.median(RMSE,axis=[0,]), '.', 
+                     color = horizon_color_dict[horizon],
+                     label=f'horizon={horizon}')
+        axes[k].fill_between(
+            t,
+            np.nanquantile(RMSE, axis=[0], q=0.5-q/2),
+            np.nanquantile(RMSE, axis=[0], q=0.5+q/2),
+            color=horizon_color_dict[horizon],
+            alpha=alpha,
+            )
     
     axes[p].set_title(f'K_I={K_I}, K_J={K_J}')
+    axes[p].grid(True, 'both','both')
     axes[p].legend()
     axes[p].set_xlabel('time (h)')
     axes[p].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
 plt.tight_layout()
 plt.savefig(f'{fig_path}/fig3_{cell_class}_effect_of_horizon.png', dpi=600)
 
-#%% Plot MEDIAN error as function of horizon 
+#%% Plot MEDIAN error as function of past steps 
 
 # Which cell class, h1, and horizon values to plot
 cell_class = 'CcaSR_FeedforwardPositive'
@@ -524,15 +708,22 @@ for p, params in enumerate(params_list):
         df_index = (df_past['K_I']==K_I)&(df_past['K_J']==K_J)&(df_past['past_steps']==past_steps)
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
     
-        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=0)
-        t = [x/12. for x in range(len(RMSE))]
-        axes[p].plot(t, RMSE, '.', 
-                      color = past_steps_color_dict[past_steps],
-                      alpha=alpha,
-                      label=f'past steps={past_steps}')
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        t = [x/12. for x in range(np.shape(RMSE)[-1])]
+        axes[k].plot(t, np.median(RMSE,axis=[0,]), '.', 
+                     color = past_steps_color_dict[past_steps],
+                     label=f'past steps={past_steps}')
+        axes[k].fill_between(
+            t,
+            np.nanquantile(RMSE, axis=[0], q=0.5-q/2),
+            np.nanquantile(RMSE, axis=[0], q=0.5+q/2),
+            color=past_steps_color_dict[past_steps],
+            alpha=alpha,
+            )
     
     axes[p].set_title(f'K_I={K_I}, K_J={K_J}')
+    axes[p].grid(True, 'both','both')
     axes[p].legend()
     axes[p].set_xlabel('time (h)')
     axes[p].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
