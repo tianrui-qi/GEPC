@@ -132,10 +132,17 @@ def get_params(simul_id):
 
 #%% Global plot styles
 
-model_color_dict = {'CcaSR_gillespie_simple_noE': 'r',
-              'CcaSR_gillespie': 'k'}
-model_list = [key for key in model_color_dict.keys()]
-
+df_simul_config = pd.DataFrame({'cell_class': ['CcaSR_gillespie',
+                                               'CcaSR_gillespie_simple_noE',
+                                               'CcaSR_gillespie_simple_noE',
+                                               'CcaSR_gillespie_simple_noE'],
+                                'camera_sim': [True, True, True, False],
+                                'solver': ['original','original','ode', 'ode'],
+                                'color': ["#327a42",
+                                            "#5a6eb8",
+                                            "#57377b",
+                                            "#c561b0",]}
+                            )
 
 
 #%% Check training data
@@ -244,18 +251,13 @@ default_h1 = np.abs((df_meta['h1'] - _h1) / _h1) < 0.01
 default_h2 = np.abs((df_meta['h2'] - _h2) / _h2) < 0.01
 default_h1h2 = np.abs(((df_meta['h1'] / df_meta['h2']) - _h1h2) / _h1h2) < 0.01
 
-df_simul_config = pd.DataFrame({'camera_sim': [True, True, False],
-                                'solver': ['original','ode', 'ode'],
-                                'color': ['b', 'g', 'r']}
-                            )
-
 
 #%% Plot responses to pure light
 
 n_hours = 4
-n_cells = 3
-alpha = 0.5
-lw = 2
+n_cells = 1
+alpha = 0.8
+lw = 2.5
 
 # Get light
 random_bit = dcc.utilities.random_stimulations(
@@ -267,10 +269,6 @@ light_sequence = [1]*12*n_hours + [0]*12*n_hours + [int(bit) for bit in random_b
 # light_sequence = [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24
 x = [t/12. for t in range(len(light_sequence)+1)]
 
-# Only for plot title, not instantiation
-plt.figure()
-cell_class = 'CcaSR_gillespie_simple_noE'
-
 for c in range(len(df_simul_config)):
     
     config = df_simul_config.loc[c]
@@ -279,7 +277,13 @@ for c in range(len(df_simul_config)):
     dcc.utilities.OptoPlotBackground(light_sequence, ymax=4095, x=x)
 
     for i in range(n_cells):
-        cell = dcc.simulations.CcaSR_gillespie_simple_noE()
+        cell_class = config['cell_class']
+        if cell_class=='CcaSR_gillespie_simple_noE':
+            cell = dcc.simulations.CcaSR_gillespie_simple_noE()
+        elif cell_class=='CcaSR_gillespie':
+            cell = dcc.simulations.CcaSR_gillespie()
+        else:
+            print('Wrong class string')
         cell.set_light_events(light_sequence) 
         
         series = cell.run(len(light_sequence)*5, 
@@ -301,125 +305,89 @@ for c in range(len(df_simul_config)):
         
 plt.xlabel('time (h)')
 plt.ylabel('Fluorescence (AU)')
-plt.title(cell_class)
+plt.xlim([0,20])
+plt.ylim([0,4095])
 plt.tight_layout()
-plt.savefig(f'{fig_path}/fig1_{cell_class}_off-on_camera_noise_stochasticity.png',
+plt.savefig(f'{fig_path}/fig1_sample_activation_different_noise.png',
             dpi=300)
-
-# Only for plot title, not instantiation
-plt.figure()
-cell_class = 'CcaSR_gillespie'
-
-for c in range(len(df_simul_config)):
-    
-    config = df_simul_config.loc[c]    
-    
-    # Plot light
-    dcc.utilities.OptoPlotBackground(light_sequence, ymax=4095, x=x)
-
-    for i in range(n_cells):
-        cell = dcc.simulations.CcaSR_gillespie_simple_noE()
-        cell.set_light_events(light_sequence) 
-        
-        series = cell.run(len(light_sequence)*5, 
-                               solver=config['solver'])
-        
-        fluo = [state['F'] for state in series]
-            
-        fluo = np.array(fluo)
-        if config['camera_sim']: 
-            fluo = dcc.simulations.camera_sim(fluo)
-        else:
-            fluo = dcc.simulations.camera_sim(fluo, noise_perc=0)
-    
-        # Plot results
-        plt.plot(x, fluo, 
-                  lw=lw, 
-                  alpha=alpha,
-                  color=config['color'])
-        
-plt.xlabel('time (h)')
-plt.ylabel('Fluorescence (AU)')
-plt.title(cell_class)
-plt.tight_layout()
-plt.savefig(f'{fig_path}/fig1_{cell_class}_off-on_camera_noise_stochasticity.png',
-            dpi=300)
-
 
 
 #%% Plot select predictions
 
 default_models = default_training_size & default_past_steps & default_horizon & default_h1 & default_h2
-
-for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
-        
-    df_cc = df_meta.loc[default_models & (df_meta['cell_class']==cell_class)].reset_index()
+lw = 0.75
+for c in range(len(df_simul_config)):
     
-    for c in range(len(df_cc)):
-        simul_id = df_cc.loc[c,'simul_id']
-        camera_sim = df_cc.loc[c,'camera_sim']
-        solver = df_cc.loc[c,'solver']
-        color = df_simul_config.loc[(df_simul_config['camera_sim']==camera_sim)&(df_simul_config['solver']==solver),'color'].values[0]
+    config = df_simul_config.loc[c]
+    camera_sim = config['camera_sim']
+    solver = config['solver']
+    cell_class = config['cell_class']
+    color = config['color']
+    config_bool = (df_meta['camera_sim']==camera_sim)&(df_meta['solver']==solver)&(df_meta['cell_class']==cell_class)
+    
+    simul_id = df_meta.loc[default_models & config_bool, 'simul_id'].values[0]
+    
+    # Find best and worst error
+    fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+    RMSE_sum_across_time = np.sum(np.sqrt((fluo - fluo_pred)**2), axis=1)
+    sorted_error = np.argsort(RMSE_sum_across_time)
+    
+    percentile = [250, 500, 750]
+    plot_list = [sorted_error[i] for i in percentile]
+    
+    stims, past_fluo, futures_fluo = get_eval_data(simul_id)
+    model_params, training_params = get_params(simul_id)
+    
+    plot_past = 3*12 # Only plot the past 3 hours (even though whole past is used)
+    cutoff = past_fluo.shape[1]
+    
+    fig, axes = plt.subplots(len(plot_list), 1,
+                              figsize=(3, 2*len(plot_list)),
+                              sharex=True)
+    for i, pl in enumerate(plot_list):
+            
+        # Stimulations
+        plt.sca(axes[i])
+        dcc.utilities.OptoPlotBackground(
+            stims[pl,cutoff-plot_past:cutoff+training_params["horizon"]],
+            x=np.arange(-plot_past, training_params["horizon"])/12,
+            ymax = 4095
+            )
+        
+        # Past
+        axes[i].plot(np.arange(-plot_past, 0)/12, 
+                      past_fluo[pl, -plot_past:],
+                      color, lw=3*lw)
+        
+        # Future
+        axes[i].plot(np.arange(0, training_params["horizon"])/12, 
+                  futures_fluo[pl, :, :training_params['horizon']].T, 
+                  color=color, alpha=0.01)
+        
+        # Prediction
+        axes[i].plot(np.arange(0, training_params["horizon"])/12, 
+                  fluo_pred[pl],
+                  color='k', lw=3*lw)
+        
+        # Prediction starts line
+        axes[i].plot([-0.5/12, -0.5/12], [0, 4095], color="gray")
+        
+        # Limits and labels
+        axes[i].set_ylim([0,4095])
+        axes[i].set_yticklabels([])
+        axes[i].set_xticklabels([])
+        # plt.title(f'Cell {c}')
+        # axes[i].set_xlabel("time (h)")
+        # axes[i].set_ylabel("Fluorescence (a.u.)")
+        # axes[i].set_title(f'{100 * percentile[i] / len(sorted_error):.0f}th percentile')
+    axes[-1].set_xlim([-plot_past/12, training_params["horizon"]/12])
+    # plt.suptitle(f'{cell_class}, camera_sim {camera_sim}, solver:{solver}')
+    plt.tight_layout()
+    plt.savefig(fig_path+f'/fig1_{cell_class}_predictions_percentiles_camera_sim_{camera_sim}_solver_{solver}.png', dpi=300)
 
-        # Find best and worst error, arbitrarily relative to the first cell future
-        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE_sum_across_time = np.sum(np.sqrt((fluo - fluo_pred)**2), axis=1)
-        sorted_error = np.argsort(RMSE_sum_across_time)
-        
-        percentile = [50, 500, 950]
-        plot_list = [sorted_error[i] for i in percentile]
-        
-        stims, past_fluo, futures_fluo = get_eval_data(simul_id)
-        model_params, training_params = get_params(simul_id)
-        
-        plot_past = 3*12 # Only plot the past 3 hours (even though whole past is used)
-        cutoff = past_fluo.shape[1]
-        
-        fig, axes = plt.subplots(len(plot_list), 1,
-                                 figsize=(4, 3*len(plot_list)),
-                                 sharex=True)
-        for i, pl in enumerate(plot_list):
-                
-            # Stimulations
-            plt.sca(axes[i])
-            dcc.utilities.OptoPlotBackground(
-                stims[pl,cutoff-plot_past:cutoff+training_params["horizon"]],
-                x=np.arange(-plot_past, training_params["horizon"])/12,
-                ymax = 4095
-                )
-            
-            # Past
-            axes[i].plot(np.arange(-plot_past, 0)/12, 
-                         past_fluo[pl, -plot_past:],
-                         "k")
-            
-            # Future
-            axes[i].plot(np.arange(0, training_params["horizon"])/12, 
-                     futures_fluo[pl, 0, :training_params['horizon']], 
-                     "k")
-            
-            # Prediction
-            axes[i].plot(np.arange(0, training_params["horizon"])/12, 
-                     fluo_pred[pl],
-                     "b")
-            
-            # Prediction starts line
-            axes[i].plot([-0.5/12, -0.5/12], [0, 4095], color="gray")
-            
-            # Limits and labels
-            axes[i].set_ylim([0,4095])
-            # plt.title(f'Cell {c}')
-            axes[i].set_xlabel("time (h)")
-            axes[i].set_ylabel("Fluorescence (a.u.)")
-            axes[i].set_title(f'{100 * percentile[i] / len(sorted_error):.0f}th percentile')
-        axes[-1].set_xlim([-plot_past/12, training_params["horizon"]/12])
-        plt.suptitle(f'{cell_class}, camera_sim {camera_sim}, solver:{solver}')
-        plt.tight_layout()
-        plt.savefig(fig_path+f'/fig1_{cell_class}_predictions_percentiles_config_{color}.png', dpi=300)
+#%% Q-plot of error  v. fluorescence(better for overlay?)
 
-#%% TO DO: fix this /Q-plot of error  v. fluorescence(better for overlay?)
-
-n_bins=200
+n_bins=20
 q = 0.5
 default_models = default_training_size & default_past_steps & default_horizon & default_h1 & default_h2
 
@@ -452,15 +420,15 @@ for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
                 SE_bin = np.nan*np.ones_like(SE)
                 SE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = SE[(fluo>bins[b])&(fluo<bins[b+1])]
                 # Median across each cell's future and time points?
-                RMSE_bins[b] = np.sqrt(np.nanmean(SE_bin, axis=[1,2]))
+                RMSE_bins[b] = np.sqrt(np.nanmean(SE_bin, axis=(1,2)))
         
-            axes[i].plot(bins[:-1], RMSE_median_bins,
+            axes[i].plot(bins[:-1], np.median(RMSE_bins, axis=1),
                           '.-', color=color, 
                           label=f'camera noise {camera_sim}, solver: {solver}')
             axes[i].fill_between(
                 bins[:-1],
-                RMSE_extrema_bins[:,0],
-                RMSE_extrema_bins[:,1],
+                np.nanquantile(RMSE_bins, axis=1, q=0.5-q/2),
+                np.nanquantile(RMSE_bins, axis=1, q=0.5+q/2),
                 color=color,
                 alpha=.2,
                 )
@@ -476,113 +444,41 @@ for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
 #%% Q-plot of error  v. time (better for overlay?)
 
 q = 0.5
-default_models = default_training_size & default_past_steps & default_horizon & default_h1 & default_h2
-
-for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
-    plt.figure()
-                                           
-    df_cc = df_meta.loc[default_models & (df_meta['cell_class']==cell_class)].reset_index()
+alpha=0.3
+for c in range(len(df_simul_config)):
     
-    for c in range(len(df_cc)):
-        simul_id = df_cc.loc[c,'simul_id']
-        camera_sim = df_cc.loc[c,'camera_sim']
-        solver = df_cc.loc[c,'solver']
-        color = df_simul_config.loc[(df_simul_config['camera_sim']==camera_sim)&(df_simul_config['solver']==solver),'color'].values[0]
-
-        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True)
-        x = np.arange(np.shape(fluo)[-1])/12
-            
-        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2), axis=1)
+    config = df_simul_config.loc[c]
+    camera_sim = config['camera_sim']
+    solver = config['solver']
+    cell_class = config['cell_class']
+    color = config['color']
+    config_bool = (df_meta['camera_sim']==camera_sim)&(df_meta['solver']==solver)&(df_meta['cell_class']==cell_class)
+    
+    simul_id = df_meta.loc[default_models & config_bool, 'simul_id'].values[0]
+    
+    fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True)
+    x = np.arange(np.shape(fluo)[-1])/12
         
-        plt.plot(x, np.median(RMSE, axis=0),
-                      '.-', color=color, 
-                      label=f'camera noise {camera_sim}, solver: {solver}')
-        plt.fill_between(
-            x,
-            np.nanquantile(RMSE, axis=0, q=0.5-q/2),
-            np.nanquantile(RMSE, axis=0, q=0.5+q/2),
-            color=color,
-            alpha=.2,
-            )
-        
-        plt.legend()   
-        plt.title(cell_class)
-        plt.xlabel('time( h)')
-        plt.ylabel(f'RMSE: Middle {q*100:.0f}%')
-        plt.ylim([0,450])
-        plt.grid(True, 'both','both')
-    plt.tight_layout()
-    plt.savefig(f'{fig_path}/fig1_{cell_class}_qplot_err_across_diff_noise_over_time.png',dpi=300)
-
-#%% Violin plots of error
-
-a = 0.05
-q_range = [a, 1-a]
-default_models = default_training_size & default_past_steps & default_horizon & default_h1 & default_h2
-
-for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
-    plt.figure(figsize=(13,3))
-        
-    df_cc = df_meta.loc[default_models & (df_meta['cell_class']==cell_class)].reset_index()
+    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
     
-    for c in range(len(df_cc)):
-        simul_id = df_cc.loc[c,'simul_id']
-        camera_sim = df_cc.loc[c,'camera_sim']
-        solver = df_cc.loc[c,'solver']
-        color = df_simul_config.loc[(df_simul_config['camera_sim']==camera_sim)&(df_simul_config['solver']==solver),'color']
-        
-        # Find best and worst error, arbitrarily relative to the first cell future
-        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.sqrt((fluo - fluo_pred)**2)
-        
-        for i in range(np.shape(RMSE)[1]):
-            
-            RMSE_i = RMSE[:,i]
-            quantiles = np.quantile(RMSE_i, q_range)
-            y = RMSE_i[(RMSE_i > quantiles[0]) & ((RMSE_i < quantiles[1]))]
-            
-            violins = plt.violinplot(y, 
-                            positions=[(i+c/4)/12,], 
-                            widths=1/12/4, 
-                            showmeans=False,
-                            showmedians=True,
-                            showextrema=False)
-            
-            violins['cmedians'].set_color(color)
-            for v in violins['bodies']:
-                v.set_facecolor(color)
-                v.set_edgecolor(color)
-                
-    plt.xlabel('time (h)')
-    plt.ylabel(f'RMSE\n{int(q_range[0]*100)} to {int(q_range[1]*100)}th percentile')
-    plt.title(cell_class)
-    plt.tight_layout()
-    plt.savefig(f'{fig_path}/fig1_{cell_class}_err_dist_over_time.png', dpi=300)
-
-#%% Plot err v. value
-
-alpha=0.03
-markersize=5
-
-default_models = default_training_size & default_past_steps & default_horizon
-
-fig, axes = plt.subplots(1, len(model_list), figsize=(12,3), sharey=True)
-for m, model in enumerate(model_list):
-
-    simul_id = df_meta.loc[default_models & (df_meta['cell_class']==model), 'simul_id'].values[-1]
+    plt.plot(x, np.median(RMSE, axis=0),
+                  '.-', color=color, )
+                  # label=f'{cell_class}, camera noise {camera_sim}, solver: {solver})
     
-    # Find best and worst error, arbitrarily relative to the first cell future
-    fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-    RMSE = np.sqrt((fluo - fluo_pred)**2)
+    # Lightweight shading: 95%
+    plt.fill_between(
+        x,
+        np.nanquantile(RMSE, axis=0, q=0.5 - q/2),
+        np.nanquantile(RMSE, axis=0, q=0.5 + q/2),
+        color=color,
+        alpha=alpha,
+        lw=0,
+        )
     
-    axes[m].plot(fluo, RMSE, '.', 
-                     alpha=alpha,
-                     markersize=markersize,
-                     color = model_color_dict[model])
-    
-    axes[m].set_ylim([0, 2000])
-    axes[m].set_xlim([0, 4095])     
-    axes[m].set_xlabel('simulated fluo')
-    axes[m].set_title(model)
-    
-axes[0].set_ylabel('RMSE')
+# plt.legend()   
+plt.xlabel('time( h)')
+plt.ylabel(f'RMSE: Middle {q*100:.0f}%')
+plt.ylim([0,450])
+plt.grid(True, 'both','both')
+plt.tight_layout()
+plt.savefig(f'{fig_path}/fig1_qplot_err_across_diff_noise_over_time.png',dpi=300)
