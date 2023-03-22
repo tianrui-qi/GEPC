@@ -184,18 +184,19 @@ for c, cell_class in enumerate(plot_list):
 #%% Cascade: responses to pure light, to show delays
 
 n_hours = 6
-n_cells = 40
+n_cells = 50
 random_bit = dcc.utilities.random_stimulations(
                         timepoints=n_hours*12*2,
                         nostim_timepoints=0,
                         total_simulations=7)[0]
 
 light_sequence = [1]*12*2*n_hours + [0]*12*n_hours + [int(bit) for bit in random_bit]
-# light_sequence = [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24
+light_sequence = [1]*12*6 + [0]*12*6
 x = [t/12. for t in range(len(light_sequence)+1)]
 
 # Find new parameters
 K_I_new_list = [60/1.5, 60, 60*1.5]
+# K_I_new_list = [20, 40, 80, 160]
 refcell = dcc.simulations.CcaSR_Cascade()
 
 cascade_params_list = []
@@ -216,30 +217,34 @@ for K_I_new in K_I_new_list:
 # plot
 fig, axes = plt.subplots(1, len(cascade_params_list), 
                          figsize=(5*len(cascade_params_list),4))
-alpha=0.3
-lw = 1
+alpha=0.2
+lw = 2
 
 for p, new_params in enumerate(cascade_params_list):
-    
-    # Simulate cell
-    cell = dcc.simulations.CcaSR_Cascade()
-    cell.update_params(new_params)
-    cell.set_light_events(light_sequence)     
-    series_list = cell.run(len(light_sequence)*5, 
-                           solver="original", 
-                           realizations=n_cells)
     
     # Plot results
     plt.sca(axes[p])
     dcc.utilities.OptoPlotBackground(light_sequence, ymax=250, x=x)
-    for series in series_list:
+    for i in range(n_cells):
+        # Simulate cell
+        cell = dcc.simulations.CcaSR_Cascade()
+        cell.update_params(new_params)
+        cell.set_light_events(light_sequence)     
+        series = cell.run(len(light_sequence)*5, 
+                               solver="original")
     
+        # axes[p].plot(x, [state['H'] for state in series],
+        #               color='r',
+        #               alpha=alpha, lw=lw)
+        # axes[p].plot(x, [state['E'] for state in series],
+        #               color='g',
+        #               alpha=alpha, lw=lw)
         axes[p].plot(x, [state['I'] for state in series],
-                      color='tab:purple',
+                      color='#6d418a',
                       alpha=alpha, lw=lw)
         axes[p].plot(x, [state['F'] for state in series],
-                     color='b',
-                     alpha=alpha, lw=lw)
+                      color='b',
+                      alpha=alpha, lw=lw)
     axes[p].set_xlabel("time (hours)")
     axes[p].set_ylabel("proteins (#)")
     axes[p].set_ylim(0,150)
@@ -300,24 +305,26 @@ fig, axes = plt.subplots(1, len(new_params_list),
 
 for p, new_params in enumerate(new_params_list):
     
-    # Simulate cell
-    cell = dcc.simulations.CcaSR_FeedforwardPositive()
-    cell.update_params(new_params)
-    cell.set_light_events(light_sequence)     
-    series_list = cell.run(len(light_sequence)*5, 
-                           solver="original", 
-                           realizations=n_cells)
+    
     
     # Plot results
     plt.sca(axes[p])
     dcc.utilities.OptoPlotBackground(light_sequence, ymax=250, x=x)
-    for series in series_list:
+    
+    for i in range(n_cells):
+        # Simulate cell
+        cell = dcc.simulations.CcaSR_FeedforwardPositive()
+        cell.update_params(new_params)
+        cell.set_light_events(light_sequence)     
+        series = cell.run(len(light_sequence)*5, 
+                               solver="original")
+    
     
         axes[p].plot(x, [state['I'] for state in series],
-                      color='tab:purple',
+                      color='#6d418a',
                       alpha=alpha, lw=lw)
         axes[p].plot(x, [state['J'] for state in series],
-                      color = '#577ebd',
+                      color = '#9c065d',
                       alpha=alpha, lw=lw)
         axes[p].plot(x, [state['F'] for state in series],
                      color='b',
@@ -401,7 +408,7 @@ default_training_size = df_meta['training_sets']=='training_set'
 
 #%% Cascade: error in each fluorescence bin
 
-n_bins=200
+n_bins=20
 q = 0.5
 
 # Which cell class, h1, and horizon values to plot
@@ -432,23 +439,25 @@ for k, K_I in enumerate(KI_vals):
         # Calulate error
         RMSE = np.sqrt((fluo - fluo_pred)**2)
         bins = np.linspace(0,4100, n_bins+1)
-        RMSE_median_bins = np.zeros((n_bins,))
-        RMSE_extrema_bins = np.zeros((n_bins, 2))
+        RMSE_bins = np.zeros((n_bins, 
+                                np.shape(RMSE)[0]))
         
         # Look at error in each bin
         for b in range(n_bins):
             
-            RMSE_bin = RMSE[(fluo>bins[b])&(fluo<bins[b+1])]
-            RMSE_median_bins[b] = np.median(RMSE_bin)
-            RMSE_extrema_bins[b] = np.nanquantile(RMSE_bin, [0.5-q/2, 0.5+q/2])
-    
-        axes[i].plot(bins[:-1], RMSE_median_bins,
+            RMSE_bin = np.nan*np.ones_like(RMSE)
+            RMSE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = RMSE[(fluo>bins[b])&(fluo<bins[b+1])]
+            # Median across each cell's future and time points?
+            RMSE_bins[b] = np.nanmedian(RMSE_bin, axis=[1,2])
+                
+        axes[i].plot(bins[:-1], 
+                     np.nanmedian(RMSE_bins, axis=[1,]),
                       '.-', color=color_list[k], 
                       label=f'K_I = {K_I}')
         axes[i].fill_between(
             bins[:-1],
-            RMSE_extrema_bins[:,0],
-            RMSE_extrema_bins[:,1],
+            np.nanquantile(RMSE_bins, axis=1, q=0.5-q/2),
+            np.nanquantile(RMSE_bins, axis=1, q=0.5+q/2),
             color=color_list[k],
             alpha=.2,
             )
@@ -458,7 +467,6 @@ for k, K_I in enumerate(KI_vals):
         axes[i].set_title(f'hour {i+1}')
         axes[i].set_xlabel('fluorescence')
         axes[i].set_ylabel(f'RMSE ({np.shape(fluo)[1]} futures of {np.shape(fluo)[0]} cells)\nMiddle {q*100:.0f}%')
-        axes[i].set_ylim([0,800])
     plt.tight_layout()
     plt.savefig(f'{fig_path}/fig3_{cell_class}_qplot_err_fluor_bin.png',dpi=300)
     
@@ -538,6 +546,7 @@ for k, K_I in enumerate(KI_vals):
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_past_steps.png', dpi=600)
 
+
 #%% FF+ error binned by fluorescence
 
 n_bins=20
@@ -578,23 +587,25 @@ for p, params in enumerate(params_list):
         # Calulate error
         RMSE = np.sqrt((fluo - fluo_pred)**2)
         bins = np.linspace(0,4100, n_bins+1)
-        RMSE_median_bins = np.zeros((n_bins,))
-        RMSE_extrema_bins = np.zeros((n_bins, 2))
+        RMSE_bins = np.zeros((n_bins, 
+                                np.shape(RMSE)[0]))
         
         # Look at error in each bin
         for b in range(n_bins):
             
-            RMSE_bin = RMSE[(fluo>bins[b])&(fluo<bins[b+1])]
-            RMSE_median_bins[b] = np.median(RMSE_bin)
-            RMSE_extrema_bins[b] = np.nanquantile(RMSE_bin, [0.5-q/2, 0.5+q/2])
-    
-        axes[i].plot(bins[:-1], RMSE_median_bins,
+            RMSE_bin = np.nan*np.ones_like(RMSE)
+            RMSE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = RMSE[(fluo>bins[b])&(fluo<bins[b+1])]
+            # Median across each cell's future and time points?
+            RMSE_bins[b] = np.nanmedian(RMSE_bin, axis=[1,2])
+         
+        axes[i].plot(bins[:-1], 
+                     np.nanmedian(RMSE_bins, axis=[1,]),
                       '.-', color=color_list[p], 
                       label=f'K_I = {K_I}, K_J={K_J}')
         axes[i].fill_between(
             bins[:-1],
-            RMSE_extrema_bins[:,0],
-            RMSE_extrema_bins[:,1],
+            np.nanquantile(RMSE_bins, axis=1, q=0.5-q/2),
+            np.nanquantile(RMSE_bins, axis=1, q=0.5+q/2),
             color=color_list[p],
             alpha=.2,
             )
@@ -603,7 +614,7 @@ for p, params in enumerate(params_list):
         axes[i].set_title(f'hour {i+1}')
         axes[i].set_xlabel('fluorescence')
         axes[i].set_ylabel(f'RMSE ({np.shape(fluo)[1]} futures of {np.shape(fluo)[0]} cells)\nMiddle {q*100:.0f}%')
-        axes[i].set_ylim([0,800])
+        axes[i].grid(True, 'both','both')
     plt.tight_layout()
     plt.savefig(f'{fig_path}/fig3_{cell_class}_qplot_err_fluor_bin.png',dpi=300)
     
@@ -651,7 +662,7 @@ for p, params in enumerate(params_list):
 plt.tight_layout()
 plt.savefig(f'{fig_path}/fig3_{cell_class}_effect_of_horizon.png', dpi=600)
 
-#%% Plot MEDIAN error as function of horizon 
+#%% Plot MEDIAN error as function of past steps 
 
 # Which cell class, h1, and horizon values to plot
 cell_class = 'CcaSR_FeedforwardPositive'

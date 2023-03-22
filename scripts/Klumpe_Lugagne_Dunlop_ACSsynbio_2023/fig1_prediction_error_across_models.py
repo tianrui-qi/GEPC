@@ -489,11 +489,9 @@ for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
         color = df_simul_config.loc[(df_simul_config['camera_sim']==camera_sim)&(df_simul_config['solver']==solver),'color'].values[0]
 
         fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True)
-        fluo = np.reshape(fluo,(-1,np.shape(fluo)[-1]))
-        fluo_pred = np.reshape(fluo_pred,(-1,np.shape(fluo_pred)[-1]))
         x = np.arange(np.shape(fluo)[-1])/12
             
-        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=1)
         
         plt.plot(x, np.median(RMSE, axis=0),
                       '.-', color=color, 

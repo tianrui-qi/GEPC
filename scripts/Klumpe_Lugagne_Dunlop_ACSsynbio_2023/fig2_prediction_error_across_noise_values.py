@@ -296,21 +296,19 @@ alpha=0.3
 
 for p, new_params in enumerate(new_params_list):
     
-    # Simulate cell
-    cell = dcc.simulations.CcaSR_gillespie()
-    cell.update_params(new_params)
-    cell.set_light_events(light_sequence)     
-    series_list = cell.run(len(light_sequence)*5, 
-                           solver="original", 
-                           realizations=n_cells)
-    
     # Plot results
     plt.sca(axes[p])
     dcc.utilities.OptoPlotBackground(light_sequence, ymax=150, x=x)
     # final_F = [series[-1]['F'] for series in series_list]
     
-    for series in series_list:
-    
+    # Simulate cells
+    for n in range(n_cells):
+        cell = dcc.simulations.CcaSR_gillespie()
+        cell.update_params(new_params)
+        cell.set_light_events(light_sequence)     
+        series = cell.run(len(light_sequence)*5, 
+                               solver="original")
+        
         axes[p].plot(x, [state['E'] for state in series],
                       color='g',
                       alpha=alpha, lw=.5)
@@ -323,7 +321,7 @@ for p, new_params in enumerate(new_params_list):
     axes[p].set_title(f"h1={new_params['h1']:.2e}, h2={new_params['h2']:.2e}")
     
 plt.tight_layout()
-# plt.savefig(f'{fig_path}/fig2_varh1h2_sample_responses.png', dpi=300)
+plt.savefig(f'{fig_path}/fig2_varh1h2_sample_responses.png', dpi=300)
 
 #%% FFT of pure ON dynamics
 
@@ -365,6 +363,7 @@ for d, dataset in enumerate(datasets_list):
 plt.yscale('log')
 
 
+
 #%% Plot MEDIAN or MEAN error as function of horizon 
 
 # Which cell class, h1, and horizon values to plot
@@ -391,16 +390,15 @@ for h, h1 in enumerate(h1_vals):
         h2 = df_past.loc[df_index, 'h2'].values[0]
     
         fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        # RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=(0,1)))
-        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=1)
         t = [x/12. for x in range(np.shape(RMSE)[-1])]
-        axes[h].plot(t, np.median(RMSE, axis=[0,1]), '.', 
+        axes[h].plot(t, np.median(RMSE, axis=[0]), '.', 
                      color = horizon_color_dict[horizon],
                      label=f'horizon={horizon}')
         axes[h].fill_between(
             t,
-            np.nanquantile(RMSE, axis=[0,1], q=0.5-q/2),
-            np.nanquantile(RMSE, axis=[0,1], q=0.5+q/2),
+            np.nanquantile(RMSE, axis=[0], q=0.5-q/2),
+            np.nanquantile(RMSE, axis=[0], q=0.5+q/2),
             color=horizon_color_dict[horizon],
             alpha=alpha,
             )
@@ -439,16 +437,15 @@ for h, h1 in enumerate(h1_vals):
         h2 = df_past.loc[df_index, 'h2'].values[0]
     
         fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        # RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=(0,1)))
-        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=1)
         t = [x/12. for x in range(np.shape(RMSE)[-1])]
-        axes[h].plot(t, np.median(RMSE, axis=[0,1]), '.', 
+        axes[h].plot(t, np.median(RMSE, axis=[0]), '.', 
                      color = past_steps_color_dict[past_steps],
                      label=f'past steps={past_steps}')
         axes[h].fill_between(
             t,
-            np.nanquantile(RMSE, axis=[0,1], q=0.5-q/2),
-            np.nanquantile(RMSE, axis=[0,1], q=0.5+q/2),
+            np.nanquantile(RMSE, axis=[0], q=0.5-q/2),
+            np.nanquantile(RMSE, axis=[0], q=0.5+q/2),
             color=past_steps_color_dict[past_steps],
             alpha=alpha,
             )
@@ -535,6 +532,90 @@ for p, new_params in enumerate(new_params_list):
 plt.tight_layout()
 plt.savefig(f'{fig_path}/fig2_{cell_class}_example_responses.png', dpi=300)
 
+
+#%% Plot select predictions
+
+cell_class = 'CcaSR_gillespie_simple'
+simul_slice = default_past_steps & default_horizon
+df_past = df_meta.loc[simul_slice&(df_meta['cell_class']==cell_class)].sort_values(by=['training_sets']).reset_index(drop=True)
+
+training_style_dict = {100: '_', 1000: 'x', 10000: '.'}
+sigma_list = [x for x in np.unique(df_past['sigma'])]
+t_list = [x for x in training_style_dict.keys()]
+
+q=0.5
+alpha=0.02
+markersize=4
+for i in range(len(df_past)):
+    sigma = df_past.loc[i,'sigma']
+    training_folder = df_past.loc[i,'training_sets']
+    if (training_folder.split('_')[-1]==1) or (training_folder.split('_')[-1]==2):
+        continue
+    if training_folder == 'training_set':
+        training_set_size = 10000
+    else:
+        training_set_size = int(training_folder.split('_')[-2])
+    simul_id = df_past.loc[i, 'simul_id']
+    
+    # Find best and worst error, arbitrarily relative to the first cell future
+    fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+    
+    # Median across futures, but then the sum across all time
+    RMSE_sum_across_time = np.sum(np.median(np.sqrt((fluo - fluo_pred)**2), axis=1), axis=1)
+    sorted_error = np.argsort(RMSE_sum_across_time)
+    
+    percentile = [50, 500, 950]
+    plot_list = [sorted_error[i] for i in percentile]
+    
+    stims, past_fluo, futures_fluo = get_eval_data(simul_id)
+    model_params, training_params = get_params(simul_id)
+    
+    plot_past = 3*12 # Only plot the past 3 hours (even though whole past is used)
+    cutoff = past_fluo.shape[1]
+    
+    fig, axes = plt.subplots(len(plot_list), 1,
+                             figsize=(4, 3*len(plot_list)),
+                             sharex=True)
+    for i, pl in enumerate(plot_list):
+            
+        # Stimulations
+        plt.sca(axes[i])
+        dcc.utilities.OptoPlotBackground(
+            stims[pl,cutoff-plot_past:cutoff+training_params["horizon"]],
+            x=np.arange(-plot_past, training_params["horizon"])/12,
+            ymax = 4095
+            )
+        
+        # Past
+        axes[i].plot(np.arange(-plot_past, 0)/12, 
+                     past_fluo[pl, -plot_past:],
+                     "k")
+        
+        # Future
+        axes[i].plot(np.arange(0, training_params["horizon"])/12, 
+                 futures_fluo[pl, :, :training_params['horizon']].T, 
+                 color = 0.5*np.ones((3,)), alpha=alpha)
+        
+        # Prediction
+        axes[i].plot(np.arange(0, training_params["horizon"])/12, 
+                 fluo_pred[pl, 0],
+                 "b")
+        
+        # Prediction starts line
+        axes[i].plot([-0.5/12, -0.5/12], [0, 4095], color="gray")
+        
+        # Limits and labels
+        axes[i].set_ylim([0,4095])
+        # plt.title(f'Cell {c}')
+        axes[i].set_xlabel("time (h)")
+        axes[i].set_ylabel("Fluorescence (a.u.)")
+        axes[i].set_title(f'{100 * percentile[i] / len(sorted_error):.0f}th percentile')
+    axes[-1].set_xlim([-plot_past/12, training_params["horizon"]/12])
+    plt.suptitle(f'sigma={sigma}, trained on {training_set_size}cells')
+    plt.tight_layout()
+    plt.savefig(fig_path+f'/fig2_{cell_class}_sigma{sigma}_ts{training_set_size}_predictions_percentiles.png', dpi=300)
+
+
 #%% MEDIAN or MEAN error (Gillespie simple) x training_set_size
 
 cell_class = 'CcaSR_gillespie_simple'
@@ -561,19 +642,18 @@ for i in range(len(df_past)):
 
     
     fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-    # RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=(0,1)))
-    RMSE = np.sqrt((fluo - fluo_pred)**2)
+    RMSE = np.median(np.sqrt((fluo - fluo_pred)**2),axis=1)
     t = [x/12. for x in range(np.shape(RMSE)[-1])]
     axes[t_list.index(training_set_size), sigma_list.index(sigma)].plot(
-                    t, np.median(RMSE, axis=[0,1]), 
+                    t, np.median(RMSE, axis=[0,]), 
                     training_style_dict[training_set_size], 
                     markersize=markersize,
                     label=f'trained on {training_set_size}cells',
                     color='k')
     axes[t_list.index(training_set_size), sigma_list.index(sigma)].fill_between(
                     t, 
-                    np.nanquantile(RMSE, axis=[0,1], q=0.5-q/2), 
-                    np.nanquantile(RMSE, axis=[0,1], q=0.5+q/2), 
+                    np.nanquantile(RMSE, axis=[0,], q=0.5-q/2), 
+                    np.nanquantile(RMSE, axis=[0,], q=0.5+q/2), 
                     color='k',
                     alpha=alpha)
 
@@ -586,3 +666,66 @@ for j in range(len(sigma_list)):
         axes[i,j].grid(True, "both", "both")
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_training_set_size.png', dpi=600)
+
+#%% "Simple" model error binned by fluorescence
+
+cell_class = 'CcaSR_gillespie_simple'
+simul_slice = default_past_steps & default_horizon
+df_past = df_meta.loc[simul_slice&(df_meta['cell_class']==cell_class)].sort_values(by=['training_sets']).reset_index(drop=True)
+
+training_style_dict = {100: '_', 1000: 'x', 10000: '.'}
+sigma_list = [x for x in np.unique(df_past['sigma'])]
+t_list = [x for x in training_style_dict.keys()]
+t_color_list = ['#cf327b','r','#cf7332']
+
+fig, axes = plt.subplots(1, len(sigma_list), figsize=(8,3), 
+                         sharex=True, sharey=True)
+q=0.5
+alpha=0.1
+markersize=4
+n_bins = 20
+for i in range(len(df_past)):
+    sigma = df_past.loc[i,'sigma']
+    training_folder = df_past.loc[i,'training_sets']
+    if training_folder == 'training_set':
+        training_set_size = 10000
+    else:
+        training_set_size = int(training_folder.split('_')[-2])
+    simul_id = df_past.loc[i, 'simul_id']
+    
+    ax = axes[sigma_list.index(sigma)]
+    
+    fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+
+    # Calulate error
+    RMSE = np.sqrt((fluo - fluo_pred)**2)
+    bins = np.linspace(0,4100, n_bins+1)
+    RMSE_bins = np.zeros((n_bins, 
+                            np.shape(RMSE)[0]))
+    
+    # Look at error in each bin
+    for b in range(n_bins):
+        
+        RMSE_bin = np.nan*np.ones_like(RMSE)
+        RMSE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = RMSE[(fluo>bins[b])&(fluo<bins[b+1])]
+        # Median across each cell's future and time points?
+        RMSE_bins[b] = np.nanmedian(RMSE_bin, axis=[1,2])
+            
+    ax.plot(bins[:-1], 
+                 np.nanmedian(RMSE_bins, axis=[1,]),
+                  '.-',color=t_color_list[t_list.index(training_set_size)])
+    ax.fill_between(
+        bins[:-1],
+        np.nanquantile(RMSE_bins, axis=1, q=0.5-q/2),
+        np.nanquantile(RMSE_bins, axis=1, q=0.5+q/2),
+        color=t_color_list[t_list.index(training_set_size)],
+        alpha=.2,
+        )
+
+    ax.set_xlabel('fluorescence')
+    ax.set_ylabel(f'RMSE ({np.shape(fluo)[1]} futures of {np.shape(fluo)[0]} cells)\nMiddle {q*100:.0f}%')
+    ax.set_ylim([0, 1200])
+    ax.grid(True, 'both', 'both')
+plt.tight_layout()
+plt.savefig(f'{fig_path}/fig2_{cell_class}_training_set_size_qplot_err_fluor_bin.png',dpi=300)
+    
