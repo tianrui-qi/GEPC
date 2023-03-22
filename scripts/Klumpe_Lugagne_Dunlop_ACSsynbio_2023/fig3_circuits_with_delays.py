@@ -437,18 +437,18 @@ for k, K_I in enumerate(KI_vals):
         fluo_pred = fluo_pred[:,:,i*12:(i+1)*12]
     
         # Calulate error
-        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        SE = (fluo - fluo_pred)**2
         bins = np.linspace(0,4100, n_bins+1)
         RMSE_bins = np.zeros((n_bins, 
-                                np.shape(RMSE)[0]))
+                                np.shape(SE)[0]))
         
         # Look at error in each bin
         for b in range(n_bins):
             
-            RMSE_bin = np.nan*np.ones_like(RMSE)
-            RMSE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = RMSE[(fluo>bins[b])&(fluo<bins[b+1])]
+            SE_bin = np.nan*np.ones_like(SE)
+            SE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = SE[(fluo>bins[b])&(fluo<bins[b+1])]
             # Median across each cell's future and time points?
-            RMSE_bins[b] = np.nanmedian(RMSE_bin, axis=[1,2])
+            RMSE_bins[b] = np.sqrt(np.nanmean(SE_bin, axis=[1,2]))
                 
         axes[i].plot(bins[:-1], 
                      np.nanmedian(RMSE_bins, axis=[1,]),
@@ -486,6 +486,7 @@ df_past = df_past.sort_values(by=['K_I','horizon'])
 
 fig, axes = plt.subplots(1, len(KI_vals), figsize=(10,3), sharey=True)
 alpha=0.5
+q = 0.5
 # Rather than plotting everything, just plot one replicate of each trained model
 for k, K_I in enumerate(KI_vals):
     
@@ -494,12 +495,18 @@ for k, K_I in enumerate(KI_vals):
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
     
         fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
-        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
         t = [x/12. for x in range(np.shape(RMSE)[-1])]
-        axes[k].plot(t, np.median(RMSE,axis=[0,1]), '.', 
+        axes[k].plot(t, np.median(RMSE,axis=[0,]), '.', 
                      color = horizon_color_dict[horizon],
-                     alpha=alpha,
                      label=f'horizon={horizon}')
+        axes[k].fill_between(
+            t,
+            np.nanquantile(RMSE, axis=[0], q=0.5-q/2),
+            np.nanquantile(RMSE, axis=[0], q=0.5+q/2),
+            color=horizon_color_dict[horizon],
+            alpha=alpha,
+            )
     
     axes[k].set_title(f'K_I={K_I}')
     axes[k].grid(True, 'both', 'both')
@@ -531,12 +538,18 @@ for k, K_I in enumerate(KI_vals):
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
     
         fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
-        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
         t = [x/12. for x in range(np.shape(RMSE)[-1])]
-        axes[k].plot(t, np.median(RMSE, axis=[0,1]), '.', 
+        axes[k].plot(t, np.median(RMSE,axis=[0,]), '.', 
                      color = past_steps_color_dict[past_steps],
-                     alpha=alpha,
                      label=f'past steps={past_steps}')
+        axes[k].fill_between(
+            t,
+            np.nanquantile(RMSE, axis=[0], q=0.5-q/2),
+            np.nanquantile(RMSE, axis=[0], q=0.5+q/2),
+            color=past_steps_color_dict[past_steps],
+            alpha=alpha,
+            )
     
     axes[k].set_title(f'K_I={K_I}')
     axes[k].legend()
@@ -585,18 +598,18 @@ for p, params in enumerate(params_list):
         fluo_pred = fluo_pred[:,:,i*12:(i+1)*12]
     
         # Calulate error
-        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        SE = (fluo - fluo_pred)**2
         bins = np.linspace(0,4100, n_bins+1)
         RMSE_bins = np.zeros((n_bins, 
-                                np.shape(RMSE)[0]))
+                                np.shape(SE)[0]))
         
         # Look at error in each bin
         for b in range(n_bins):
             
-            RMSE_bin = np.nan*np.ones_like(RMSE)
-            RMSE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = RMSE[(fluo>bins[b])&(fluo<bins[b+1])]
+            SE_bin = np.nan*np.ones_like(SE)
+            SE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = SE[(fluo>bins[b])&(fluo<bins[b+1])]
             # Median across each cell's future and time points?
-            RMSE_bins[b] = np.nanmedian(RMSE_bin, axis=[1,2])
+            RMSE_bins[b] = np.sqrt(np.nanmean(SE_bin, axis=[1,2]))
          
         axes[i].plot(bins[:-1], 
                      np.nanmedian(RMSE_bins, axis=[1,]),
@@ -647,12 +660,18 @@ for p, params in enumerate(params_list):
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
     
         fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
-        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
         t = [x/12. for x in range(np.shape(RMSE)[-1])]
-        axes[p].plot(t, np.median(RMSE, axis=[0,1]), '.', 
-                      color = horizon_color_dict[horizon],
-                      alpha=alpha,
-                      label=f'horizon={horizon}')
+        axes[k].plot(t, np.median(RMSE,axis=[0,]), '.', 
+                     color = horizon_color_dict[horizon],
+                     label=f'horizon={horizon}')
+        axes[k].fill_between(
+            t,
+            np.nanquantile(RMSE, axis=[0], q=0.5-q/2),
+            np.nanquantile(RMSE, axis=[0], q=0.5+q/2),
+            color=horizon_color_dict[horizon],
+            alpha=alpha,
+            )
     
     axes[p].set_title(f'K_I={K_I}, K_J={K_J}')
     axes[p].grid(True, 'both','both')
@@ -690,12 +709,18 @@ for p, params in enumerate(params_list):
         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
     
         fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
-        RMSE = np.sqrt((fluo - fluo_pred)**2)
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
         t = [x/12. for x in range(np.shape(RMSE)[-1])]
-        axes[p].plot(t, np.median(RMSE, axis=[0,1]), '.', 
-                      color = past_steps_color_dict[past_steps],
-                      alpha=alpha,
-                      label=f'past steps={past_steps}')
+        axes[k].plot(t, np.median(RMSE,axis=[0,]), '.', 
+                     color = past_steps_color_dict[past_steps],
+                     label=f'past steps={past_steps}')
+        axes[k].fill_between(
+            t,
+            np.nanquantile(RMSE, axis=[0], q=0.5-q/2),
+            np.nanquantile(RMSE, axis=[0], q=0.5+q/2),
+            color=past_steps_color_dict[past_steps],
+            alpha=alpha,
+            )
     
     axes[p].set_title(f'K_I={K_I}, K_J={K_J}')
     axes[p].grid(True, 'both','both')

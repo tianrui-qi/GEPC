@@ -417,7 +417,7 @@ for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
         plt.tight_layout()
         plt.savefig(fig_path+f'/fig1_{cell_class}_predictions_percentiles_config_{color}.png', dpi=300)
 
-#%% Q-plot of error  v. fluorescence(better for overlay?)
+#%% TO DO: fix this /Q-plot of error  v. fluorescence(better for overlay?)
 
 n_bins=200
 q = 0.5
@@ -441,17 +441,18 @@ for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
             fluo_pred = fluo_pred[:,:,i*12:(i+1)*12]
         
             # Calulate error
-            RMSE = np.sqrt((fluo - fluo_pred)**2)
+            SE = (fluo - fluo_pred)**2
             bins = np.linspace(0,4100, n_bins+1)
-            RMSE_median_bins = np.zeros((n_bins,))
-            RMSE_extrema_bins = np.zeros((n_bins, 2))
+            RMSE_bins = np.zeros((n_bins, 
+                                    np.shape(SE)[0]))
             
             # Look at error in each bin
             for b in range(n_bins):
                 
-                RMSE_bin = RMSE[(fluo>bins[b])&(fluo<bins[b+1])]
-                RMSE_median_bins[b] = np.median(RMSE_bin)
-                RMSE_extrema_bins[b] = np.nanquantile(RMSE_bin, [0.5-q/2, 0.5+q/2])
+                SE_bin = np.nan*np.ones_like(SE)
+                SE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = SE[(fluo>bins[b])&(fluo<bins[b+1])]
+                # Median across each cell's future and time points?
+                RMSE_bins[b] = np.sqrt(np.nanmean(SE_bin, axis=[1,2]))
         
             axes[i].plot(bins[:-1], RMSE_median_bins,
                           '.-', color=color, 
@@ -491,7 +492,7 @@ for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
         fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True)
         x = np.arange(np.shape(fluo)[-1])/12
             
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=1)
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2), axis=1)
         
         plt.plot(x, np.median(RMSE, axis=0),
                       '.-', color=color, 

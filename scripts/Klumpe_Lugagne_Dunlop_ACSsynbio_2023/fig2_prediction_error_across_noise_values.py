@@ -390,7 +390,7 @@ for h, h1 in enumerate(h1_vals):
         h2 = df_past.loc[df_index, 'h2'].values[0]
     
         fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=1)
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2), axis=1)
         t = [x/12. for x in range(np.shape(RMSE)[-1])]
         axes[h].plot(t, np.median(RMSE, axis=[0]), '.', 
                      color = horizon_color_dict[horizon],
@@ -437,7 +437,7 @@ for h, h1 in enumerate(h1_vals):
         h2 = df_past.loc[df_index, 'h2'].values[0]
     
         fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.median(np.sqrt((fluo - fluo_pred)**2), axis=1)
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2), axis=1)
         t = [x/12. for x in range(np.shape(RMSE)[-1])]
         axes[h].plot(t, np.median(RMSE, axis=[0]), '.', 
                      color = past_steps_color_dict[past_steps],
@@ -642,7 +642,7 @@ for i in range(len(df_past)):
 
     
     fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-    RMSE = np.median(np.sqrt((fluo - fluo_pred)**2),axis=1)
+    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2),axis=1)
     t = [x/12. for x in range(np.shape(RMSE)[-1])]
     axes[t_list.index(training_set_size), sigma_list.index(sigma)].plot(
                     t, np.median(RMSE, axis=[0,]), 
@@ -698,18 +698,18 @@ for i in range(len(df_past)):
     fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
 
     # Calulate error
-    RMSE = np.sqrt((fluo - fluo_pred)**2)
+    SE = (fluo - fluo_pred)**2
     bins = np.linspace(0,4100, n_bins+1)
     RMSE_bins = np.zeros((n_bins, 
-                            np.shape(RMSE)[0]))
+                            np.shape(SE)[0]))
     
     # Look at error in each bin
     for b in range(n_bins):
         
-        RMSE_bin = np.nan*np.ones_like(RMSE)
-        RMSE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = RMSE[(fluo>bins[b])&(fluo<bins[b+1])]
+        SE_bin = np.nan*np.ones_like(SE)
+        SE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = SE[(fluo>bins[b])&(fluo<bins[b+1])]
         # Median across each cell's future and time points?
-        RMSE_bins[b] = np.nanmedian(RMSE_bin, axis=[1,2])
+        RMSE_bins[b] = np.sqrt(np.nanmean(SE_bin, axis=[1,2]))
             
     ax.plot(bins[:-1], 
                  np.nanmedian(RMSE_bins, axis=[1,]),
