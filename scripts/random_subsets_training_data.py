@@ -20,9 +20,11 @@ rng = np.random.default_rng(103122)
 
 training_set_id_list = ['*03-18*3d5*','*03-18*413*']
 cell_class_list = ['CcaSR_gillespie_simple','CcaSR_gillespie_simple']
+training_set_id_list = ['*20-53*',]
+cell_class_list = ['CcaSR_gillespie',]
 # subset_size_list = [1_000, 100]
 # n_samples = 3
-subset_size_list = [2, 10]
+subset_size_list = [1, 10, 100, 1000]
 n_samples = 1
 
 for c, cell_class in enumerate(cell_class_list):
@@ -34,10 +36,9 @@ for c, cell_class in enumerate(cell_class_list):
     with open(f'{data_dir}/model_parameters.json','r') as f:
         model_params = json.load(f)
         
-    print(model_params['mu'])
-    print(model_params['sigma'])
+    # print(model_params['mu'])
+    # print(model_params['sigma'])
         
-    
     # Load training data
     fluo1 = np.load(data_dir+'/training_set/fluo1.npy')
     stims = np.load(data_dir+'/training_set/stims.npy')
