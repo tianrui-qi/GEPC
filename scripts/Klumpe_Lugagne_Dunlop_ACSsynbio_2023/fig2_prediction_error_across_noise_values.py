@@ -155,7 +155,18 @@ models_list = [key for key in model_style_dict.keys()]
 horizon_style_dict = {12: '.', 24: 'x', 48: '_'}
 horizon_color_dict = {12: 'r', 24: 'g', 48: 'b'}
 
-past_steps_color_dict = {12: 'r', 24: 'g', 36: 'b'}
+past_steps_color_dict = {3: "#ce5451",
+                         6: "#bc8b3d",
+                         12: "#73af3d",
+                         24: "#5da071", 
+                         36: "#588acf"}
+
+training_set_color_dict = {10: "#327a42",
+                           100:"#5a6eb8",
+                           1000: "#57377b",
+                           10000: "#c561b0",}
+
+markersize=8
 
 #%% Check training data
 
@@ -275,25 +286,76 @@ default_h1h2 = np.abs(((df_meta['h1'] / df_meta['h2']) - _h1h2) / _h1h2) < 0.01
 #%% Plot responses to pure light, to show variability
 
 n_hours = 4
-n_cells = 40
+n_cells = 20
+alpha=0.4
+lw = 1.5
+ymax = 130
+
+
+#  # Constant E
+cell_class = 'CcaSR_gillespie_simple'
 random_bit = dcc.utilities.random_stimulations(
                         timepoints=3*n_hours*12,
                         nostim_timepoints=0,
                         total_simulations=7)[0]
 
 light_sequence = [1]*12*n_hours + [0]*12*n_hours + [int(bit) for bit in random_bit]
-# light_sequence = [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24
+# light_sequence = [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24
 x = [t/12. for t in range(len(light_sequence)+1)]
 
+# new parameters - resampling should happen at the end
+new_params_list = [{'sigma': 2, 'resample_species': True},
+                   {'sigma': 8, 'resample_species': True},
+                    ]
+
+fig, axes = plt.subplots(1, len(new_params_list), 
+                         figsize=(3*len(new_params_list), 3))
+
+for p, new_params in enumerate(new_params_list):
+    
+    plt.sca(axes[p])
+    dcc.utilities.OptoPlotBackground(light_sequence, ymax=150, x=x)
+    
+    E_samples = []
+    for i in range(n_cells):
+    
+        # Simulate cell
+        cell = dcc.simulations.CcaSR_gillespie_simple()
+        cell.update_params(new_params)
+        
+        # Simulate
+        cell.set_light_events(light_sequence)     
+        series = cell.run(len(light_sequence)*5, 
+                               solver="original", 
+                               realizations=1)
+        
+        axes[p].plot(x, [state['F'] for state in series],
+                     color='b',
+                     alpha=alpha, lw=lw)
+        axes[p].plot(x, [state['E'] for state in series],
+                     color='g',
+                     alpha=alpha, lw=lw)
+    
+    # axes[p].set_xlabel("time (hours)")
+    # axes[p].set_ylabel("proteins (#)")
+    axes[p].set_xticklabels([])
+    axes[p].set_yticklabels([])
+    
+    axes[p].set_ylim([0,ymax])
+    # axes[p].set_title(f"mu={cell.params['mu']:.2e}, sigma={cell.params['sigma']:.2e}")
+    
+plt.tight_layout()
+plt.savefig(f'{fig_path}/fig2_{cell_class}_sample_responses.png', dpi=300)
+
+# # Variable E
+cell_class = 'CcaSR_gillespie'
 new_params_list = [{'h1': (4e-2)/5, 'h2': (1e-3)/5},
                    {'h1': (4e-2)*1, 'h2': (1e-3)*1},
                    {'h1': (4e-2)*5, 'h2': (1e-3)*5},
                    ]
 
 fig, axes = plt.subplots(1, len(new_params_list), 
-                         figsize=(4*len(new_params_list),4))
-alpha=0.3
-
+                         figsize=(3*len(new_params_list),3))
 for p, new_params in enumerate(new_params_list):
     
     # Plot results
@@ -311,57 +373,20 @@ for p, new_params in enumerate(new_params_list):
         
         axes[p].plot(x, [state['E'] for state in series],
                       color='g',
-                      alpha=alpha, lw=.5)
+                      alpha=alpha, lw=lw)
         axes[p].plot(x, [state['F'] for state in series],
                       color='b',
-                      alpha=alpha, lw=.5)
-    axes[p].set_xlabel("time (hours)")
-    axes[p].set_ylabel("proteins (#)")
-    axes[p].set_ylim(0,150)
-    axes[p].set_title(f"h1={new_params['h1']:.2e}, h2={new_params['h2']:.2e}")
+                      alpha=alpha, lw=lw)
+    # axes[p].set_xlabel("time (hours)")
+    # axes[p].set_ylabel("proteins (#)")
+    axes[p].set_xticklabels([])
+    axes[p].set_yticklabels([])
+    
+    axes[p].set_ylim(0,ymax)
+    # axes[p].set_title(f"h1={new_params['h1']:.2e}, h2={new_params['h2']:.2e}")
     
 plt.tight_layout()
-plt.savefig(f'{fig_path}/fig2_varh1h2_sample_responses.png', dpi=300)
-
-#%% FFT of pure ON dynamics
-
-import scipy.fft
-
-cell_class = 'CcaSR_gillespie'
-colors = ['r','g','b']
-datasets_list = np.unique(df_meta.loc[df_meta['cell_class']==cell_class, 'datasets_folder'])
-
-light_sequence = [1]*15*12
-n_cells=10
-
-for d, dataset in enumerate(datasets_list):
-    # # Drop first 3 hours of darkness
-    # fluo = np.load(dataset+'/training_set/fluo1.npy')[:,36:]
-    
-    model_json = glob.glob(dataset+'/model_parameters.json')[0]
-    with open(model_json, 'r') as f:
-        model_params = json.load(f)
-    
-    refcell = dcc.simulations.CcaSR_gillespie()
-    refcell.update_params(model_params)
-    refcell.set_light_events(light_sequence)
-    states = refcell.run(len(light_sequence)*5, 
-                         realizations=n_cells)
-    
-    N = len(light_sequence) #np.shape(fluo)[1]
-    T = 1/12
-    xf = scipy.fft.fftfreq(N,T)[:N//2]
-    
-    for i in range(n_cells):
-        # y = fluo[i]
-        y = [state['F'] for state in states[i]]
-        yf = scipy.fft.fft(y)[:N//2]
-        
-        plt.plot(xf, 2/N * np.abs(yf), alpha=0.2, color=colors[d])
-        
-# plt.xlim([0,1])
-plt.yscale('log')
-
+plt.savefig(f'{fig_path}/fig2_{cell_class}_sample_responses.png', dpi=300)
 
 
 #%% Plot MEDIAN or MEAN error as function of horizon 
@@ -390,9 +415,10 @@ for h, h1 in enumerate(h1_vals):
         h2 = df_past.loc[df_index, 'h2'].values[0]
     
         fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2), axis=1)
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
         t = [x/12. for x in range(np.shape(RMSE)[-1])]
-        axes[h].plot(t, np.median(RMSE, axis=[0]), '.', 
+        axes[h].plot(t, np.median(RMSE, axis=[0]), '.-', 
+                     markersize=markersize,
                      color = horizon_color_dict[horizon],
                      label=f'horizon={horizon}')
         axes[h].fill_between(
@@ -404,10 +430,10 @@ for h, h1 in enumerate(h1_vals):
             )
     
     axes[h].set_title(f'h1={h1:.2e}, h2={h2:.2e}')
-    axes[h].legend()
-    axes[h].set_xlabel('time (h)')
-    axes[h].set_ylabel(f'RMSE\n{np.shape(fluo)[0]} cells')
+    # axes[h].set_xlabel('time (h)')
+    # axes[h].set_ylabel(f'RMSE\n{np.shape(fluo)[0]} cells')
     axes[h].grid(True, "both", "both")
+axes[0].legend()
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_horizon.png', dpi=300)
 
@@ -418,6 +444,7 @@ cell_class = 'CcaSR_gillespie'
 h1_vals = np.sort(np.unique(h1_list))
 h1_vals = h1_vals[~np.isnan(h1_vals)]
 past_steps_vals = np.sort(np.unique(past_steps_list))[::-1]
+past_steps_vals = [6, 12, 24]
 
 # Keep simulations with default training size, default horizon, and same h1/h2 ratio
 simul_slice = default_training_size & default_horizon & default_h1h2 & \
@@ -437,9 +464,10 @@ for h, h1 in enumerate(h1_vals):
         h2 = df_past.loc[df_index, 'h2'].values[0]
     
         fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2), axis=1)
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
         t = [x/12. for x in range(np.shape(RMSE)[-1])]
-        axes[h].plot(t, np.median(RMSE, axis=[0]), '.', 
+        axes[h].plot(t, np.median(RMSE, axis=[0]), '.-', 
+                     markersize=markersize,
                      color = past_steps_color_dict[past_steps],
                      label=f'past steps={past_steps}')
         axes[h].fill_between(
@@ -450,87 +478,102 @@ for h, h1 in enumerate(h1_vals):
             alpha=alpha,
             )
     
-    axes[h].set_title(f'h1={h1:.2e}, h2={h2:.2e}')
-    axes[h].legend()
-    axes[h].set_xlabel('time (h)')
-    axes[h].set_ylabel(f'RMSE\n{np.shape(fluo)[0]} cells')
+    # axes[h].set_title(f'h1={h1:.2e}, h2={h2:.2e}')
+    # axes[h].set_xlabel('time (h)')
+    # axes[h].set_ylabel(f'RMSE\n{np.shape(fluo)[0]} cells')
     axes[h].grid(True, "both", "both")
+axes[0].legend()
 plt.tight_layout()
+# plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_past_steps_all.png', dpi=600)
 plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_past_steps.png', dpi=600)
 
+#%% ((In progress) Plot sample predictions
 
+# Which cell class, h1, and horizon values to plot
+cell_class = 'CcaSR_gillespie'
+h1_vals = np.sort(np.unique(h1_list))
+h1_vals = h1_vals[~np.isnan(h1_vals)]
+past_steps_vals = np.sort(np.unique(past_steps_list))[::-1]
+past_steps_vals = [6, 12, 24, 36]
 
-#%% Show variability of Gillespie_simple training data
+# Keep simulations with default training size, default horizon, and same h1/h2 ratio
+simul_slice = default_training_size & default_horizon & default_h1h2 & \
+            default_camera_sim & default_solver
 
-cell_class = 'CcaSR_gillespie_simple'
-n_hours = 4
-n_cells = 200
-random_bit = dcc.utilities.random_stimulations(
-                        timepoints=3*n_hours*12,
-                        nostim_timepoints=0,
-                        total_simulations=7)[0]
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
 
-light_sequence = [1]*12*n_hours + [0]*12*n_hours + [int(bit) for bit in random_bit]
-# light_sequence = [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24
-x = [t/12. for t in range(len(light_sequence)+1)]
+percentile = [250, 500, 750]
+lw = 0.75
 
-# new parameters - resampling should happen at the end
-new_params_list = [{'sigma': 2, 'resample_species': True},
-                   {'sigma': 8, 'resample_species': True},
-                    ]
-
-fig, axes = plt.subplots(1, len(new_params_list), 
-                         figsize=(3*len(new_params_list), 3))
-alpha=0.1
-
-for p, new_params in enumerate(new_params_list):
+# Rather than plotting everything, just plot one replicate of each trained model
+for h, h1 in enumerate(h1_vals):
     
-    plt.sca(axes[p])
-    dcc.utilities.OptoPlotBackground(light_sequence, ymax=150, x=x)
+    fig, axes = plt.subplots(len(percentile), len(past_steps_vals),
+                              figsize=(3, 2*len(percentile)),
+                              sharex=True, sharey=True)
     
-    E_samples = []
-    for i in range(n_cells):
-    
-        # Simulate cell
-        cell = dcc.simulations.CcaSR_gillespie_simple()
+    for p, past_steps in enumerate(past_steps_vals):
         
-        # Update parameters (including new E sample)
-        # new_E = round(np.random.normal(loc=cell.params['mu'],
-        #                             scale=new_params['sigma'])), # steady state E
-        # new_params.update({'E': new_E[0]})
-        cell.update_params(new_params)
-        
-        # Simulate
-        cell.set_light_events(light_sequence)     
-        series = cell.run(len(light_sequence)*5, 
-                               solver="original", 
-                               realizations=1)
-        E_samples += [series[0]['E']]
-        # Plot results
+        df_index = (df_past['h1']==h1)&(df_past['past_steps']==past_steps)
+        simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+        h2 = df_past.loc[df_index, 'h2'].values[0]
+        color = past_steps_color_dict[past_steps]
     
-        # axes[p,0].plot(x, [state['E'] for state in series],
-        #              color='g',
-        #              alpha=alpha*2, lw=.5)
-        axes[p].plot(x, [state['F'] for state in series],
-                     color='b',
-                     alpha=alpha, lw=.5)
-        axes[p].plot(x, [state['E'] for state in series],
-                     color='g',
-                     alpha=alpha, lw=.5)
-    
-    axes[p].set_xlabel("time (hours)")
-    axes[p].set_ylabel("proteins (#)")
+        # Find best and worst error
+        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+        RMSE_sum_across_time = np.sum(np.sqrt((fluo - fluo_pred)**2), axis=1)
+        sorted_error = np.argsort(RMSE_sum_across_time)
 
-    # axes[p,0].hist(E_samples, density=True, color='g')
-    # axes[p,0].set_xlabel("E")
-    # axes[p,0].set_ylabel("frequency")
-    # axes[p,0].set_xlim([20,60])
-    
-    axes[p].set_ylim([0,100])
-    axes[p].set_title(f"mu={cell.params['mu']:.2e}, sigma={cell.params['sigma']:.2e}")
-    
-plt.tight_layout()
-plt.savefig(f'{fig_path}/fig2_{cell_class}_example_responses.png', dpi=300)
+        plot_list = [sorted_error[i] for i in percentile]
+
+        stims, past_fluo, futures_fluo = get_eval_data(simul_id)
+        model_params, training_params = get_params(simul_id)
+
+        plot_past = 3*12 # Only plot the past 3 hours (even though whole past is used)
+        cutoff = past_fluo.shape[1]
+
+        
+        for i, pl in enumerate(plot_list):
+            ax = axes[i,p]
+                
+            # Stimulations
+            plt.sca(ax)
+            dcc.utilities.OptoPlotBackground(
+                stims[pl,cutoff-plot_past:cutoff+training_params["horizon"]],
+                x=np.arange(-plot_past, training_params["horizon"])/12,
+                ymax = 4095
+                )
+            
+            # Past
+            axes[i].plot(np.arange(-plot_past, 0)/12, 
+                          past_fluo[pl, -plot_past:],
+                          color, lw=3*lw)
+            
+            # Future
+            axes[i].plot(np.arange(0, training_params["horizon"])/12, 
+                      futures_fluo[pl, :, :training_params['horizon']].T, 
+                      color=color, alpha=0.01)
+            
+            # Prediction
+            axes[i].plot(np.arange(0, training_params["horizon"])/12, 
+                      fluo_pred[pl],
+                      color='k', lw=3*lw)
+            
+            # Prediction starts line
+            axes[i].plot([-0.5/12, -0.5/12], [0, 4095], color="gray")
+            
+            # Limits and labels
+            axes[i].set_ylim([0,4095])
+            axes[i].set_yticklabels([])
+            axes[i].set_xticklabels([])
+            # plt.title(f'Cell {c}')
+            # axes[i].set_xlabel("time (h)")
+            # axes[i].set_ylabel("Fluorescence (a.u.)")
+            # axes[i].set_title(f'{100 * percentile[i] / len(sorted_error):.0f}th percentile')
+        axes[-1].set_xlim([-plot_past/12, training_params["horizon"]/12])
+        # plt.suptitle(f'{cell_class}, camera_sim {camera_sim}, solver:{solver}')
+        plt.tight_layout()
+        plt.savefig(fig_path+f'/fig2_variable_E_h1_vals_{h}_percentiles.png', dpi=300)
 
 
 #%% Plot select predictions
@@ -616,21 +659,20 @@ for i in range(len(df_past)):
     plt.savefig(fig_path+f'/fig2_{cell_class}_sigma{sigma}_ts{training_set_size}_predictions_percentiles.png', dpi=300)
 
 
+
 #%% MEDIAN or MEAN error (Gillespie simple) x training_set_size
 
 cell_class = 'CcaSR_gillespie_simple'
 simul_slice = default_past_steps & default_horizon
 df_past = df_meta.loc[simul_slice&(df_meta['cell_class']==cell_class)].sort_values(by=['training_sets']).reset_index(drop=True)
 
-training_style_dict = {100: '_', 1000: 'x', 10000: '.'}
 sigma_list = [x for x in np.unique(df_past['sigma'])]
-t_list = [x for x in training_style_dict.keys()]
+t_list = [key for key in training_set_color_dict.keys()]
 
-fig, axes = plt.subplots(len(t_list), len(sigma_list), figsize=(8,10), 
+fig, axes = plt.subplots(1, len(sigma_list), figsize=(8,3), 
                          sharex=True, sharey=True)
 q=0.5
 alpha=0.2
-markersize=4
 for i in range(len(df_past)):
     sigma = df_past.loc[i,'sigma']
     training_folder = df_past.loc[i,'training_sets']
@@ -638,34 +680,38 @@ for i in range(len(df_past)):
         training_set_size = 10000
     else:
         training_set_size = int(training_folder.split('_')[-2])
+    if (training_folder.split('_')[-1] == '1') or (training_folder.split('_')[-1] == '2'):
+        continue
+    
     simul_id = df_past.loc[i, 'simul_id']
 
     
     fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2),axis=1)
+    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2,axis=1))
     t = [x/12. for x in range(np.shape(RMSE)[-1])]
-    axes[t_list.index(training_set_size), sigma_list.index(sigma)].plot(
-                    t, np.median(RMSE, axis=[0,]), 
-                    training_style_dict[training_set_size], 
+    axes[sigma_list.index(sigma)].plot(
+                    t, np.median(RMSE, axis=[0,]), '.-',
                     markersize=markersize,
-                    label=f'trained on {training_set_size}cells',
-                    color='k')
-    axes[t_list.index(training_set_size), sigma_list.index(sigma)].fill_between(
+                    label=f'{training_set_size:.0e} cells',
+                    color=training_set_color_dict[training_set_size])
+    axes[sigma_list.index(sigma)].fill_between(
                     t, 
                     np.nanquantile(RMSE, axis=[0,], q=0.5-q/2), 
                     np.nanquantile(RMSE, axis=[0,], q=0.5+q/2), 
-                    color='k',
+                    color=training_set_color_dict[training_set_size],
                     alpha=alpha)
 
 for j in range(len(sigma_list)):
-    for i in range(len(t_list)):
-        axes[i,j].set_xlabel('time (h)')
-        axes[i,j].set_title(f'sigma={sigma_list[j]}\ntrained on {t_list[i]} cells')
-        axes[i,j].set_ylim([0,500])
-        axes[i,j].set_ylabel(f'RMSE\n{np.shape(fluo)[0]} cells')
-        axes[i,j].grid(True, "both", "both")
+    ax = axes[j]
+    # ax.legend()
+    # ax.set_xlabel('time (h)')
+    # ax.set_title(f'sigma={sigma_list[j]}')
+    # ax.set_ylabel(f'RMSE\n{np.shape(fluo)[0]} cells')
+    ax.grid(True, "both", "both")
+axes[0].legend()
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_training_set_size.png', dpi=600)
+print(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_training_set_size.png')
 
 #%% "Simple" model error binned by fluorescence
 
