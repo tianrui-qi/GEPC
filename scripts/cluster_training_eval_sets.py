@@ -153,6 +153,7 @@ cell_class = 'CcaSR_Cascade'
 
 # Find new parameters
 K_I_new_list = [60/1.5, 60, 60*1.5]
+K_I_new_list = [20, 40, 50, 70]
 refcell = dcc.simulations.CcaSR_Cascade()
 
 cascade_params_list = []

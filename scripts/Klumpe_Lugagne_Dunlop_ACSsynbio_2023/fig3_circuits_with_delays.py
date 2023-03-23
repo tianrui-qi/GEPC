@@ -185,6 +185,9 @@ for c, cell_class in enumerate(plot_list):
 
 n_hours = 6
 n_cells = 50
+alpha=0.3
+lw =1
+
 random_bit = dcc.utilities.random_stimulations(
                         timepoints=n_hours*12*2,
                         nostim_timepoints=0,
@@ -196,7 +199,7 @@ x = [t/12. for t in range(len(light_sequence)+1)]
 
 # Find new parameters
 K_I_new_list = [60/1.5, 60, 60*1.5]
-# K_I_new_list = [20, 40, 80, 160]
+K_I_new_list = [20, 40, 50, 70]
 refcell = dcc.simulations.CcaSR_Cascade()
 
 cascade_params_list = []
@@ -217,8 +220,6 @@ for K_I_new in K_I_new_list:
 # plot
 fig, axes = plt.subplots(1, len(cascade_params_list), 
                          figsize=(5*len(cascade_params_list),4))
-alpha=0.2
-lw = 2
 
 for p, new_params in enumerate(cascade_params_list):
     
