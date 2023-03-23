@@ -97,55 +97,56 @@ for cell_class in cell_class_list:
 # Cell class: in training data path, and name of class in dcc.simulations
 cell_class = 'CcaSR_gillespie'
 
-horizon_list = [12, 24, 48]
+# horizon_list = [12, 24, 48]
 
-for horizon in horizon_list:
+# for horizon in horizon_list:
         
-    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training*")
-    training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
+#     training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training*")
+#     training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
     
-    for training_dir in training_dir_list:
+#     for training_dir in training_dir_list:
         
-        training_file = training_dir.split('/')[-1]
-        datasets_folder = '/'.join(training_dir.split('/')[:-1])
+#         training_file = training_dir.split('/')[-1]
+#         datasets_folder = '/'.join(training_dir.split('/')[:-1])
                         
-        # Fields to change in config.py:
-        # Training epochs, locations of training and evaluation datsets,
-        # which cell class to use for simulations
-        config = dict(
-            training_parameters = dict(
-                epochs = 200, # 200 is typically enough
-                ),
-            datasets_folder = datasets_folder, # Point to generated sets folder
-            training_sets = (training_file,), # Training subfolder(s)
-            eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
-            features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
-            cell_class = cell_class, # Cell class to use in dcc.simulations
-            models_folder = dcc_repo_path + '/assets/models/',
-            horizon = horizon,
-            )
+#         # Fields to change in config.py:
+#         # Training epochs, locations of training and evaluation datsets,
+#         # which cell class to use for simulations
+#         config = dict(
+#             training_parameters = dict(
+#                 epochs = 200, # 200 is typically enough
+#                 ),
+#             datasets_folder = datasets_folder, # Point to generated sets folder
+#             training_sets = (training_file,), # Training subfolder(s)
+#             eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+#             features = ("fluo1", "stims"), # Features to use (probably will only be fluo1 and stims)
+#             cell_class = cell_class, # Cell class to use in dcc.simulations
+#             models_folder = dcc_repo_path + '/assets/models/',
+#             horizon = horizon,
+#             )
         
-        # Updated config and save it to disk:
-        saved_config_file = params_change(config)
+#         # Updated config and save it to disk:
+#         saved_config_file = params_change(config)
         
-        # Submit qsub request for single job:
-        job_id = qsub.submit(
-            dcc_repo_path + "scripts/simulated_pipeline.py",
-            args = [saved_config_file],
-            conda_env="dcc_env_shared",
-            hardware_requirements = dict(
-                time_limit = 5, #2
-                cores=6, #4
-                gpus=1,
-                mem_per_core=4,
-                )
-            )
+#         # Submit qsub request for single job:
+#         job_id = qsub.submit(
+#             dcc_repo_path + "scripts/simulated_pipeline.py",
+#             args = [saved_config_file],
+#             conda_env="dcc_env_shared",
+#             hardware_requirements = dict(
+#                 time_limit = 5, #2
+#                 cores=6, #4
+#                 gpus=1,
+#                 mem_per_core=4,
+#                 )
+#             )
         
-past_steps_list = [12, 24, 36]
+# past_steps_list = [12, 24, 36]
+past_steps_list = [3, 6]
 
 for past_steps in past_steps_list:
         
-    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training*")
+    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023-03-16*/training*")
     training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
     
     for training_dir in training_dir_list:
