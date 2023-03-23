@@ -251,6 +251,7 @@ default_h1 = np.abs((df_meta['h1'] - _h1) / _h1) < 0.01
 default_h2 = np.abs((df_meta['h2'] - _h2) / _h2) < 0.01
 default_h1h2 = np.abs(((df_meta['h1'] / df_meta['h2']) - _h1h2) / _h1h2) < 0.01
 
+default_models = default_training_size & default_past_steps & default_horizon & default_h1 & default_h2
 
 #%% Plot responses to pure light
 
@@ -311,10 +312,42 @@ plt.tight_layout()
 plt.savefig(f'{fig_path}/fig1_sample_activation_different_noise.png',
             dpi=300)
 
+#%% Distribution of error at time 0
+
+alpha = 0.3
+n_bins = 100
+x_max = 700
+
+for c in range(len(df_simul_config)):
+    
+    config = df_simul_config.loc[c]
+    camera_sim = config['camera_sim']
+    solver = config['solver']
+    cell_class = config['cell_class']
+    color = config['color']
+    config_bool = (df_meta['camera_sim']==camera_sim)&(df_meta['solver']==solver)&(df_meta['cell_class']==cell_class)
+    
+    simul_id = df_meta.loc[default_models & config_bool, 'simul_id'].values[0]
+    
+    fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True)
+    x = np.arange(np.shape(fluo)[-1])/12
+        
+    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+    
+    plt.hist(RMSE[:,-1], 
+              bins = np.linspace(0,x_max,n_bins+1),
+              color=color,
+              alpha=alpha,
+              density=True)
+    
+plt.xlabel('RMSE at end of prediction')
+plt.ylabel('Frequency')
+plt.xlim([0,x_max])
+# plt.tight_layout()
+plt.savefig(f'{fig_path}/fig1_tfinal_RMSE_distribution.png',dpi=300)
 
 #%% Plot select predictions
 
-default_models = default_training_size & default_past_steps & default_horizon & default_h1 & default_h2
 lw = 0.75
 for c in range(len(df_simul_config)):
     
