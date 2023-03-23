@@ -241,21 +241,20 @@ for training_dir in training_dir_list:
 
 # Cell class: in training data path, and name of class in dcc.simulations
 cell_class = 'CcaSR_Cascade'
+training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023-03-23*/training*")
+training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
 
-horizon_list = [12, 48]
+horizon_list = [12, 24, 48]
 
 for horizon in horizon_list:
-        
-    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training*")
-    training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
     
     for training_dir in training_dir_list:
         
         training_file = training_dir.split('/')[-1]
         datasets_folder = '/'.join(training_dir.split('/')[:-1])
         
-        print(datasets_folder)
-        print(training_file)
+        # print(datasets_folder)
+        # print(training_file)
                         
         # Fields to change in config.py:
         # Training epochs, locations of training and evaluation datsets,
@@ -289,17 +288,17 @@ for horizon in horizon_list:
                 )
             )
         
-past_steps_list = [12, 24, 36]
+past_steps_list = [6, 12, 24]
 
 for past_steps in past_steps_list:
-        
-    training_dir_list = glob.glob(dcc_data_path + f"assets/simulated/data/{cell_class}/2023*/training*")
-    training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
     
     for training_dir in training_dir_list:
         
         training_file = training_dir.split('/')[-1]
         datasets_folder = '/'.join(training_dir.split('/')[:-1])
+        
+        # print(datasets_folder)
+        # print(training_file)
                         
         # Fields to change in config.py:
         # Training epochs, locations of training and evaluation datsets,
