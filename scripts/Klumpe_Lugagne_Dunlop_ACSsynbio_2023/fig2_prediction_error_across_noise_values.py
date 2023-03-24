@@ -161,10 +161,11 @@ past_steps_color_dict = {3: "#ce5451",
                          24: "#5da071", 
                          36: "#588acf"}
 
-training_set_color_dict = {10: "#327a42",
-                           100:"#5a6eb8",
-                           1000: "#57377b",
-                           10000: "#c561b0",}
+training_set_color_dict = {1: 'k',
+                           9: "#327a42",
+                           90:"#5a6eb8",
+                           900: "#57377b",
+                           9000: "#c561b0",}
 
 markersize=8
 
@@ -389,7 +390,207 @@ plt.tight_layout()
 plt.savefig(f'{fig_path}/fig2_{cell_class}_sample_responses.png', dpi=300)
 
 
-#%% Plot MEDIAN or MEAN error as function of horizon 
+#%% For default model, look at effect of training set size
+
+# Which cell class, and horizon values to plot
+cell_class = 'CcaSR_gillespie'
+
+# Keep simulations with default past steps, default horizon, and same h1/h2 ratio
+simul_slice = default_past_steps & default_horizon & default_h1 & \
+            default_h2 & default_camera_sim & default_solver
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)].sort_values(by=['training_sets']).reset_index()
+
+
+alpha = 0.5
+n_bins = 100
+x_max = 25000
+
+for i in df_past.index:
+    simul = df_past.loc[i]
+    simul_id = simul['simul_id']
+    training_set_folder = simul['training_sets']
+    
+    if training_set_folder == 'training_set':
+        training_set_size = 10_000
+    else:
+        training_set_size = int(training_set_folder.split('_')[-2])
+        
+    if training_set_size > 1:
+        training_set_size = int(0.9*training_set_size)
+    else:
+        continue
+
+    fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+    
+    # Distribution across the prediction
+    plt.hist(np.sum(RMSE, axis=1), 
+                  bins=np.linspace(0, x_max, n_bins+1),
+                  color=training_set_color_dict[training_set_size],
+                alpha=alpha,                 
+                label=f'trained on {training_set_size} cells',
+                density=True)
+
+plt.xlabel('Total RMSE')
+plt.ylabel('Frequency')
+plt.legend()
+
+plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_default_effect_of_training_set_size.png', dpi=300)
+
+#%% Default model x horizon
+
+# Which cell class, and horizon values to plot
+cell_class = 'CcaSR_gillespie'
+horizon_vals = np.sort(np.unique(horizon_list))[::-1]
+
+# Keep simulations with default training size, default past steps, and same h1/h2 ratio
+simul_slice = default_training_size & default_past_steps & default_h1 & \
+            default_h2 & default_camera_sim & default_solver
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+
+
+fig, axes = plt.subplots(1,2, figsize=(8,3))
+alpha = 0.5
+n_bins = 100
+x_max = 1000
+
+for ho, horizon in enumerate(horizon_vals):
+    df_index = (df_past['horizon']==horizon)
+    simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+
+    fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+    
+    # At final time point
+    axes[0].hist(RMSE[:,horizon-1],
+                 bins=np.linspace(0, x_max, n_bins+1),
+                 color=horizon_color_dict[horizon],
+                 alpha=alpha,
+                 label=f'horizon={horizon}',
+                 density=True)
+    
+    # Distribution at a particular point in time
+    axes[1].hist(RMSE[:,11], 
+                 bins=np.linspace(0, x_max, n_bins+1),
+               color=horizon_color_dict[horizon],
+               alpha=alpha,                 
+               label=f'horizon={horizon}',
+               density=True)
+
+axes[0].set_xlabel('RMSE at final prediction time point')
+axes[1].set_xlabel('RMSE after 1h of prediction')
+axes[1].legend()
+for i in range(2):
+    axes[i].set_ylabel('Frequency')
+    
+plt.tight_layout()
+
+plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_default_effect_of_horizon.png', dpi=300)
+
+#%% For default model, look at effect of past steps
+
+# Which cell class, and horizon values to plot
+cell_class = 'CcaSR_gillespie'
+past_steps_vals = np.sort(np.unique(past_steps_list))[::-1]
+
+# Keep simulations with default training size, default past steps, and same h1/h2 ratio
+simul_slice = default_training_size & default_horizon & default_h1 & \
+            default_h2 & default_camera_sim & default_solver
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+
+
+alpha = 0.5
+n_bins = 100
+x_max = 60000
+
+for p, past_steps in enumerate(past_steps_vals):
+    df_index = (df_past['past_steps']==past_steps)
+    simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+
+    fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+    
+    # Distribution across the prediction
+    plt.hist(np.sum(RMSE, axis=1), 
+                 bins=np.linspace(0, x_max, n_bins+1),
+               color=past_steps_color_dict[past_steps],
+               alpha=alpha,                 
+               label=f'past steps={past_steps}',
+               density=True)
+
+plt.xlabel('Total RMSE')
+plt.ylabel('Frequency')
+plt.legend()
+
+plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_default_effect_of_past_steps.png', dpi=300)
+
+#%% Gillespie x horizon
+
+# Which cell class, and horizon values to plot
+cell_class = 'CcaSR_gillespie'
+h1_vals = np.sort(np.unique(h1_list))
+h1_vals = h1_vals[~np.isnan(h1_vals)]
+horizon_vals = np.sort(np.unique(horizon_list))[::-1]
+
+h1_highlight = 4e-2
+h1_plot = [8e-3, 2e-1]
+
+# Keep simulations with default training size, default past steps, and same h1/h2 ratio
+simul_slice = default_training_size & default_past_steps & default_h1h2 & \
+            default_camera_sim & default_solver
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+
+fig, axes = plt.subplots(1, len(h1_plot), figsize=(10,3), sharey=True)
+alpha = 0.2
+n_bins = 100
+x_max = 1200
+
+for h, h1 in enumerate(h1_vals):
+    
+    for ho, horizon in enumerate(horizon_vals):
+        df_index = (df_past['h1']==h1)&(df_past['horizon']==horizon)
+        simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+        h2 = df_past.loc[df_index, 'h2'].values[0]
+    
+        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+    
+        # For horizon, plot endpoint prediction
+        # Highlighted parameter set as outline
+        if h1==h1_highlight:
+            for i in range(len(h1_plot)):
+                axes[i].hist(RMSE[:,-1], 
+                              bins=np.linspace(0, x_max, n_bins+1),
+                              color=horizon_color_dict[horizon],
+                              histtype='step',
+                            label=f'horizon={horizon}',
+                            density=True)
+        # Other as distribution
+        else:   
+            ax = axes[h1_plot.index(h1)]
+            ax.hist(RMSE[:,-1], 
+                          bins=np.linspace(0, x_max, n_bins+1),
+                          color=horizon_color_dict[horizon],
+                          alpha=alpha,
+                        label=f'horizon={horizon}',
+                        density=True)
+            
+            ax.set_title(f'h1={h1:.2e}, h2={h2:.2e}')
+            ax.set_xlabel('Endpoint RMSE')
+                
+        
+# axes[0].set_ylabel('Frequency')
+axes[-1].legend(bbox_to_anchor=(1,1))
+
+plt.tight_layout()
+plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_horizon.png', dpi=300)
+
+
+#%% Gillespie x horizon x time 
 
 # Which cell class, h1, and horizon values to plot
 cell_class = 'CcaSR_gillespie'
@@ -437,7 +638,72 @@ axes[0].legend()
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_horizon.png', dpi=300)
 
-#%% Plot MEDIAN or MEAN error as function of past steps 
+#%% Gillespie x past steps
+
+# Which cell class, and horizon values to plot
+cell_class = 'CcaSR_gillespie'
+h1_vals = np.sort(np.unique(h1_list))
+h1_vals = h1_vals[~np.isnan(h1_vals)]
+past_steps_vals = np.sort(np.unique(past_steps_list))[::-1]
+past_steps_vals = [6, 12, 24, 36]
+past_steps_vals = [3,]
+
+h1_highlight = 4e-2
+h1_plot = [8e-3, 2e-1]
+
+# Keep simulations with default training size, default past steps, and same h1/h2 ratio
+simul_slice = default_training_size & default_horizon & default_h1h2 & \
+            default_camera_sim & default_solver
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+
+fig, axes = plt.subplots(1, len(h1_plot), figsize=(10,3), sharey=True)
+alpha = 0.2
+n_bins = 100
+x_max = 50_000 # 20_000
+
+for h, h1 in enumerate(h1_vals):
+    
+    for p, past_steps in enumerate(past_steps_vals):
+        df_index = (df_past['h1']==h1)&(df_past['past_steps']==past_steps)
+        simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+        h2 = df_past.loc[df_index, 'h2'].values[0]
+    
+        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+    
+        # For horizon, plot endpoint prediction
+        # Highlighted parameter set as outline
+        if h1==h1_highlight:
+            for i in range(len(h1_plot)):
+                axes[i].hist(np.sum(RMSE, axis=1), 
+                              bins=np.linspace(0, x_max, n_bins+1),
+                              color=past_steps_color_dict[past_steps],
+                              histtype='step',
+                            label=f'past steps={past_steps}',
+                            density=True)
+        # Other as distribution
+        else:   
+            ax = axes[h1_plot.index(h1)]
+            ax.hist(np.sum(RMSE, axis=1), 
+                          bins=np.linspace(0, x_max, n_bins+1),
+                              color=past_steps_color_dict[past_steps],
+                          alpha=alpha,
+                        label=f'past steps={past_steps}',
+                        density=True)
+            
+            ax.set_title(f'h1={h1:.2e}, h2={h2:.2e}')
+            ax.set_xlabel('Total RMSE')
+                
+        
+# axes[0].set_ylabel('Frequency')
+axes[-1].legend(bbox_to_anchor=(1,1))
+
+plt.tight_layout()
+plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_past_steps_subset.png', dpi=300)
+
+
+#%% Gillespie x past steps x time
 
 # Which cell class, h1, and horizon values to plot
 cell_class = 'CcaSR_gillespie'
@@ -658,9 +924,151 @@ for i in range(len(df_past)):
     plt.tight_layout()
     plt.savefig(fig_path+f'/fig2_{cell_class}_sigma{sigma}_ts{training_set_size}_predictions_percentiles.png', dpi=300)
 
+#%% Gillespie simple x training_set_size
+
+# Which cell class, and horizon values to plot
+cell_class = 'CcaSR_gillespie_simple'
+sigma_vals = np.unique(sigma_list)
+sigma_vals = sigma_vals[~np.isnan(sigma_vals)]
+
+# Keep simulations with default past steps, default horizon, and same h1/h2 ratio
+simul_slice = default_past_steps & default_horizon & default_camera_sim & default_solver
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)].sort_values(by=['training_sets']).reset_index()
+
+fig, axes = plt.subplots(1,2, figsize=(8,3), sharex=True)
+alpha = 0.3
+n_bins = 100
+x_max = 30000
+
+for s, sigma in enumerate(sigma_vals):
+    
+    df_s = df_past.loc[df_past['sigma']==sigma]
+    
+    for i in df_s.index:
+
+        simul = df_past.loc[i]
+        simul_id = simul['simul_id']
+        training_set_folder = simul['training_sets']
+        
+        if training_set_folder == 'training_set':
+            training_set_size = 10_000
+        else:
+            training_set_size = int(training_set_folder.split('_')[-2])
+            
+        if training_set_size > 1:
+            training_set_size = int(0.9*training_set_size)
+        else:
+            continue
+    
+        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        
+        # # Distribution across the prediction
+        axes[s].hist(np.sum(RMSE, axis=1), 
+                      bins=np.linspace(0, x_max, n_bins+1),
+                      color=training_set_color_dict[training_set_size],
+                    alpha=alpha,                 
+                    label=f'trained on {training_set_size} cells',
+                    density=True)
+        # x = np.sort(np.sum(RMSE, axis=1))
+        # y = np.arange(1,len(x)+1) / len(x)
+        # axes[s].plot(x,y, '.', markersize=3, 
+        #              color=training_set_color_dict[training_set_size],
+        #              label=f'trained on {training_set_size}cell')
+    axes[s].set_title(f'sigma={sigma}')
+    axes[s].set_xlabel('Total RMSE')
+
+# axes[0].set_ylabel('Frequency')
+# axes[1].legend(bbox_to_anchor=(1,1))
+
+plt.tight_layout()
+plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_training_set_size.png', dpi=300)
+
+#%% Gillespie simple x training_set_size [cp sigma side by side]
+
+# Which cell class, and horizon values to plot
+cell_class = 'CcaSR_gillespie_simple'
+sigma_vals = np.unique(sigma_list)
+sigma_vals = sigma_vals[~np.isnan(sigma_vals)]
+sigma_colors = ["#a26dba","#71a65a"]
+ts_list = [900, 90, 9]
+
+# Keep simulations with default past steps, default horizon, and same h1/h2 ratio
+simul_slice = default_past_steps & default_horizon & default_camera_sim & default_solver
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)].sort_values(by=['training_sets']).reset_index()
+
+fig, axes = plt.subplots(1,len(ts_list), figsize=(3.5*len(ts_list),3), sharey=True)
+alpha = 0.2
+n_bins = 100
+x_max = 30000
+
+for s, sigma in enumerate(sigma_vals):
+    
+    df_s = df_past.loc[df_past['sigma']==sigma]
+    
+    for i in df_s.index:
+
+        simul = df_past.loc[i]
+        simul_id = simul['simul_id']
+        training_set_folder = simul['training_sets']
+                
+        # Get training set size
+        if training_set_folder == 'training_set':
+            training_set_size = 10_000
+        else:
+            training_set_size = int(training_set_folder.split('_')[-2])
+            
+        # Correct for test/eval split
+        if training_set_size > 1:
+            training_set_size = int(0.9*training_set_size)
+        else:
+            continue
+    
+        # which axes
+        if training_set_size in ts_list:
+            ax = axes[ts_list.index(training_set_size)]
+        
+            fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+            RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+            
+            # # Distribution across the prediction
+            ax.hist(np.sum(RMSE, axis=1), 
+                          bins=np.linspace(0, x_max, n_bins+1),
+                          color=sigma_colors[s],
+                        alpha=alpha,                 
+                        label=f'sigma={sigma}',
+                        density=True)
+            # x = np.sort(np.sum(RMSE, axis=1))
+            # y = np.arange(1,len(x)+1) / len(x)
+            # axes[s].plot(x,y, '.', markersize=3, 
+            #              color=training_set_color_dict[training_set_size],
+            #              label=f'trained on {training_set_size}cell')
+            ax.set_title(f'Trained on {training_set_size} cells')
+            ax.set_xlabel('Total RMSE')
+        elif training_set_size == 9_000:
+            for t in range(len(ts_list)):
+                fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+                RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+                
+                # # Distribution across the prediction
+                axes[t].hist(np.sum(RMSE, axis=1), 
+                              bins=np.linspace(0, x_max, n_bins+1),
+                              color=sigma_colors[s],
+                              histtype='step',
+                            label=f'sigma={sigma}',
+                            density=True)
+            
+
+# axes[0].set_ylabel('Frequency')
+axes[-1].legend(bbox_to_anchor=(1,1))
+
+plt.tight_layout()
+plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_effect_of_training_set_size.png', dpi=300)
 
 
-#%% MEDIAN or MEAN error (Gillespie simple) x training_set_size
+#%% (Gillespie simple) x training_set_size x time
 
 cell_class = 'CcaSR_gillespie_simple'
 simul_slice = default_past_steps & default_horizon

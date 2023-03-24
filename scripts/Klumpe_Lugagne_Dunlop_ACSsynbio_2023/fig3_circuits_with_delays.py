@@ -151,11 +151,16 @@ def get_params(simul_id):
 #%% Global plot styles
 
 horizon_color_dict = {12: 'r', 24: 'g', 48: 'b'}
-past_steps_color_dict = {12: 'r', 24: 'g', 36: 'b'}
+
+past_steps_color_dict = {3: "#ce5451",
+                         6: "#bc8b3d",
+                         12: "#73af3d",
+                         24: "#5da071", 
+                         36: "#588acf"}
 
 #%% Check training data
 
-plot_list = ['CcaSR_Cascade', 'CcaSR_FeedforwardPositive']
+plot_list = ['CcaSR_Cascade', ]
 alpha = 0.3
 
 for c, cell_class in enumerate(plot_list):
@@ -198,12 +203,11 @@ light_sequence = [1]*12*6 + [0]*12*6
 x = [t/12. for t in range(len(light_sequence)+1)]
 
 # Find new parameters
-K_I_new_list = [60/1.5, 60, 60*1.5]
-K_I_new_list = [20, 40, 50, 70]
+KI_vals = [20, 40, 50, 70]
 refcell = dcc.simulations.CcaSR_Cascade()
 
 cascade_params_list = []
-for K_I_new in K_I_new_list:
+for K_I_new in KI_vals:
     
     H_ss = refcell.params['eta'] / refcell.params['nu'] 
     E_ss = refcell.params['h1'] / refcell.params['h2'] 
@@ -257,86 +261,86 @@ plt.savefig(fig_path+'/fig3_CcaSR_Cascade_ss_responses.png', dpi=300)
 #%% Feedforward: responses to pure light, to show delays
 
 
-# Solve for parameters
-refcell = dcc.simulations.CcaSR_FeedforwardPositive()
-starting_list = [{'K_I': 120, 'K_J': 120},
-                   {'K_I': 120, 'K_J': 30},
-                   {'K_I': 60, 'K_J': 120},
-                   {'K_I': 60, 'K_J': 30},
-                    ]
+# # Solve for parameters
+# refcell = dcc.simulations.CcaSR_FeedforwardPositive()
+# starting_list = [{'K_I': 120, 'K_J': 120},
+#                    {'K_I': 120, 'K_J': 30},
+#                    {'K_I': 60, 'K_J': 120},
+#                    {'K_I': 60, 'K_J': 30},
+#                     ]
 
-new_params_list = []
-for starting in starting_list:
+# new_params_list = []
+# for starting in starting_list:
     
-    K_I_new = starting['K_I']
-    K_J_new = starting['K_J']
+#     K_I_new = starting['K_I']
+#     K_J_new = starting['K_J']
     
-    eta = refcell.params['eta']
-    nu = refcell.params['nu']
-    h1 = refcell.params['h1']
-    h2 = refcell.params['h2']
-    K_H = refcell.params['K_H']
-    nh = refcell.params['nh']
-    K_I = refcell.params['K_I']
-    ni = refcell.params['ni']
-    K_J = refcell.params['K_J']
-    nj = refcell.params['nj']
-    a = refcell.params['a']
+#     eta = refcell.params['eta']
+#     nu = refcell.params['nu']
+#     h1 = refcell.params['h1']
+#     h2 = refcell.params['h2']
+#     K_H = refcell.params['K_H']
+#     nh = refcell.params['nh']
+#     K_I = refcell.params['K_I']
+#     ni = refcell.params['ni']
+#     K_J = refcell.params['K_J']
+#     nj = refcell.params['nj']
+#     a = refcell.params['a']
     
-    H_ss = eta / nu
-    E_ss = h1 / h2
-    I_ss = (a * E_ss * H_ss**nh) / nu / (K_H**nh + H_ss**nh)
+#     H_ss = eta / nu
+#     E_ss = h1 / h2
+#     I_ss = (a * E_ss * H_ss**nh) / nu / (K_H**nh + H_ss**nh)
     
-    J_ss = (a * E_ss * I_ss**ni) / nu / (K_I**ni + I_ss**ni)
-    fac1 = I_ss**ni / (K_I**ni + I_ss**ni)
-    fac2 = J_ss**nj / (K_J**nj + J_ss**nj)
+#     J_ss = (a * E_ss * I_ss**ni) / nu / (K_I**ni + I_ss**ni)
+#     fac1 = I_ss**ni / (K_I**ni + I_ss**ni)
+#     fac2 = J_ss**nj / (K_J**nj + J_ss**nj)
     
-    J_ss_new = (a * E_ss * I_ss**ni) / nu / (K_I_new**ni + I_ss**ni)
-    fac1_new = I_ss**ni / (K_I_new**ni + I_ss**ni)
-    fac2_new = J_ss_new**nj / (K_J_new**nj + J_ss_new**nj)
+#     J_ss_new = (a * E_ss * I_ss**ni) / nu / (K_I_new**ni + I_ss**ni)
+#     fac1_new = I_ss**ni / (K_I_new**ni + I_ss**ni)
+#     fac2_new = J_ss_new**nj / (K_J_new**nj + J_ss_new**nj)
     
-    a_update = (fac1 + fac2) / (fac1_new + fac2_new)
+#     a_update = (fac1 + fac2) / (fac1_new + fac2_new)
     
-    new_params = {'K_J': K_J_new, 'K_I': K_I_new, 'a_F': a_update}
-    new_params_list += [new_params]
+#     new_params = {'K_J': K_J_new, 'K_I': K_I_new, 'a_F': a_update}
+#     new_params_list += [new_params]
 
-# plot
-fig, axes = plt.subplots(1, len(new_params_list), 
-                         figsize=(5*len(new_params_list),4))
+# # plot
+# fig, axes = plt.subplots(1, len(new_params_list), 
+#                          figsize=(5*len(new_params_list),4))
 
-for p, new_params in enumerate(new_params_list):
+# for p, new_params in enumerate(new_params_list):
     
     
     
-    # Plot results
-    plt.sca(axes[p])
-    dcc.utilities.OptoPlotBackground(light_sequence, ymax=250, x=x)
+#     # Plot results
+#     plt.sca(axes[p])
+#     dcc.utilities.OptoPlotBackground(light_sequence, ymax=250, x=x)
     
-    for i in range(n_cells):
-        # Simulate cell
-        cell = dcc.simulations.CcaSR_FeedforwardPositive()
-        cell.update_params(new_params)
-        cell.set_light_events(light_sequence)     
-        series = cell.run(len(light_sequence)*5, 
-                               solver="original")
+#     for i in range(n_cells):
+#         # Simulate cell
+#         cell = dcc.simulations.CcaSR_FeedforwardPositive()
+#         cell.update_params(new_params)
+#         cell.set_light_events(light_sequence)     
+#         series = cell.run(len(light_sequence)*5, 
+#                                solver="original")
     
     
-        axes[p].plot(x, [state['I'] for state in series],
-                      color='#6d418a',
-                      alpha=alpha, lw=lw)
-        axes[p].plot(x, [state['J'] for state in series],
-                      color = '#9c065d',
-                      alpha=alpha, lw=lw)
-        axes[p].plot(x, [state['F'] for state in series],
-                     color='b',
-                     alpha=alpha, lw=lw)
-    axes[p].set_xlabel("time (hours)")
-    axes[p].set_ylabel("proteins (#)")
-    axes[p].set_ylim(0,150)
-    axes[p].set_title(f"K_I={new_params['K_I']}, K_J={new_params['K_J']} ,a_F={new_params['a_F']:.2e}")
+#         axes[p].plot(x, [state['I'] for state in series],
+#                       color='#6d418a',
+#                       alpha=alpha, lw=lw)
+#         axes[p].plot(x, [state['J'] for state in series],
+#                       color = '#9c065d',
+#                       alpha=alpha, lw=lw)
+#         axes[p].plot(x, [state['F'] for state in series],
+#                      color='b',
+#                      alpha=alpha, lw=lw)
+#     axes[p].set_xlabel("time (hours)")
+#     axes[p].set_ylabel("proteins (#)")
+#     axes[p].set_ylim(0,150)
+#     axes[p].set_title(f"K_I={new_params['K_I']}, K_J={new_params['K_J']} ,a_F={new_params['a_F']:.2e}")
     
-plt.tight_layout()
-plt.savefig(fig_path+'/fig3_CcaSR_FeedforwardPositive_ss_responses.png', dpi=300)
+# plt.tight_layout()
+# plt.savefig(fig_path+'/fig3_CcaSR_FeedforwardPositive_ss_responses.png', dpi=300)
 
 #%% Get information about simulations
 
@@ -472,11 +476,62 @@ for k, K_I in enumerate(KI_vals):
     plt.savefig(f'{fig_path}/fig3_{cell_class}_qplot_err_fluor_bin.png',dpi=300)
     
 
+
 #%% Cascade x horizon
 
 # Which cell class, h1, and horizon values to plot
 cell_class = 'CcaSR_Cascade'
-KI_vals = [40, 60, 90]
+horizon_vals = np.sort(np.unique(horizon_list))[::-1]
+
+# Keep simulations with default training size, default past, and same h1/h2 ratio
+simul_slice = default_training_size & default_past_steps
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+df_past = df_past.sort_values(by=['K_I','horizon'])
+
+fig, axes = plt.subplots(2, len(KI_vals), figsize=(10,5), sharey=True)
+alpha=0.5
+xmax = 1500
+n_bins = 100
+# Rather than plotting everything, just plot one replicate of each trained model
+for k, K_I in enumerate(KI_vals):
+    
+    for ho, horizon in enumerate(horizon_vals):
+        df_index = (df_past['K_I']==K_I)&(df_past['horizon']==horizon)
+        simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+    
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        
+        axes[0, k].hist(RMSE[:,-1],
+                 bins = np.linspace(0,xmax, n_bins+1),
+                  color = horizon_color_dict[horizon],
+                  label=f'horizon={horizon}',
+                  alpha=alpha,
+                  density=True)
+        axes[1, k].hist(RMSE[:,11],
+                 bins = np.linspace(0,xmax, n_bins+1),
+                  color = horizon_color_dict[horizon],
+                  label=f'horizon={horizon}',
+                      alpha=alpha,
+                      density=True)
+    
+    axes[0,k].set_xlabel('Endpoint RMSE')
+    axes[1,k].set_xlabel('1h RMSE')
+    
+    for i in range(2):
+        axes[i,k].set_xlim([0, xmax])
+        axes[i, 0].legend()
+        axes[i,k].set_title(f'K_I={K_I}')
+        
+plt.tight_layout()
+plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_horizon.png', dpi=600)
+
+
+#%% Cascade x horizon x time
+
+# Which cell class, h1, and horizon values to plot
+cell_class = 'CcaSR_Cascade'
 horizon_vals = np.sort(np.unique(horizon_list))[::-1]
 
 # Keep simulations with default training size, default past, and same h1/h2 ratio
@@ -515,14 +570,59 @@ for k, K_I in enumerate(KI_vals):
     axes[k].set_xlabel('time (h)')
     axes[k].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
 plt.tight_layout()
-plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_horizon.png', dpi=600)
+plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_horizon_with_time.png', dpi=600)
 
-#%% Cascade x past steps
+
+#%% Cascade x past_steps
 
 # Which cell class, h1, and horizon values to plot
 cell_class = 'CcaSR_Cascade'
-KI_vals = [40, 60, 90]
 past_steps_vals = np.sort(np.unique(past_steps_list))[::-1]
+past_steps_vals = [6, 12, 24, 36]
+
+# Keep simulations with default training size, default past, and same h1/h2 ratio
+simul_slice = default_training_size & default_horizon
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+df_past = df_past.sort_values(by=['K_I','past_steps'])
+
+fig, axes = plt.subplots(1, len(KI_vals), figsize=(10,3), sharey=True)
+alpha=0.5
+xmax = 50_000
+n_bins = 100
+
+# Rather than plotting everything, just plot one replicate of each trained model
+for k, K_I in enumerate(KI_vals):
+    
+    for p, past_steps in enumerate(past_steps_vals):
+        df_index = (df_past['K_I']==K_I)&(df_past['past_steps']==past_steps)
+        simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+    
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        
+        axes[k].hist(np.sum(RMSE, axis=1),
+                 bins = np.linspace(0,xmax, n_bins+1),
+                  color = past_steps_color_dict[past_steps],
+                  label=f'past steps={past_steps}',
+                  alpha=alpha,
+                  density=True)
+    
+    axes[k].set_xlabel('Total RMSE')
+    
+    axes[k].set_xlim([0, xmax])
+    axes[0].legend()
+    axes[k].set_title(f'K_I={K_I}')
+        
+plt.tight_layout()
+plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_past_steps.png', dpi=600)
+
+#%% Cascade x past steps x time
+
+# Which cell class, h1, and horizon values to plot
+cell_class = 'CcaSR_Cascade'
+past_steps_vals = np.sort(np.unique(past_steps_list))[::-1]
+past_steps_vals = [6, 12, 24, 36]
 
 # Keep simulations with default training size, default past, and same h1/h2 ratio
 simul_slice = default_training_size & default_horizon
@@ -553,12 +653,12 @@ for k, K_I in enumerate(KI_vals):
             )
     
     axes[k].set_title(f'K_I={K_I}')
-    axes[k].legend()
+    # axes[k].legend()
     axes[k].set_xlabel('time (h)')
-    axes[k].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
     axes[k].grid(True, 'both', 'both')
+axes[0].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
 plt.tight_layout()
-plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_past_steps.png', dpi=600)
+plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_past_steps_over_time.png', dpi=600)
 
 
 #%% FF+ error binned by fluorescence
