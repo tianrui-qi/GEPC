@@ -90,7 +90,10 @@ x = (
      )
 
 # Load best evaluated model from disk:
-network = tf.keras.models.load_model(save_path + "/model_besteval.hdf5")
+if training_set.test_ratio > 0:
+    network = tf.keras.models.load_model(save_path + "/model_besteval.hdf5")
+else:
+    network = tf.keras.models.load_model(save_path + "/model.hdf5")
 
 # Predict:
 yhat = network.predict(x, verbose = True)
