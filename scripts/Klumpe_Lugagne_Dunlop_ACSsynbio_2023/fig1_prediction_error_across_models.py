@@ -419,6 +419,83 @@ for c in range(len(df_simul_config)):
     plt.tight_layout()
     plt.savefig(fig_path+f'/fig1_{cell_class}_predictions_percentiles_camera_sim_{camera_sim}_solver_{solver}.png', dpi=300)
 
+#%% Median prediction summary
+
+lw = 0.75
+fig, axes = plt.subplots(len(df_simul_config), 1, 
+                         figsize=(3(len(df_simul_config),4)))
+
+percentile = [50,]
+
+for c in range(len(df_simul_config)):
+    
+    config = df_simul_config.loc[c]
+    camera_sim = config['camera_sim']
+    solver = config['solver']
+    cell_class = config['cell_class']
+    color = config['color']
+    config_bool = (df_meta['camera_sim']==camera_sim)&(df_meta['solver']==solver)&(df_meta['cell_class']==cell_class)
+    
+    simul_id = df_meta.loc[default_models & config_bool, 'simul_id'].values[0]
+    
+    # Find best and worst error
+    fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+    RMSE_sum_across_time = np.sum(np.sqrt((fluo - fluo_pred)**2), axis=1)
+    sorted_error = np.argsort(RMSE_sum_across_time)
+    
+    plot_list = [sorted_error[i] for i in percentile]
+    
+    stims, past_fluo, futures_fluo = get_eval_data(simul_id)
+    model_params, training_params = get_params(simul_id)
+    
+    plot_past = 3*12 # Only plot the past 3 hours (even though whole past is used)
+    cutoff = past_fluo.shape[1]
+    
+    fig, axes = plt.subplots(len(plot_list), 1,
+                              figsize=(3, 2*len(plot_list)),
+                              sharex=True)
+    for i, pl in enumerate(plot_list):
+            
+        # Stimulations
+        plt.sca(axes[i])
+        dcc.utilities.OptoPlotBackground(
+            stims[pl,cutoff-plot_past:cutoff+training_params["horizon"]],
+            x=np.arange(-plot_past, training_params["horizon"])/12,
+            ymax = 4095
+            )
+        
+        # Past
+        axes[i].plot(np.arange(-plot_past, 0)/12, 
+                      past_fluo[pl, -plot_past:],
+                      color, lw=3*lw)
+        
+        # Future
+        axes[i].plot(np.arange(0, training_params["horizon"])/12, 
+                  futures_fluo[pl, :, :training_params['horizon']].T, 
+                  color=color, alpha=0.01)
+        
+        # Prediction
+        axes[i].plot(np.arange(0, training_params["horizon"])/12, 
+                  fluo_pred[pl],
+                  color='k', lw=3*lw)
+        
+        # Prediction starts line
+        axes[i].plot([-0.5/12, -0.5/12], [0, 4095], color="gray")
+        
+        # Limits and labels
+        axes[i].set_ylim([0,4095])
+        axes[i].set_yticklabels([])
+        axes[i].set_xticklabels([])
+        # plt.title(f'Cell {c}')
+        # axes[i].set_xlabel("time (h)")
+        # axes[i].set_ylabel("Fluorescence (a.u.)")
+        # axes[i].set_title(f'{100 * percentile[i] / len(sorted_error):.0f}th percentile')
+    axes[-1].set_xlim([-plot_past/12, training_params["horizon"]/12])
+    # plt.suptitle(f'{cell_class}, camera_sim {camera_sim}, solver:{solver}')
+    plt.tight_layout()
+    plt.savefig(fig_path+f'/fig1_{cell_class}_predictions_percentiles_camera_sim_{camera_sim}_solver_{solver}.png', dpi=300)
+
+
 #%% Q-plot of error  v. fluorescence(better for overlay?)
 
 n_bins=20
