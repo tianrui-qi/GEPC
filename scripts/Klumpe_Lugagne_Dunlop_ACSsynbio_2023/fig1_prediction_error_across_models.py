@@ -312,11 +312,11 @@ plt.tight_layout()
 plt.savefig(f'{fig_path}/fig1_sample_activation_different_noise.png',
             dpi=300)
 
-#%% Distribution of error at time 0
+#%% Distribution of error over all time
 
-alpha = 0.3
+alpha = 0.7
 n_bins = 100
-x_max = 700
+x_max = 15000
 
 for c in range(len(df_simul_config)):
     
@@ -334,17 +334,18 @@ for c in range(len(df_simul_config)):
         
     RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
     
-    plt.hist(RMSE[:,-1], 
+    plt.hist(np.sum(RMSE, axis=1), 
               bins = np.linspace(0,x_max,n_bins+1),
               color=color,
               alpha=alpha,
+              linewidth=3,
               density=True)
     
-plt.xlabel('RMSE at end of prediction')
+plt.xlabel('RMSE (sum across time)')
 plt.ylabel('Frequency')
 plt.xlim([0,x_max])
-# plt.tight_layout()
-plt.savefig(f'{fig_path}/fig1_tfinal_RMSE_distribution.png',dpi=300)
+plt.tight_layout()
+plt.savefig(f'{fig_path}/fig1_total_RMSE_distribution.png',dpi=300)
 
 #%% Plot select predictions
 
