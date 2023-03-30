@@ -56,7 +56,7 @@ def get_eval_data(simul_id):
     
     return stims, past_fluo, futures_fluo
 
-def get_fluo_pred(simul_id):
+def get_fluo_pred(simul_id, validated=True):
     """
     Funtion to get predicted futures
 
@@ -73,11 +73,14 @@ def get_fluo_pred(simul_id):
     simul_dir = glob.glob(dcc_repo_path + f'/assets/models/{simul_id}*')[0]+'/'
         
     # Load predictions
-    fluo_pred = 4095 * np.load(f'{simul_dir}/evaluation/predictions.npy')
+    if validated:
+        fluo_pred = 4095 * np.load(f'{simul_dir}/evaluation/predictions.npy')
+    else:
+        fluo_pred = 4095 * np.load(f'{simul_dir}/evaluation_no_validation/predictions.npy')
     
     return fluo_pred
     
-def get_fluo_and_pred(simul_id, return_all=False):
+def get_fluo_and_pred(simul_id, return_all=True, validated=True):
     """
     Inputs
     ------
@@ -85,7 +88,10 @@ def get_fluo_and_pred(simul_id, return_all=False):
     return_all: bool, optional
         Whether to return all possible futures
         Default is false
-    
+    validated: bool, optional
+        Whether to return the prediction data on a model that was validated or not
+        Default is True
+        
     Outputs
     -------
     fluo: arr, (n_cells, len(future))
@@ -97,7 +103,7 @@ def get_fluo_and_pred(simul_id, return_all=False):
     """
         
     # Load predictions
-    fluo_pred = get_fluo_pred(simul_id)
+    fluo_pred = get_fluo_pred(simul_id, validated=validated)
 
     # Load data
     stims, past_fluo, futures_fluo = get_eval_data(simul_id)
@@ -108,7 +114,6 @@ def get_fluo_and_pred(simul_id, return_all=False):
         fluo_pred = np.repeat(fluo_pred[:, np.newaxis], fluo.shape[0], axis=1)
     else:
         fluo = futures_fluo[:,0,:np.shape(fluo_pred)[1]]
-    
     return fluo, fluo_pred
 
 def get_params(simul_id):
@@ -128,22 +133,6 @@ def get_params(simul_id):
         model_params = json.load(f)
         
     return model_params, training_params
-    """
-    Given: 
-        simul_id: str (some unique part of file name in /assets/models/) 
-    Returns:
-        training_params: dict
-        model parameters: dict
-    """
-    simul_dir = glob.glob(dcc_repo_path + f'/assets/models/{simul_id}*')[0]+'/'
-
-    with open(simul_dir+'training_parameters.json','r') as f:
-        training_params = json.load(f)
-        
-    with open(training_params['datasets_folder']+'/model_parameters.json', 'r') as f:
-        model_params = json.load(f)
-        
-    return training_params, model_params
 
 
 
@@ -157,6 +146,13 @@ past_steps_color_dict = {3: "#ce5451",
                          12: "#73af3d",
                          24: "#5da071", 
                          36: "#588acf"}
+
+KI_vals = [20,70]#[20, 40, 50, 70]
+KI_colors = ["#d84d32",
+            #  "#b27d3e",
+            # "#dac54b",
+            "#8f8539"]
+KI_color_dict = {KI_vals[i]: KI_colors[i] for i in range(len(KI_vals))}
 
 #%% Check training data
 
@@ -203,7 +199,6 @@ light_sequence = [1]*12*6 + [0]*12*6
 x = [t/12. for t in range(len(light_sequence)+1)]
 
 # Find new parameters
-KI_vals = [20, 40, 50, 70]
 refcell = dcc.simulations.CcaSR_Cascade()
 
 cascade_params_list = []
@@ -223,7 +218,7 @@ for K_I_new in KI_vals:
 
 # plot
 fig, axes = plt.subplots(1, len(cascade_params_list), 
-                         figsize=(5*len(cascade_params_list),4))
+                         figsize=(3*len(cascade_params_list),3))
 
 for p, new_params in enumerate(cascade_params_list):
     
@@ -250,10 +245,13 @@ for p, new_params in enumerate(cascade_params_list):
         axes[p].plot(x, [state['F'] for state in series],
                       color='b',
                       alpha=alpha, lw=lw)
-    axes[p].set_xlabel("time (hours)")
-    axes[p].set_ylabel("proteins (#)")
+    # axes[p].set_xlabel("time (hours)")
+    # axes[p].set_ylabel("proteins (#)")
+    # axes[p].set_xticklabels([])
+    axes[p].set_yticklabels([])
     axes[p].set_ylim(0,150)
-    axes[p].set_title(f"K_I={new_params['K_I']}, a_F={new_params['a_F']:.2e}")
+    axes[p].set_xlim([0,2*n_hours])
+    # axes[p].set_title(f"K_I={new_params['K_I']}, a_F={new_params['a_F']:.2e}")
     
 plt.tight_layout()
 plt.savefig(fig_path+'/fig3_CcaSR_Cascade_ss_responses.png', dpi=300)
@@ -357,6 +355,8 @@ epochs_list = []
 datasets_list = []
 KI_list = []
 KJ_list = []
+h1_list = []
+h2_list = []
 
 for simul_id in simul_id_list:
     
@@ -369,6 +369,12 @@ for simul_id in simul_id_list:
     epochs_list += [training_params['training_parameters']['epochs']]
     datasets_list += [training_params['datasets_folder']]
     
+    if 'h1' in model_params.keys():
+        h1_list += [model_params['h1']]
+    else: h1_list += [np.nan]
+    if 'h2' in model_params.keys():
+        h2_list += [model_params['h2']]
+    else: h2_list += [np.nan]
     if 'K_I' in model_params.keys():
         KI_list += [model_params['K_I']]
     else:
@@ -391,6 +397,8 @@ df_meta = pd.DataFrame({'simul_id': simul_id_list,
                         'past_steps': past_steps_list,
                         'camera_sim': camera_sim_list,
                         'solver': solver_list,
+                        'h1': h1_list,
+                        'h2': h2_list,
                         'K_I': KI_list,
                         'K_J': KJ_list,
                         'cell_class': cell_class_list,
@@ -410,6 +418,12 @@ default_horizon = df_meta['horizon']==24
 default_past_steps = df_meta['past_steps']==36
 default_training_size = df_meta['training_sets']=='training_set'
 
+_h1 = 4e-2
+_h2 = 1e-3
+_h1h2 = _h1 / _h2
+default_h1 = np.abs((df_meta['h1'] - _h1) / _h1) < 0.01
+default_h2 = np.abs((df_meta['h2'] - _h2) / _h2) < 0.01
+default_h1h2 = np.abs(((df_meta['h1'] / df_meta['h2']) - _h1h2) / _h1h2) < 0.01
 
 #%% Cascade: error in each fluorescence bin
 
@@ -477,55 +491,329 @@ for k, K_I in enumerate(KI_vals):
     
 
 
-#%% Cascade x horizon
+#%% Plot select predictions
+
+# Which cell class, h1, and horizon values to plot
+cell_class = 'CcaSR_Cascade'
+
+# Keep simulations with default training size, default past, and same h1/h2 ratio
+simul_slice = default_training_size & default_horizon
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+df_past = df_past.sort_values(by=['K_I',])
+past_steps_vals = [6,12,24,36]
+
+percentile = [50, 250, 500, 750, 950]
+
+
+alpha=0.5
+lw=0.5
+# Rather than plotting everything, just plot one replicate of each trained model
+    
+for k, K_I in enumerate(KI_vals):
+    
+    fig, axes = plt.subplots(len(percentile), 
+                             len(past_steps_vals),
+                              figsize=(3*len(past_steps_vals), 2*len(plot_list)),
+                              sharex=True)
+    
+    for p, past_steps in enumerate(past_steps_vals):
+        
+        df_index = (df_past['K_I']==K_I)&(df_past['past_steps']==past_steps)
+        simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+        color = KI_color_dict[K_I]
+        
+        # Find best and worst error
+        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+        RMSE_avg_across_time = np.mean(np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1)),axis=1)
+        sorted_error = np.argsort(RMSE_avg_across_time)
+        
+        plot_list = [sorted_error[i] for i in percentile]
+        
+        stims, past_fluo, futures_fluo = get_eval_data(simul_id)
+        model_params, training_params = get_params(simul_id)
+        
+        plot_past = 3*12 # Only plot the past 3 hours (even though whole past is used)
+        cutoff = past_fluo.shape[1]
+        
+        
+        for i, pl in enumerate(plot_list):
+                
+            # Stimulations
+            plt.sca(axes[i,p])
+            dcc.utilities.OptoPlotBackground(
+                stims[pl,cutoff-plot_past:cutoff+training_params["horizon"]],
+                x=np.arange(-plot_past, training_params["horizon"])/12,
+                ymax = 4095
+                )
+            
+            # Past
+            axes[i,p].plot(np.arange(-plot_past, 0)/12, 
+                          past_fluo[pl, -plot_past:],
+                          color, lw=3*lw)
+            
+            # Future
+            axes[i,p].plot(np.arange(0, training_params["horizon"])/12, 
+                      futures_fluo[pl, :, :training_params['horizon']].T, 
+                      color=color, alpha=0.01)
+            
+            # Prediction
+            axes[i,p].plot(np.arange(0, training_params["horizon"])/12, 
+                      fluo_pred[pl, 0],
+                      color='k', lw=3*lw)
+            
+            # Prediction starts line
+            axes[i,p].plot([-0.5/12, -0.5/12], [0, 4095], color="gray")
+            
+            # Limits and labels
+            axes[i,p].set_ylim([0,4095])
+            axes[i,p].set_yticklabels([])
+            axes[i,p].set_xticklabels([])
+            # plt.title(f'Cell {c}')
+            # axes[i].set_xlabel("time (h)")
+            # axes[i].set_ylabel("Fluorescence (a.u.)")
+            # axes[i].set_title(f'{100 * percentile[i] / len(sorted_error):.0f}th percentile')
+            axes[i,p].set_title(f'K_I={K_I}, {past_steps}past steps')
+        axes[-1,p].set_xlim([-plot_past/12, training_params["horizon"]/12])
+    plt.tight_layout()
+    plt.savefig(fig_path+f'/fig3_{cell_class}_predictions_percentiles_KI_{K_I}.png', dpi=300)
+
+#%% Cascade average error
 
 # Which cell class, h1, and horizon values to plot
 cell_class = 'CcaSR_Cascade'
 horizon_vals = np.sort(np.unique(horizon_list))[::-1]
 
 # Keep simulations with default training size, default past, and same h1/h2 ratio
-simul_slice = default_training_size & default_past_steps
+cascade_slice = default_training_size & default_past_steps \
+    & default_horizon & (df_meta['cell_class']=='CcaSR_Cascade') \
+        & (df_meta['K_I'].isin(KI_vals))
+gillespie_slice = default_training_size & default_past_steps \
+    & default_horizon & default_h1 & default_h2 & \
+        (df_meta['solver']=='original') & (df_meta['cell_class']=='CcaSR_gillespie')
 
-df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
-df_past = df_past.sort_values(by=['K_I','horizon'])
+df_plot = df_meta.loc[cascade_slice + gillespie_slice].reset_index(drop=True)
 
-fig, axes = plt.subplots(2, len(KI_vals), figsize=(10,5), sharey=True)
 alpha=0.5
-xmax = 1500
-n_bins = 100
+xmax = 800
+n_bins = 50
+lw = 1
+fig, axes = plt.subplots(1,2, figsize=(7,3))
+
 # Rather than plotting everything, just plot one replicate of each trained model
-for k, K_I in enumerate(KI_vals):
+for i in range(len(df_plot)):
     
-    for ho, horizon in enumerate(horizon_vals):
-        df_index = (df_past['K_I']==K_I)&(df_past['horizon']==horizon)
-        simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+    df_i = df_plot.loc[i]
+    cell_class = df_i['cell_class']
+    K_I = df_i['K_I']
+    simul_id = df_i['simul_id']
     
+    fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+    
+    if np.isnan(K_I):
+        color='k'
+        label=f'{cell_class}'
+        zorder = 2
+        histtype='step'
+    elif K_I==20:
+        color='tab:blue'
+        label=f'{cell_class}, K_I={K_I}'
+        zorder=1
+        histtype='stepfilled'
+    elif K_I==70:
+        color = 'tab:orange'
+        label=f'{cell_class}, K_I={K_I}'
+        zorder=0
+        histtype='stepfilled'
+        
+    axes[0].hist(np.mean(RMSE, axis=1),
+             bins = np.linspace(0,xmax, n_bins+1),
+              label=label,
+              color=color,
+              histtype=histtype,
+              density=True,
+              lw=lw,
+              zorder=zorder,
+              alpha=alpha)
+    axes[1].plot(np.mean(fluo, axis=(1,2)),
+                 np.mean(RMSE, axis=1),
+                 '.', color=color, alpha=alpha/2)
+        
+# for i in range(2):
+#     axes[i].set_xticklabels([])
+#     axes[i].set_yticklabels([])
+plt.tight_layout()
+plt.savefig(dcc_repo_path+f'/assets/figures/fig3_Cascade_error_overall.png', dpi=600)
+
+#%% Cascade x horizon
+
+# Which cell class, h1, and horizon values to plot
+cell_class = 'CcaSR_Cascade'
+horizon_vals = np.sort(np.unique(horizon_list))
+
+# Keep simulations with default training size, default past, and same h1/h2 ratio
+cascade_slice = default_training_size & default_past_steps \
+     & (df_meta['cell_class']=='CcaSR_Cascade') \
+        & (df_meta['K_I'].isin(KI_vals))
+gillespie_slice = default_training_size & default_past_steps \
+     & default_h1 & default_h2 & \
+        (df_meta['solver']=='original') & (df_meta['cell_class']=='CcaSR_gillespie')
+
+df_plot = df_meta.loc[cascade_slice + gillespie_slice].reset_index(drop=True)
+
+fig, axes = plt.subplots(1, len(horizon_vals), 
+                         figsize=(3*len(horizon_vals),3), sharey=True)
+alpha=0.5
+xmax = 800
+n_bins = 50
+# Rather than plotting everything, just plot one replicate of each trained model
+for i in range(len(df_plot)):
+            
+        df_i = df_plot.loc[i]
+        cell_class = df_i['cell_class']
+        K_I = df_i['K_I']
+        horizon = df_i['horizon']
+        simul_id = df_i['simul_id']
+        
+        ax = axes[np.where(horizon_vals==horizon)[0][0]]
+        
         fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
         RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
-        
-        axes[0, k].hist(RMSE[:,-1],
-                 bins = np.linspace(0,xmax, n_bins+1),
-                  color = horizon_color_dict[horizon],
-                  label=f'horizon={horizon}',
-                  alpha=alpha,
-                  density=True)
-        axes[1, k].hist(RMSE[:,11],
-                 bins = np.linspace(0,xmax, n_bins+1),
-                  color = horizon_color_dict[horizon],
-                  label=f'horizon={horizon}',
+            
+        if np.isnan(K_I):
+            ax.hist(RMSE[:,-1],
+                     bins = np.linspace(0,xmax, n_bins+1),
+                      label=f'{cell_class}',
+                      color='k',
+                      histtype='step',
+                      density=True,
+                      lw=lw,
+                      zorder=0)
+        else:
+            ax.hist(RMSE[:,-1],
+                     bins = np.linspace(0,xmax, n_bins+1),
+                      label=f'{cell_class}, K_I={K_I}',
                       alpha=alpha,
                       density=True)
-    
-    axes[0,k].set_xlabel('Endpoint RMSE')
-    axes[1,k].set_xlabel('1h RMSE')
-    
-    for i in range(2):
-        axes[i,k].set_xlim([0, xmax])
-        axes[i, 0].legend()
-        axes[i,k].set_title(f'K_I={K_I}')
+            
+        ax.set_title(f'horizon={horizon}')
         
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_horizon.png', dpi=600)
+
+#%% Cascade x Horizon extra
+
+# Which cell class, h1, and horizon values to plot
+cell_class = 'CcaSR_Cascade'
+horizon_vals = np.sort(np.unique(horizon_list))
+
+# Keep simulations with default training size, default past, and same h1/h2 ratio
+cascade_slice = default_training_size & default_past_steps \
+     & (df_meta['cell_class']=='CcaSR_Cascade') \
+        & (df_meta['K_I'].isin(KI_vals))
+gillespie_slice = default_training_size & default_past_steps \
+     & default_h1 & default_h2 & \
+        (df_meta['solver']=='original') & (df_meta['cell_class']=='CcaSR_gillespie')
+
+df_plot = df_meta.loc[cascade_slice + gillespie_slice].reset_index(drop=True)
+
+fig, axes = plt.subplots(1, len(horizon_vals), 
+                         figsize=(3*len(horizon_vals),3), sharey=True)
+alpha=0.2
+xmax = 800
+n_bins = 50
+# Rather than plotting everything, just plot one replicate of each trained model
+for i in range(len(df_plot)):
+            
+        df_i = df_plot.loc[i]
+        cell_class = df_i['cell_class']
+        K_I = df_i['K_I']
+        horizon = df_i['horizon']
+        simul_id = df_i['simul_id']
+        
+        ax = axes[np.where(horizon_vals==horizon)[0][0]]
+        
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        
+        if np.isnan(K_I):
+            color='k'
+            label=f'{cell_class}'
+            zorder = 0
+        elif K_I==20:
+            color='tab:blue'
+            label=f'{cell_class}, K_I={K_I}'
+            zorder=2
+        elif K_I==70:
+            color = 'tab:orange'
+            label=f'{cell_class}, K_I={K_I}'
+            zorder=1
+
+        ax.plot(np.mean(fluo[:,:,-1], axis=1),
+                    RMSE[:,-1],
+                            '.',
+                      label=label,
+                      color=color,
+                      alpha=alpha,
+                      zorder=zorder)
+            
+        ax.set_title(f'horizon={horizon}')
+        ax.set_ylim([0,1600])
+        
+plt.tight_layout()
+plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_horizon_endpoint_fluor.png', dpi=600)
+
+
+
+# #%% Cascade x horizon
+
+# # Which cell class, h1, and horizon values to plot
+# cell_class = 'CcaSR_Cascade'
+# horizon_vals = np.sort(np.unique(horizon_list))[::-1]
+
+# # Keep simulations with default training size, default past, and same h1/h2 ratio
+# simul_slice = default_training_size & default_past_steps
+
+# df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+# df_past = df_past.sort_values(by=['K_I','horizon'])
+
+# fig, axes = plt.subplots(2, len(KI_vals), figsize=(10,5), sharey=True)
+# alpha=0.5
+# xmax = 1500
+# n_bins = 100
+# # Rather than plotting everything, just plot one replicate of each trained model
+# for k, K_I in enumerate(KI_vals):
+    
+#     for ho, horizon in enumerate(horizon_vals):
+#         df_index = (df_past['K_I']==K_I)&(df_past['horizon']==horizon)
+#         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+    
+#         fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+#         RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        
+#         axes[0, k].hist(RMSE[:,-1],
+#                  bins = np.linspace(0,xmax, n_bins+1),
+#                   color = horizon_color_dict[horizon],
+#                   label=f'horizon={horizon}',
+#                   alpha=alpha,
+#                   density=True)
+#         axes[1, k].hist(RMSE[:,11],
+#                  bins = np.linspace(0,xmax, n_bins+1),
+#                   color = horizon_color_dict[horizon],
+#                   label=f'horizon={horizon}',
+#                       alpha=alpha,
+#                       density=True)
+    
+#     axes[0,k].set_xlabel('Endpoint RMSE')
+#     axes[1,k].set_xlabel('1h RMSE')
+    
+#     for i in range(2):
+#         axes[i,k].set_xlim([0, xmax])
+#         axes[i, 0].legend()
+#         axes[i,k].set_title(f'K_I={K_I}')
+        
+# plt.tight_layout()
+# plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_horizon.png', dpi=600)
 
 
 #%% Cascade x horizon x time
@@ -571,51 +859,124 @@ for k, K_I in enumerate(KI_vals):
     axes[k].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_horizon_with_time.png', dpi=600)
-
-
 #%% Cascade x past_steps
 
 # Which cell class, h1, and horizon values to plot
 cell_class = 'CcaSR_Cascade'
-past_steps_vals = np.sort(np.unique(past_steps_list))[::-1]
-past_steps_vals = [6, 12, 24, 36]
+past_steps_vals = np.sort(np.unique(past_steps_list))[1:]
 
 # Keep simulations with default training size, default past, and same h1/h2 ratio
-simul_slice = default_training_size & default_horizon
+cascade_slice = default_training_size & default_horizon \
+     & (df_meta['cell_class']=='CcaSR_Cascade') \
+        & (df_meta['K_I'].isin(KI_vals)) & (df_meta['past_steps'].isin(past_steps_vals))
+gillespie_slice = default_training_size & default_horizon \
+     & default_h1 & default_h2 & (df_meta['past_steps'].isin(past_steps_vals)) \
+        & (df_meta['solver']=='original') & (df_meta['cell_class']=='CcaSR_gillespie')
 
-df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
-df_past = df_past.sort_values(by=['K_I','past_steps'])
+df_plot = df_meta.loc[cascade_slice + gillespie_slice].reset_index(drop=True)
 
-fig, axes = plt.subplots(1, len(KI_vals), figsize=(10,3), sharey=True)
-alpha=0.5
-xmax = 50_000
-n_bins = 100
-
+fig, axes = plt.subplots(1, 3, 
+                         figsize=(3*2,2), sharey=False)
+markersize=8
+lw=1
 # Rather than plotting everything, just plot one replicate of each trained model
-for k, K_I in enumerate(KI_vals):
+for i in range(len(df_plot)):
+            
+    df_i = df_plot.loc[i]
+    cell_class = df_i['cell_class']
+    K_I = df_i['K_I']
+    past_steps = df_i['past_steps']
+    simul_id = df_i['simul_id']
     
-    for p, past_steps in enumerate(past_steps_vals):
-        df_index = (df_past['K_I']==K_I)&(df_past['past_steps']==past_steps)
-        simul_id = df_past.loc[df_index, 'simul_id'].values[0]
-    
-        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
-        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+    fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
         
-        axes[k].hist(np.sum(RMSE, axis=1),
-                 bins = np.linspace(0,xmax, n_bins+1),
-                  color = past_steps_color_dict[past_steps],
-                  label=f'past steps={past_steps}',
-                  alpha=alpha,
-                  density=True)
-    
-    axes[k].set_xlabel('Total RMSE')
-    
-    axes[k].set_xlim([0, xmax])
-    axes[0].legend()
-    axes[k].set_title(f'K_I={K_I}')
+    plot_list = [np.mean(RMSE,axis=1),
+                 RMSE[:,-1],
+                 RMSE[:,0]]
+    y_label = ['RMSE (average over time)',
+               'RMSE (final timepoint)',
+               'RMSE (initial timepoint)']
+
+    if np.isnan(K_I):
+        histtype = 'step'
+        color = 'k'
+        nudge = -1/5
+        if past_steps==36:
+            for j, y in enumerate(plot_list):
+                axes[j].plot([-1,len(past_steps_vals)],
+                         np.median(y)*np.ones(2),'--',
+                         color=0.5*np.ones(3), zorder=0)
+        
+    else:
+        histtype='stepfilled'
+        if K_I==20:
+            color='tab:blue'
+            nudge = 0
+        elif K_I==70:
+            color = 'tab:orange'
+            nudge = 1/5
+        
+    for j, y in enumerate(plot_list):
+        x = np.where(past_steps_vals==past_steps)[0][0]
+        axes[j].plot(x+nudge,
+                     np.median(y),
+                     '.', markersize=markersize,
+                     color=color)
+        axes[j].plot([x+nudge, x+nudge],
+                     [np.quantile(y, q=0.25), np.quantile(y,q=0.75)],
+                     '-',lw=lw,
+                     color=color)
+        # axes[j].set_ylabel(y_label[j])
+        axes[j].set_ylim([0,800])
+        axes[j].set_xlim([-0.5,len(past_steps_vals)-0.5])
+        axes[j].set_xticks(np.arange(len(past_steps_vals)))
         
 plt.tight_layout()
-plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_past_steps.png', dpi=600)
+plt.savefig(dcc_repo_path+'/assets/figures/fig3_Cascade_effect_of_past_steps.png', dpi=600)
+
+
+# # Which cell class, h1, and horizon values to plot
+# cell_class = 'CcaSR_Cascade'
+# past_steps_vals = np.sort(np.unique(past_steps_list))[::-1]
+# past_steps_vals = [6, 12, 24, 36]
+
+# # Keep simulations with default training size, default past, and same h1/h2 ratio
+# simul_slice = default_training_size & default_horizon
+
+# df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+# df_past = df_past.sort_values(by=['K_I','past_steps'])
+
+# fig, axes = plt.subplots(1, len(KI_vals), figsize=(10,3), sharey=True)
+# alpha=0.5
+# xmax = 50_000
+# n_bins = 100
+
+# # Rather than plotting everything, just plot one replicate of each trained model
+# for k, K_I in enumerate(KI_vals):
+    
+#     for p, past_steps in enumerate(past_steps_vals):
+#         df_index = (df_past['K_I']==K_I)&(df_past['past_steps']==past_steps)
+#         simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+    
+#         fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+#         RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        
+#         axes[k].hist(np.sum(RMSE, axis=1),
+#                  bins = np.linspace(0,xmax, n_bins+1),
+#                   color = past_steps_color_dict[past_steps],
+#                   label=f'past steps={past_steps}',
+#                   alpha=alpha,
+#                   density=True)
+    
+#     axes[k].set_xlabel('Total RMSE')
+    
+#     axes[k].set_xlim([0, xmax])
+#     axes[0].legend()
+#     axes[k].set_title(f'K_I={K_I}')
+        
+# plt.tight_layout()
+# plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_past_steps.png', dpi=600)
 
 #%% Cascade x past steps x time
 
@@ -631,6 +992,7 @@ df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
 
 fig, axes = plt.subplots(1, len(KI_vals), figsize=(10,3), sharey=True)
 alpha=0.5
+q=0.5
 # Rather than plotting everything, just plot one replicate of each trained model
 for k, K_I in enumerate(KI_vals):
     
@@ -660,6 +1022,113 @@ axes[0].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_effect_of_past_steps_over_time.png', dpi=600)
 
+#%% Cascade x past steps - time 0 error
+
+# Which cell class, h1, and horizon values to plot
+cell_class = 'CcaSR_Cascade'
+past_steps_vals = np.sort(np.unique(past_steps_list))[::-1]
+past_steps_vals = [6, 12, 24, 36]
+
+# Keep simulations with default training size, default past, and same h1/h2 ratio
+simul_slice = default_training_size & default_horizon
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+
+fig, axes = plt.subplots(2, len(KI_vals), figsize=(12,6), 
+                         sharey=True, sharex=True)
+alpha=0.5
+q=0.5
+x_max = 2000
+n_bins = 100
+
+# Rather than plotting everything, just plot one replicate of each trained model
+for k, K_I in enumerate(KI_vals):
+    
+    for p, past_steps in enumerate(past_steps_vals):
+        df_index = (df_past['K_I']==K_I)&(df_past['past_steps']==past_steps)
+        simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+    
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        t = [x/12. for x in range(np.shape(RMSE)[-1])]
+        axes[0,k].hist(RMSE[:,0],bins=np.linspace(0,x_max, n_bins+1),
+                     color=past_steps_color_dict[past_steps],
+                     alpha=alpha, density=True,
+                     label=f'{past_steps} past steps')
+        axes[1,k].hist(RMSE[:,-1],bins=np.linspace(0,x_max, n_bins+1),
+                     color=past_steps_color_dict[past_steps],
+                     alpha=alpha, density=True)
+        # axes[k].plot(t, np.median(RMSE,axis=[0,]), '.', 
+        #              color = past_steps_color_dict[past_steps],
+        #              label=f'past steps={past_steps}')
+        # axes[k].fill_between(
+        #     t,
+        #     np.nanquantile(RMSE, axis=[0], q=0.5-q/2),
+        #     np.nanquantile(RMSE, axis=[0], q=0.5+q/2),
+        #     color=past_steps_color_dict[past_steps],
+        #     alpha=alpha,
+        #     )
+    
+    axes[0,k].set_title(f'K_I={K_I}, t0 error')
+    axes[1,k].set_title(f'K_I={K_I}, tf error')
+    axes[0,k].legend()
+    # axes[k].legend()
+    for i in range(2):
+        axes[i,k].set_xlabel('RMSE')
+        axes[i,k].grid(True, 'both', 'both')
+        axes[0,i].set_ylabel('Frequency')
+plt.tight_layout()
+plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_past_steps_t0_err.png', dpi=600)
+
+
+#%% [by cell] Cascade x past steps x time
+
+# Which cell class, h1, and horizon values to plot
+cell_class = 'CcaSR_Cascade'
+past_steps_vals = np.sort(np.unique(past_steps_list))[::-1]
+past_steps_vals = [6, 12, 24, 36]
+
+# Keep simulations with default training size, default past, and same h1/h2 ratio
+simul_slice = default_training_size & default_horizon
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)]
+
+fig, axes = plt.subplots(len(past_steps_vals), len(KI_vals), 
+                         figsize=(3*len(KI_vals),3*len(past_steps_vals)), 
+                         sharey=False)
+alpha=0.03
+# Rather than plotting everything, just plot one replicate of each trained model
+for k, K_I in enumerate(KI_vals):
+    
+    for p, past_steps in enumerate(past_steps_vals):
+        df_index = (df_past['K_I']==K_I)&(df_past['past_steps']==past_steps)
+        simul_id = df_past.loc[df_index, 'simul_id'].values[0]
+    
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        t = [x/12. for x in range(np.shape(RMSE)[-1])]
+        axes[k,p].plot(t, RMSE.T, '.-',
+                     alpha=alpha,
+                     color=past_steps_color_dict[past_steps],
+                     label=f'past steps={past_steps}')
+        # axes[k].plot(t, np.median(RMSE,axis=[0,]), '.', 
+        #              color = past_steps_color_dict[past_steps],
+        #              label=f'past steps={past_steps}')
+        # axes[k].fill_between(
+        #     t,
+        #     np.nanquantile(RMSE, axis=[0], q=0.5-q/2),
+        #     np.nanquantile(RMSE, axis=[0], q=0.5+q/2),
+        #     color=past_steps_color_dict[past_steps],
+        #     alpha=alpha,
+        #     )
+    
+        axes[k,p].set_title(f'K_I={K_I}')
+        # axes[k].legend()
+        axes[k,p].set_xlabel('time (h)')
+        axes[k,p].grid(True, 'both', 'both')
+axes[0,0].set_ylabel(f'Median error\n{np.shape(fluo)[0]} cells')
+plt.tight_layout()
+plt.savefig(dcc_repo_path+f'/assets/figures/fig3_{cell_class}_past_steps_over_time_individual_cells.png', dpi=600)
 
 #%% FF+ error binned by fluorescence
 
