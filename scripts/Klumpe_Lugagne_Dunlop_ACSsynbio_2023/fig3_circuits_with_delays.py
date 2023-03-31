@@ -148,10 +148,11 @@ past_steps_color_dict = {3: "#ce5451",
                          36: "#588acf"}
 
 KI_vals = [20,70]#[20, 40, 50, 70]
-KI_colors = ["#d84d32",
+KI_colors = ['tab:blue',#"#d84d32",
             #  "#b27d3e",
             # "#dac54b",
-            "#8f8539"]
+            'tab:orange',#"#8f8539"
+            ]
 KI_color_dict = {KI_vals[i]: KI_colors[i] for i in range(len(KI_vals))}
 
 #%% Check training data
@@ -513,7 +514,7 @@ for k, K_I in enumerate(KI_vals):
     
     fig, axes = plt.subplots(len(percentile), 
                              len(past_steps_vals),
-                              figsize=(3*len(past_steps_vals), 2*len(plot_list)),
+                              figsize=(3*len(past_steps_vals), 2*len(percentile)),
                               sharex=True)
     
     for p, past_steps in enumerate(past_steps_vals):
@@ -572,7 +573,7 @@ for k, K_I in enumerate(KI_vals):
             # axes[i].set_xlabel("time (h)")
             # axes[i].set_ylabel("Fluorescence (a.u.)")
             # axes[i].set_title(f'{100 * percentile[i] / len(sorted_error):.0f}th percentile')
-            axes[i,p].set_title(f'K_I={K_I}, {past_steps}past steps')
+        axes[0,p].set_title(f'K_I={K_I}, {past_steps}past steps')
         axes[-1,p].set_xlim([-plot_past/12, training_params["horizon"]/12])
     plt.tight_layout()
     plt.savefig(fig_path+f'/fig3_{cell_class}_predictions_percentiles_KI_{K_I}.png', dpi=300)
