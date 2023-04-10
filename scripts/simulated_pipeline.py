@@ -23,12 +23,14 @@ import deepcellcontrol as dcc
 
 # Load default params:
 params = copy.deepcopy(dcc.config.defaults)
+test_ratio = 0.1
 
 # If path to parameters JSON file passed as argument, load additional
 # parameters stored there:
 if len(sys.argv) > 1:
     with open(sys.argv[-1], "r") as f:
         params.update(json.load(f))
+        test_ratio = params['test_ratio']
 
 # Folder to save training, evaluation, control results:
 params["save_folder"] = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_simulated_{uuid.uuid4()}"
@@ -55,7 +57,7 @@ training_set = dcc.data.Datasets(
     formatter = dcc.data.LSTMFormatter(params["features"]),
     parameters = params
     )
-training_set.test_ratio = 0.1 # Fraction of samples that are left out of training
+training_set.test_ratio = test_ratio # Fraction of samples that are left out of training
 # Actually load data and normalize:
 training_set.load()
 training_set.normalize()
@@ -90,7 +92,10 @@ x = (
      )
 
 # Load best evaluated model from disk:
-network = tf.keras.models.load_model(save_path + "/model_besteval.hdf5")
+if training_set.test_ratio > 0:
+    network = tf.keras.models.load_model(save_path + "/model_besteval.hdf5")
+else:
+    network = tf.keras.models.load_model(save_path + "/model.hdf5")
 
 # Predict:
 yhat = network.predict(x, verbose = True)
