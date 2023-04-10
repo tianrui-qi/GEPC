@@ -145,3 +145,5 @@ config.py
 
 # Vi swap files:
 *.py.swp
+
+.idea/
