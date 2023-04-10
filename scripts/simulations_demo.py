@@ -162,7 +162,7 @@ plt.show()
 
 #%% Bifurcation:    
 
-solve_hours = 72
+solve_hours = 120
 
 cell_on = dcc.simulations.CcaSR_Autoactivation()
 cell_on.species["E"] = cell_on.params['h1'] / cell_on.params['h2']
@@ -178,7 +178,7 @@ cell_off.set_light_events([0]*solve_hours*12)
 _ = cell_off.run(solve_hours*60, solver="ode")
 cell_off.time = 0
 
-u_values = np.linspace(0,1,30)
+u_values = np.linspace(0,1,50)
 start_on, start_off = [], []
 for u in u_values:
     print(u)
@@ -195,8 +195,10 @@ for u in u_values:
 
 plt.plot(u_values, start_on, '-o', label="start on")
 plt.plot(u_values, start_off, '-o', label="start off")
-plt.xlabel("U")
+plt.xlabel("Average light input")
 plt.ylabel("F (#proteins)")
+plt.legend()
+plt.savefig("D:/deepcellcontrol/assets/autoactivation/SI_figs/bifurcation.svg", dpi=300)
 plt.show()
 
 #%% Step-by-step computation (for example as in feedback control)

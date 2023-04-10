@@ -42,6 +42,37 @@ training_set.load()
 training_set.normalize() # This step now takes a few minutes the first time it is called
 training_set.data_type='normalized_dataset'
 
+#%% Illustrate samples:
+
+batch = next(training_set)
+
+#%%
+s = 72
+# s+=1
+
+past = batch[0][0][s]
+future_stims = batch[0][1][s]
+groundtruth = batch[1][s]
+
+x = np.arange(-past.shape[0], 0)/12
+dcc.utilities.OptoPlotBackground(past[:,-1], x=x)
+plt.plot(x, past[:,0],'k')
+# plt.xlim(-3,0)
+plt.savefig(params["save_folder"] + "/SI_figs/formatting_s{s:03d}_past.svg")
+plt.show()
+
+x = np.arange(0, future_stims.shape[0])/12
+dcc.utilities.OptoPlotBackground(future_stims, x=x)
+plt.savefig(params["save_folder"] + "/SI_figs/formatting_s{s:03d}_past.svg")
+plt.show()
+
+plt.imshow(np.transpose(groundtruth), cmap="inferno")
+plt.gca().invert_yaxis()
+# plt.title(s)
+plt.savefig(params["save_folder"] + "/fig4_groundtruth.svg")
+plt.show()
+
+
 
 #%% Train
 
@@ -56,7 +87,7 @@ model_checkpoint = ModelCheckpoint(
     save_best_only=True
     )
 early_stopping = EarlyStopping(
-    monitor='loss', mode='min', verbose=1, patience=5
+    monitor='loss', mode='min', verbose=1, patience=100
     )
 callbacks = [model_checkpoint, early_stopping]
 
@@ -141,5 +172,5 @@ for c in range(min(past.shape[0], 100)):
     plt.xlabel("fluorescence")
     plt.legend()
     
-    plt.savefig(eval_folder+f"/cnn_eval_sample_{c}.png")
+    # plt.savefig(eval_folder+f"/cnn_eval_sample_{c}.png")
     plt.show()

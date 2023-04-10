@@ -9,9 +9,10 @@ Created on Fri Aug 14 18:24:45 2020
 """
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
-    Dense, LSTM, Input, TimeDistributed, Concatenate, Reshape, Conv2DTranspose, Conv2D
+    Layer, Dense, LSTM, Input, TimeDistributed, Concatenate, Reshape, Conv2DTranspose, Conv2D, RepeatVector
     )
 from tensorflow.keras.optimizers import Adam
+import numpy as np
 
 
 def lstm_mlp(hyper_parameters):
@@ -34,9 +35,9 @@ def lstm_mlp(hyper_parameters):
     # Inputs:
     past_events = Input(
         (None, len(hyper_parameters["features"])),
-        name='past_inputs'
+        name='past_timeseries',
         )
-    future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
+    future_light = Input((hyper_parameters["horizon"],), name='future_light')
     
     # Encoder:
     state_h, state_c = _encoder(past_events, hyper_parameters)
@@ -313,7 +314,7 @@ def mlp_decoder(hyper_parameters):
     # Inputs:
     state_h = Input((hyper_parameters["latent_dim"],),name='state_h') 
     state_c = Input((hyper_parameters["latent_dim"],),name='state_c') 
-    future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
+    future_light = Input((hyper_parameters["horizon"],),name='future_light')
   
     # Decoder:
     prediction = _mlpdecoder(state_h, state_c, future_light, hyper_parameters)
@@ -357,7 +358,7 @@ def _mlpdecoder(state_h, state_c, future_light, hyper_parameters):
     # Concatenate inputs together:
     hidden = Concatenate(
         axis=-1,
-        name="prediction_inputs"
+        name="decoder_inputs"
         )([state_h, state_c, future_light])
     
     # Hidden layers:
@@ -406,34 +407,54 @@ def _cnndecoder(state_h, state_c, future_light, hyper_parameters):
         int(hyper_parameters["cnn_bins"]/8), 
         int(hyper_parameters["horizon"]/8)
         )
+    latent_len = hyper_parameters["latent_dim"]*2 + hyper_parameters["horizon"]
     filters = hyper_parameters["cnn_filters"]
     
     # Concatenate inputs together:
     latent = Concatenate(
         axis=-1,
-        name="prediction_inputs"
+        name="decoder_inputs",
         )([state_h, state_c, future_light])
-    
-    
+
     # 1D latent to 3D tensor:
-    hidden = Dense(first_shape[0] * first_shape[1] * filters[0], activation="relu")(latent)
-    hidden = Reshape(first_shape + (filters[0],))(hidden)
-    hidden = Conv2D(filters[1], 3, activation = "relu", padding= "same")(hidden)
+    hidden = Dense(
+        first_shape[0] * first_shape[1] * filters[0],
+        activation="relu",
+        name="decoder_0"
+        )(latent)
+    hidden = Reshape(first_shape + (filters[0],), name="decoder_1")(hidden)
+    hidden = Conv2D(
+        filters[1], 3, activation = "relu", padding= "same", name="decoder_2"
+        )(hidden)
     
     # Upscaling block 1 (x2):
-    hidden = Conv2DTranspose(filters[2], 3, activation="relu", strides=2, padding="same")(hidden)
-    hidden = Conv2D(filters[3], 3, activation = "relu", padding= "same")(hidden)
+    hidden = Conv2DTranspose(
+        filters[2], 3, activation="relu", strides=2, padding="same", name="decoder_3"
+        )(hidden)
+    hidden = Conv2D(
+        filters[3], 3, activation = "relu", padding= "same", name="decoder_4"
+        )(hidden)
     
     # Upscaling block 2 (x4):
-    hidden = Conv2DTranspose(filters[4], 3, activation="relu", strides=2, padding="same")(hidden)
-    hidden = Conv2D(filters[5], 3, activation = "relu", padding= "same")(hidden)
+    hidden = Conv2DTranspose(
+        filters[4], 3, activation="relu", strides=2, padding="same", name="decoder_5"
+        )(hidden)
+    hidden = Conv2D(
+        filters[5], 3, activation = "relu", padding= "same", name="decoder_6"
+        )(hidden)
     
     # Upscaling block 3 (x8):
-    hidden = Conv2DTranspose(filters[6], 3, activation="relu", strides=2, padding="same")(hidden)
-    hidden = Conv2D(filters[7], 3, activation = "relu", padding= "same")(hidden)
+    hidden = Conv2DTranspose(
+        filters[6], 3, activation="relu", strides=2, padding="same", name="decoder_7"
+        )(hidden)
+    hidden = Conv2D(
+        filters[7], 3, activation = "relu", padding= "same", name="decoder_8"
+        )(hidden)
     
     # Output:
-    prediction = Conv2DTranspose(1, 3, activation="relu", padding="same")(hidden)
+    prediction = Conv2D(
+        1, 3, activation="relu", padding="same", name="decoder_output"
+        )(hidden)
     
     return prediction
 
@@ -458,9 +479,9 @@ def lstm_cnn(hyper_parameters):
     # Inputs:
     past_events = Input(
         (None, len(hyper_parameters["features"])),
-        name='past_inputs'
+        name='past_timeseries',
         )
-    future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
+    future_light = Input((hyper_parameters["horizon"],), name='future_light')
     
     # Encoder:
     state_h, state_c = _encoder(past_events, hyper_parameters)
