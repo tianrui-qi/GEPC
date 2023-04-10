@@ -151,3 +151,5 @@ config.py
 
 # macOS files
 .DS_Store
+
+.idea/
