@@ -17,14 +17,14 @@ import tensorflow as tf
 import deepcellcontrol as dcc
 
 # experiments path:
-experiments = "Y:/data/Microscope/jeanbaptiste/deepmpc/control/"
+experiments = "Z:/data/Microscope/jeanbaptiste/deepmpc/control/"
 horizon_exp = experiments+"2022-05-07_DeepMPC_horizons_tests/"
 
 # Folder with all trained models:
-models_scc = "Z:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/"
+models_scc = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/"
 
 # Save images to:
-save_folder = "C:/Users/Administrator/jb/deepmpc_paper/figure3/"
+save_folder = "D:/deepmpc_paper/figure3/"
 
 def load_cells(mothers, partition):
     #Load cells belonging to one of the 12h, 24h, 36h, 48h horizion partitions
@@ -174,10 +174,19 @@ rmse = {}
 timing = {}
 bitdiff = {}
 
+oneshot_rmse = {}
+oneshot_timing = {}
+oneshot_bitdiff = {}
+
+#%%
 particles_nbs = [2, 5, 10, 20, 40, 60, 100]
 iteration_nbs = [1, 2, 5, 10, 25, 50, 100]
 
+# particles_nbs = [10, 20, 40]
+# iteration_nbs = [1, 10, 25]
+
 for horizon in [12, 24, 36, 48]:
+# for horizon in [24]:
     
     rmse[horizon] = {}
     timing[horizon] = {}
@@ -201,6 +210,7 @@ for horizon in [12, 24, 36, 48]:
     best_strategies = controller.strategy
     best_predictions = controller.show_predict(past, best_strategies)
     
+    # Run bPSO:
     for particles in particles_nbs:
         timing[horizon][particles] = []
         rmse[horizon][particles] = []
@@ -234,8 +244,34 @@ for horizon in [12, 24, 36, 48]:
             rmse[horizon][particles].append(
                 np.mean(np.sqrt(np.mean((predictions-objectives)**2,axis=1)))
                 )
+        
+    # Run one-shot optimizer:
+    model_file = model_folders[f"horizon_{horizon}"] + '/model.hdf5'
+    controller = dcc.control.SplitLSTMMPC(
+        model_file = model_file,
+        strategy_optimizer=dcc.control.OneShotOptimizer(
+            particles=1000, horizon=horizon
+        )
+    )
 
-# Plot the results:
+    # Time and run feedback control for current settings:
+    t0 = time.perf_counter()
+    _ = controller.feedback(past, objectives)
+    oneshot_timing[horizon] = time.perf_counter()-t0
+
+    # Compute difference between reference control and current controller:
+    strategies = controller.strategy
+    oneshot_bitdiff[horizon] = np.mean(
+        np.logical_xor(strategies, best_strategies)
+    )
+
+    # Compute RMSE between controller prediction and objective:
+    predictions = controller.show_predict(past, strategies)
+    oneshot_rmse[horizon] = np.mean(
+        np.sqrt(np.mean((predictions-objectives)**2, axis=1))
+    )
+
+#%% Plot the results:
 plt.figure(figsize=(8,12), dpi=300)
 for h, horizon in enumerate([12, 24, 36, 48]):
     
@@ -250,6 +286,9 @@ for h, horizon in enumerate([12, 24, 36, 48]):
     plt.yscale("log")
     plt.ylim([2.8e2, 1e3])
     plt.grid("both","both")
+    xl = plt.xlim()
+    plt.plot(xl, [oneshot_rmse[horizon]*4095]*2,'k--')
+    plt.xlim(xl)
     
     # Difference
     plt.subplot(4,3,2+h*3)
@@ -258,6 +297,9 @@ for h, horizon in enumerate([12, 24, 36, 48]):
     plt.xscale("log")
     plt.ylim([0, 25])
     plt.grid("both","both")
+    xl = plt.xlim()
+    plt.plot(xl, [oneshot_bitdiff[horizon]*horizon]*2,'k--')
+    plt.xlim(xl)
     
     # Comp time
     plt.subplot(4,3,3+h*3)
@@ -269,13 +311,15 @@ for h, horizon in enumerate([12, 24, 36, 48]):
     plt.xscale("log")
     plt.ylim([0, 80])
     plt.grid("both","both")
+    xl = plt.xlim()
+    plt.plot(xl, [oneshot_timing[horizon]*1000/past.shape[0]]*2,'k--')
+    plt.xlim(xl)
 
 
 plt.savefig(save_folder+"SI_Fig_XX_bPSOeval.png", dpi=300)
 plt.savefig(save_folder+"SI_Fig_XX_bPSOeval.svg", dpi=300)
 plt.savefig(save_folder+"SI_Fig_XX_bPSOeval.pdf", dpi=300)
 plt.show()
-
 
 #%% Panel B - Control Population
 
