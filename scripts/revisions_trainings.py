@@ -33,9 +33,10 @@ def params_change(params):
     _params.update(params)
     
     savefolder = _params["models_folder"] + _params["save_folder"]
+    os.makedirs(savefolder)
     print(f"Save folder:\n{savefolder}")
     
-    with open(savefolder+"/sub_parameters.json","w") as f:
+    with open(savefolder+"/submission_parameters.json","w") as f:
         json.dump(_params,f, indent=4)
     
     return savefolder+"/submission_parameters.json", _params
@@ -44,7 +45,7 @@ def submit(
         changes, 
         name="dcc_training", 
         time_limit=2, 
-        record_csv = "/projectnb/dunlop/JB/deepcellcontrol/revisions.csv",
+        record_csv = "/projectnb/dunlop/JB/deepcellcontrol/assets/models/revisions.csv"
         ):
     
     files, configs, folders = [], [], ""
@@ -52,7 +53,7 @@ def submit(
         file, config = params_change(change)
         files.append([file])
         configs.append(config)
-        folders += configs["save_folder"] + "\n"
+        folders += config["save_folder"] + "\n"
     
     job_id = qsub.submit(
         dcc_repo_path + "scripts/training.py",
