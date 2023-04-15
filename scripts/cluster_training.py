@@ -4,6 +4,7 @@ import json
 import time
 import os
 import sys
+import uuid
 
 import qsub
 
@@ -19,6 +20,8 @@ def params_change(params):
         datasets_folder = dcc_data_path + "assets/data/",
         models_folder = dcc_data_path + "assets/models/",
         )
+    if "save_folder" not in params:
+        _params["save_folder"] = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{uuid.uuid4()}"
     
     _params.update(params)
     

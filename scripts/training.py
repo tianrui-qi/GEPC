@@ -23,8 +23,6 @@ if len(sys.argv) > 1:
     with open(sys.argv[-1], "r") as f:
         params.update(json.load(f))
 
-# Save folder:
-params["save_folder"] = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{uuid.uuid4()}"
 params["past_steps"] = [36, 144]
 
 # Load datasets:
