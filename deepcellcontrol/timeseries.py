@@ -256,15 +256,16 @@ def batch_train_eval(
     # Evaluate:
     if evaluation_dataset is None:
         metrics, eval_d = evaluate(
-            dataset, network, batch_size=100_000, batches=1, return_eval=True
+            dataset, network, batch_size=100_000, num_batches=1, return_eval=True
             )
     else:
         metrics, eval_d = evaluate(
-            evaluation_dataset, network, batch_size=100_000, batches=1, return_eval=True
+            evaluation_dataset, network, batch_size=100_000, num_batches=1, return_eval=True
             )
 
     # Save eval to disk:
-    np.save(os.path.join(save_folder,'eval_input.npy'),eval_d["input"])
+    np.save(os.path.join(save_folder,'eval_past.npy'),eval_d["input"][0])
+    np.save(os.path.join(save_folder,'eval_light.npy'),eval_d["input"][1])
     np.save(os.path.join(save_folder,'eval_groundtruth.npy'),eval_d["groundtruth"])
     np.save(os.path.join(save_folder,'eval_prediction.npy'),eval_d["prediction"])
 

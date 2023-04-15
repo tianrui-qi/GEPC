@@ -44,13 +44,13 @@ def submit(
         changes, 
         name="dcc_training", 
         time_limit=2, 
-        record_csv = "/projectnb/dunlop/JB/deepcellcontrol/revisions.csv"
+        record_csv = "/projectnb/dunlop/JB/deepcellcontrol/revisions.csv",
         ):
     
     files, configs, folders = [], [], ""
     for c, change in enumerate(changes):
         file, config = params_change(change)
-        files.append(file)
+        files.append([file])
         configs.append(config)
         folders += configs["save_folder"] + "\n"
     
@@ -94,4 +94,6 @@ for change in changes:
     change["batch_size"] = 1000
 
 submit(changes, "dcc_increasing_ntwk", time_limit=4)
+
+#%% Different features:
 

@@ -37,8 +37,8 @@ params["features"] = (
     'neighbor_stims',
     'stims'
     )
-params["batch_size"] = 1000
-params["training_parameters"]["epochs"] = 100
+params["batch_size"] = 100
+params["training_parameters"]["epochs"] = 200
 params["datasets_folder"] = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/data/"
 params["models_folder"] = "D:/deepcellcontrol/assets/models/"
 
