@@ -8,7 +8,9 @@ Created on Fri Aug 14 18:24:45 2020
 @author: jeanbaptiste
 """
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, LSTM, Input, TimeDistributed, Concatenate
+from tensorflow.keras.layers import (
+    Dense, LSTM, Input, TimeDistributed, Concatenate, Flatten
+    )
 from tensorflow.keras.optimizers import Adam
 
 
@@ -409,6 +411,40 @@ def mlp_nopast(hyper_parameters):
 
     # Finalize model:
     model = Model(future_light, prediction)
+    model.compile(
+        loss=hyper_parameters["loss"],
+        optimizer = Adam(
+            learning_rate=hyper_parameters["learning_rate"]
+            )
+        )
+    
+    return model
+
+def linear_predictor(hyper_parameters):
+    
+    future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
+    
+    # Inputs:
+    past_events = Input(
+        (hyper_parameters["past_steps"], len(hyper_parameters["features"])),
+        name='past_timeseries'
+        )
+    flat_events = Flatten(name="flattened_past")(past_events)
+    future_light = Input((hyper_parameters["horizon"],),name='future_light')
+    inputs = Concatenate(axis=-1, name="concatenated_inputs")(
+        [flat_events, future_light]
+        )
+    
+    # Linear predictor:
+    prediction = Dense(
+        hyper_parameters["horizon"], 
+        activation="linear",
+        name="linear_predictor",
+        use_bias=True,
+        )(inputs)
+
+    # Finalize model:
+    model = Model([past_events, future_light], prediction)
     model.compile(
         loss=hyper_parameters["loss"],
         optimizer = Adam(
