@@ -23,8 +23,6 @@ if len(sys.argv) > 1:
     with open(sys.argv[-1], "r") as f:
         params.update(json.load(f))
 
-params["past_steps"] = [36, 144]
-
 # Load datasets:
 training_set, evaluation_set = dcc.data.load_datasets(params)
 

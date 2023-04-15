@@ -33,7 +33,7 @@ defaults = dict(
         'neighbor_stims',
         'stims'
         ), # Features to compile for training/control
-    past_steps=36, # obsolete.
+    past_steps=[36, 144], # For training only
     horizon = 24, # Number of future time points to use for prediction horizon
     latent_dim=16, # Number of LSTM units in 2nd decoder layer
     output_mode = "timedistributed", # or "dense" # For LSTM decoder, obsolete.
