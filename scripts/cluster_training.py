@@ -2,7 +2,6 @@
 
 import json
 import time
-import os
 import sys
 import uuid
 
@@ -16,29 +15,28 @@ import deepcellcontrol as dcc
 
 def params_change(params):
     
+    print(f"\n\n{'-'*50}\nChanges:\n{json.dumps(params, indent=4)}")
+    
     _params = dict(
         datasets_folder = dcc_data_path + "assets/data/",
         models_folder = dcc_data_path + "assets/models/",
         )
     if "save_folder" not in params:
-        _params["save_folder"] = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{uuid.uuid4()}"
+        _params["save_folder"] = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{uuid.uuid4()}/"
     
     _params.update(params)
     
-    assets = "/usr2/postdoc/jlugagne/qsub_scripts/assets/"
-    subfolders = [ f.path for f in os.scandir(assets) if f.is_dir() ]
-    foldername = assets + time.strftime("%Y-%m-%d_%H-%M-%S") + f"_submission_{len(subfolders)}/"
-    os.makedirs(foldername)
-    print(foldername)
+    savefolder = _params["models_folder"] + _params["save_folder"]
+    print(f"Save folder:\n{savefolder}")
     
-    with open(foldername+"parameters.json","w") as f:
+    with open(savefolder+"/sub_parameters.json","w") as f:
         json.dump(_params,f, indent=4)
     
-    return foldername+"parameters.json"
+    return savefolder+"/submission_parameters.json"
 
 #%% Launch single training:
 
-saved_config = params_change(
+saved_config, _ = params_change(
     dict(
         training_parameters = dict(
             epochs = 200,
