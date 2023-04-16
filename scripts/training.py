@@ -12,7 +12,7 @@ import sys
 import json
 import uuid
 
-sys.path.insert(0,"/project/dunlop/shared_python_packages/deepcellcontrol/")
+sys.path.insert(0,"/project/dunlop/JB/deepcellcontrol/")
 import deepcellcontrol as dcc
 
 # Load params:
