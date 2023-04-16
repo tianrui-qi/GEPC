@@ -10,7 +10,6 @@ Created on Sun Sep 26 19:46:40 2021
 @author: jeanbaptiste
 """
 import os
-import time
 from collections.abc import Generator
 import pickle
 
@@ -280,9 +279,11 @@ class AbstractFormatter():
     evaluation, or feedback control
     """
     
-    def __init__(self, features):
+    def __init__(self, features, future_features=("fluo1", "stims")):
         self.features = features
         "List of features to compile as input (in addition to 'stims')"
+        self.future_features = future_features
+        "List of features in the future part of the timeseries"
     
     def training(self, past, future):
         """
@@ -348,8 +349,8 @@ class LSTMFormatter(AbstractFormatter):
 
         """
         
-        X = [self.control(past), future[:, :, self.features.index("stims")]]
-        Y = future[:, :, [feature in ("fluos", "fluo1") for feature in self.features]]
+        X = [self.control(past), future[:, :, self.future_features.index("stims")]]
+        Y = future[:, :, [feature in ("fluos", "fluo1") for feature in self.future_features]]
         
         return X, Y
     
@@ -413,7 +414,13 @@ class Datasets(Generator):
     Generator class so it can be fed directly to TF's .fit() function
     """
 
-    def __init__(self, datasets, features, formatter):
+    def __init__(
+            self,
+            datasets,
+            features,
+            formatter,
+            future_features= ("fluo1", "stims")
+            ):
         """
         Instanciate
 
@@ -422,9 +429,13 @@ class Datasets(Generator):
         datasets : List of str
             List of path to dataset pickle files.
         features : List of str
-            List of features to use for training.
-        test_ratio : float, optional
-            Ratio of data to save for testing. The default is 0.1.
+            List of features to use from the past part of the timeseries.
+        formatter : AbstractFormatter
+            Class of the formatter to use on the batch samples to adapt data to the
+            network.
+        future_features: list of str, optional
+            List of features to extract from the future part of the timeseries,
+            default is ("fluo1", "stims").
 
         Returns
         -------
@@ -433,7 +444,8 @@ class Datasets(Generator):
         """
         self.datasets = datasets
         self.features = features
-        self.formatter = formatter
+        self.future_features = future_features
+        self.formatter = formatter(features, future_features)
         self.test_ratio = 0.1
         self.data_type = "raw_dataset"
         self.mode = "training"
@@ -641,14 +653,16 @@ class Datasets(Generator):
         
         # Init sample:
         past = np.zeros((max_steps, len(self.features)), dtype=np.float32)
-        future = np.empty((self.horizon, len(self.features)), dtype=np.float32)
+        future = np.empty(
+            (self.horizon, len(self.future_features)), dtype=np.float32
+            )
         
         # Run through features, compile sample:
-        
         for f, feature in enumerate(self.features):
             past[past_point-timepoint:,f] = dataset[feature][
                 cell_nb, past_point:timepoint, 0
                 ]
+        for f, feature in enumerate(self.future_features):
             future[:,f] = dataset[feature][
                 cell_nb, timepoint : timepoint + self.horizon, 0
                 ]
@@ -677,7 +691,7 @@ class Datasets(Generator):
             (self.batch_size, past_steps, len(self.features)), dtype=np.float32
         )
         future = np.empty(
-            (self.batch_size, self.horizon, len(self.features)), dtype=np.float32
+            (self.batch_size, self.horizon, len(self.future_features)), dtype=np.float32
         )
 
         for batch_ind in range(self.batch_size):
@@ -727,7 +741,7 @@ def load_datasets(parameters):
         training_set = Datasets(
             training_files,
             features = parameters["features"],
-            formatter = LSTMFormatter(parameters["features"])
+            formatter = LSTMFormatter
             )
         training_set.test_ratio = 0
         training_set.horizon = parameters["horizon"]
@@ -746,7 +760,7 @@ def load_datasets(parameters):
         evaluation_set = Datasets(
             evaluation_files,
             features = parameters["features"],
-            formatter = LSTMFormatter(parameters["features"])
+            formatter = LSTMFormatter
             )
         evaluation_set.test_ratio = 1
         evaluation_set.horizon = parameters["horizon"]
