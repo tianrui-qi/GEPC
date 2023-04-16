@@ -9,6 +9,7 @@ import time
 import sys
 import uuid
 import os
+import copy
 
 import pandas
 import qsub
@@ -98,3 +99,11 @@ submit(changes, "dcc_increasing_ntwk", time_limit=4)
 
 #%% Different features:
 
+# Leave one out:
+changes = []
+for feature in dcc.config.defaults["features"]:
+    features = list(copy.copy(dcc.config.defaults["features"]))
+    features.remove(feature)
+    changes.append({"features": tuple(features), "batch_size": 1000})
+
+submit(changes, "dcc_leaveoneout_features", time_limit=4)
