@@ -765,8 +765,8 @@ def load_datasets(parameters):
         evaluation_set.test_ratio = 1
         evaluation_set.horizon = parameters["horizon"]
         evaluation_set.past_steps = parameters["past_steps"]
-        training_set.batch_size = parameters["batch_size"]
-        training_set.mode = "evaluation"
+        evaluation_set.batch_size = parameters["batch_size"]
+        evaluation_set.mode = "evaluation"
         evaluation_set.load()
         evaluation_set.normalize()
         evaluation_set.data_type='normalized_dataset'

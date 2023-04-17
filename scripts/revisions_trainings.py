@@ -107,3 +107,12 @@ for feature in dcc.config.defaults["features"]:
     changes.append({"features": tuple(features), "batch_size": 1000})
 
 submit(changes, "dcc_leaveoneout_features", time_limit=4)
+
+# All, only fluo & stims, fluo & stims & area:
+changes = []
+features = copy.copy(dcc.config.defaults["features"])
+changes.append({"features": features, "batch_size": 1000})
+changes.append({"features": ("fluo1", "stims"), "batch_size": 1000})
+changes.append({"features": ("fluo1", "area", "stims"), "batch_size": 1000})
+
+submit(changes, "dcc_custom_features", time_limit=4)

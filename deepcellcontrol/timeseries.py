@@ -107,7 +107,10 @@ def train(
         epochs=epochs,
         callbacks=callbacks
         )
-    network.load_weights(os.path.join(save_folder,'model.hdf5'))
+    if evaluation_clbk is not None:
+        network.load_weights(os.path.join(save_folder,'model_besteval.hdf5'))
+    else:
+        network.load_weights(os.path.join(save_folder,'model.hdf5'))
     
     # Add rmse and mae to history metrics a posteriori:
     if evaluation_clbk is not None:
