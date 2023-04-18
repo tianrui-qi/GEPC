@@ -82,6 +82,7 @@ def split(model, decode_mode="mlp"):
     hyper_parameters = dict(
         past_steps = model.get_layer("past_inputs").output_shape[0][1],
         features = ["" for _ in range(model.get_layer("past_inputs").output_shape[0][2])], # dummy list to for the len() call
+        lstm_units = model.get_layer("encoder_0").output_shape[-1],
         latent_dim = model.get_layer("encoder_1").output_shape[0][-1],
         output_mode = model.get_layer("decoder_1").__class__.__name__.lower(), # Only useful for lstm decoder
         loss = model.loss, # These aren' really useful
