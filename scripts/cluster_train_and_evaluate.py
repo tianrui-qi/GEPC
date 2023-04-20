@@ -79,7 +79,7 @@ for cell_class in cell_class_list:
         
         # Submit qsub request for single job:
         job_id = qsub.submit(
-            dcc_repo_path + "scripts/simulated_pipeline.py",
+            dcc_repo_path + "scripts/simulated_train_and_evaluate.py",
             args = [saved_config_file],
             conda_env="dcc_env_shared",
             hardware_requirements = dict(
@@ -130,7 +130,7 @@ cell_class = 'CcaSR_gillespie'
         
 #         # Submit qsub request for single job:
 #         job_id = qsub.submit(
-#             dcc_repo_path + "scripts/simulated_pipeline.py",
+#             dcc_repo_path + "scripts/simulated_train_and_evaluate.py",
 #             args = [saved_config_file],
 #             conda_env="dcc_env_shared",
 #             hardware_requirements = dict(
@@ -175,7 +175,7 @@ for past_steps in past_steps_list:
         
         # Submit qsub request for single job:
         job_id = qsub.submit(
-            dcc_repo_path + "scripts/simulated_pipeline.py",
+            dcc_repo_path + "scripts/simulated_train_and_evaluate.py",
             args = [saved_config_file],
             conda_env="dcc_env_shared",
             hardware_requirements = dict(
@@ -230,7 +230,7 @@ for training_dir in training_dir_list:
     
     # Submit qsub request for single job:
     job_id = qsub.submit(
-        dcc_repo_path + "scripts/simulated_pipeline.py",
+        dcc_repo_path + "scripts/simulated_train_and_evaluate.py",
         args = [saved_config_file],
         conda_env="dcc_env_shared",
         hardware_requirements = dict(
@@ -285,7 +285,7 @@ for training_dir in training_dir_list:
     
     # Submit qsub request for single job:
     job_id = qsub.submit(
-        dcc_repo_path + "scripts/simulated_pipeline.py",
+        dcc_repo_path + "scripts/simulated_train_and_evaluate.py",
         args = [saved_config_file],
         conda_env="dcc_env_shared",
         hardware_requirements = dict(
@@ -340,7 +340,7 @@ training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_lis
         
 #         # Submit qsub request for single job:
 #         job_id = qsub.submit(
-#             dcc_repo_path + "scripts/simulated_pipeline.py",
+#             dcc_repo_path + "scripts/simulated_train_and_evaluate.py",
 #             args = [saved_config_file],
 #             conda_env="dcc_env_shared",
 #             hardware_requirements = dict(
@@ -386,7 +386,7 @@ for past_steps in past_steps_list:
         
         # Submit qsub request for single job:
         job_id = qsub.submit(
-            dcc_repo_path + "scripts/simulated_pipeline.py",
+            dcc_repo_path + "scripts/simulated_train_and_evaluate.py",
             args = [saved_config_file],
             conda_env="dcc_env_shared",
             hardware_requirements = dict(
@@ -438,7 +438,7 @@ for horizon in horizon_list:
         
         # Submit qsub request for single job:
         job_id = qsub.submit(
-            dcc_repo_path + "scripts/simulated_pipeline.py",
+            dcc_repo_path + "scripts/simulated_train_and_evaluate.py",
             args = [saved_config_file],
             conda_env="dcc_env_shared",
             hardware_requirements = dict(
@@ -482,7 +482,7 @@ for past_steps in past_steps_list:
         
         # Submit qsub request for single job:
         job_id = qsub.submit(
-            dcc_repo_path + "scripts/simulated_pipeline.py",
+            dcc_repo_path + "scripts/simulated_train_and_evaluate.py",
             args = [saved_config_file],
             conda_env="dcc_env_shared",
             hardware_requirements = dict(
@@ -534,7 +534,7 @@ for cell_class in cell_class_list:
         
         # Submit qsub request for single job:
         job_id = qsub.submit(
-            dcc_repo_path + "scripts/simulated_pipeline.py",
+            dcc_repo_path + "scripts/simulated_train_and_evaluate.py",
             args = [saved_config_file],
             conda_env="delta_env",
             hardware_requirements = dict(
@@ -576,12 +576,62 @@ for datasets_folder in datasets_folder_list:
     
     # Submit qsub request for single job:
     job_id = qsub.submit(
-        dcc_repo_path + "scripts/simulated_pipeline.py",
+        dcc_repo_path + "scripts/simulated_train_and_evaluate.py",
         args = [saved_config_file],
         conda_env="delta_env",
         hardware_requirements = dict(
             time_limit = 5, #2
             cores=6, #4
+            gpus=1,
+            mem_per_core=4,
+            )
+        )
+
+#%% CNN: Gillespie
+
+# Cell class: in training data path, and name of class in dcc.simulations
+cell_class = 'CcaSR_gillespie'
+        
+cell_class_dir = f'{dcc_repo_path}/assets/simulated/data/{cell_class}/'
+training_dir_list = glob.glob(cell_class_dir + '2023-04-*/training_set')
+training_file_list = [train_dir.split('/')[-1] for train_dir in training_dir_list]
+
+for training_dir in training_dir_list:
+    
+    training_file = training_dir.split('/')[-1]
+    datasets_folder = '/'.join(training_dir.split('/')[:-1])
+                
+    # Fields to change in config.py:
+    # Training epochs, locations of training and evaluation datsets,
+    # which cell class to use for simulations
+    config = dict(
+        past_steps = [36, 144],
+        horizon = 8*12,
+        features = ('fluo1', 'stims'),
+        batch_size = 1000,
+        loss = 'Huber',
+        models_folder = dcc_repo_path + '/assets/models/',
+        training_parameters = dict(
+            epochs = 100, # 100 is default
+            steps_per_epoch = 200, # 200 is default
+            ),
+        datasets_folder = datasets_folder, # Point to generated sets folder
+        training_sets = (training_file,), # Training subfolder(s)
+        eval_sets = ("evaluation_set",), # Evaluation subfolder(s)
+        cell_class = cell_class, # Cell class to use in dcc.simulations
+        )
+    
+    # Updated config and save it to disk:
+    saved_config_file = params_change(config)
+    
+    # Submit qsub request for single job:
+    job_id = qsub.submit(
+        dcc_repo_path + "scripts/simulated_train_and_evaluate_CNN.py",
+        args = [saved_config_file],
+        conda_env="dcc_env_shared",
+        hardware_requirements = dict(
+            time_limit = 5, #2
+            cores=9, #4
             gpus=1,
             mem_per_core=4,
             )
