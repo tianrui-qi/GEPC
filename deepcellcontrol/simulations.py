@@ -1058,8 +1058,8 @@ class CcaSR_Autoactivation(CcaSR_gillespie):
         self.reactions = (
             Reaction('eta*U', {'H': 1}), # CcaSR activation
             Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*E/2 * (H**nh)/(K_H**nh+H**nh)', {'F': 1}), # GFP creation by H
-            Reaction('a*E/2 * (F**nf)/(K_F**nf+F**nf)', {'F': 1}), # GFP creation by itself
+            Reaction('a/2 * (H**nh)/(K_H**nh+H**nh)', {'F': 1}), # GFP creation by H
+            Reaction('a/2 * (F**nf)/(K_F**nf+F**nf)', {'F': 1}), # GFP creation by itself
             Reaction('nu*F', {'F': -1}), # GFP dilution
             )
 
