@@ -563,7 +563,7 @@ class SplitLSTMCNN_MPC(_MPC):
         LSTM encoder - CNN decoder as defined in models.py.
     """
     
-    def __init__(self, model_file, n_bins=96, *args, **kwargs):
+    def __init__(self, model_file, *args, **kwargs):
         """
         Instanciation.
 
@@ -583,7 +583,6 @@ class SplitLSTMCNN_MPC(_MPC):
         
         # Initialize parent properties:
         super().__init__(*args, **kwargs)
-        self.n_bins = n_bins
     
         # Initialize model:
         whole_model = tf.keras.models.load_model(model_file)
@@ -591,51 +590,13 @@ class SplitLSTMCNN_MPC(_MPC):
         self.encoder = encoder
         self.model = decoder
         
-    def objective_landscape(self, objectives, get_error=True):
-        """
-        Turn single trace objective into an objective landscape
-        Default returns an "error" landscape
-
-        Parameters
-        ----------
-        objectives : arr, (cells, horizon)
-            List containing control objectives. Each row contains a 1D
-            numpy array of future objective values for each cell to process in
-            parallel.
-            Normalized to camera max to match what is done for other models
-        get_error: bool, default True
-            Whether to just compute the landscape or the error 
-            (ie. (objective - fluo)**2)
-
-        Returns
-        -------
-        objective_landscapes : list
-            List containing control objectives. Each list element contains a 2D
-            numpy array of future (error or objective) landscapes for each cell
-            to process in parallel.
-
-        """
-        objective_landscapes = []
-        
-        # Fluorescence value in each bin
-        camera_max = 4095
-        bin_width = camera_max / (self.n_bins+1)
-        bin_centers = np.arange(bin_width, camera_max, bin_width)
-        fluo_landscape = np.repeat(bin_centers[np.newaxis], 
-                                   np.shape(objectives)[1], # horizon: same for all timepoints
-                                   axis=0).T
-        
-        for obj_idx, objective in enumerate(objectives):
-            
-            objective_landscape = gaussian_img(objective*camera_max, self.n_bins)
-            
-            if get_error:
-                objective_landscapes += [(fluo_landscape - objective_landscape)**2,]
-            
-            else:
-                objective_landscapes += [objective_landscape,]
-                      
-        return objective_landscapes
+        # This only needs to be generated once:
+        horizon, n_bins = self.model.layers[-1].output_shape[1:3]
+        bin_width = 1 / (n_bins+1)
+        bin_centers = np.arange(bin_width, 1, bin_width)
+        self.fluo_landscape = np.repeat(
+            bin_centers[np.newaxis], horizon, axis=0
+            ).T
 
     def get_strategy(self, inputs, objectives):
         """
@@ -673,10 +634,8 @@ class SplitLSTMCNN_MPC(_MPC):
             state_c, self.strategy_optimizer.num_particles, axis=0
             )
         
-        objective_landscapes = self.objective_landscape(objectives)
-        
         # Moving on:
-        return super().get_strategy(inputs, objective_landscapes)
+        return super().get_strategy(inputs, objectives)
         
     def compute_scores(self, predictions, objectives):
         """
@@ -702,18 +661,15 @@ class SplitLSTMCNN_MPC(_MPC):
         # Init array:
         scores = np.empty(shape=predictions.shape[0:2], dtype=float)
 
-        for obj_ind in range(len(objectives)):
+        for obj_ind, objective in enumerate(objectives):
             
-            # Repeat objective in numpy array of same size as predictions:
-            obj_arr = np.repeat(
-                np.expand_dims(objectives[obj_ind], 0),
-                predictions.shape[1],
-                axis=0
-                )
-
+            # Compute error landscape:
+            error_landscape = ((self.fluo_landscape - objective)**2).T
+            
             # Compute expected RMSE (sum over fluo_bin and horizon):
-            scores[obj_ind] = np.sum(obj_arr * predictions[obj_ind], 
-                                     axis=(1,2))
+            scores[obj_ind] = np.sum(
+                error_landscape[np.newaxis] * predictions[obj_ind], axis=(1,2)
+                )
 
         return scores
     

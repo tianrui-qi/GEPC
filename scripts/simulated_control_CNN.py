@@ -20,7 +20,8 @@ sys.path.insert(0,dcc_repo_path)
 import deepcellcontrol as dcc
 
 #%% Parameters:
-model_path = glob.glob("../assets/models/cnn_model_JB*")[0]
+assets_folder = os.path.dirname(dcc.__file__) + "/../assets"
+model_path = glob.glob(assets_folder + "/models/cnn_model_JB*")[0]
 # model_path = glob.glob("../assets/models/*4-20_05*")[0]
 # with open(model_path + "/training_parameters.json", "r") as f:
 #     params = json.load(f)
@@ -42,12 +43,11 @@ os.makedirs(model_path + "/control/", exist_ok = True)
 num_cells = 10
 SAMPLING = 5 # Minutes between samples
 no_control = 3*12 # Timepoints without control
-control_duration = 3*12 # Timepoints with control
+control_duration = 36*12 # Timepoints with control
 
 #%% Set up "experiment":
 controller = dcc.control.SplitLSTMCNN_MPC(
     model_file = params['model_file'],
-    n_bins = params['cnn_bins'],
     strategy_optimizer=dcc.control.BinaryParticleSwarmOptimizer(
         horizon=params["horizon"], 
         iterations=25, particles=40,
@@ -55,7 +55,7 @@ controller = dcc.control.SplitLSTMCNN_MPC(
     )
 
 objectives = dcc.utilities.sine_objective(
-    period=8*60, #8*60,
+    period=16*60, #8*60,
     offset=1250,
     amplitude=750,
     delay=0,
@@ -132,3 +132,5 @@ np.save(model_path + "/control/fluo.npy", fluorescence)
 np.save(model_path + "/control/stims.npy", stims)
 
 print("="*50 + f"\n{time.strftime('%Y-%m-%d_%H-%M-%S')}: Done\n" + "="*50)
+
+#%%
