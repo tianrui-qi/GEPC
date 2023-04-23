@@ -13,6 +13,7 @@ import copy
 
 import pandas
 import qsub
+import numpy as np
 
 dcc_data_path = "/projectnb/dunlop/JB/deepcellcontrol/"
 dcc_repo_path = "/project/dunlop/JB/deepcellcontrol/"
@@ -116,3 +117,30 @@ changes.append({"features": ("fluo1", "stims"), "batch_size": 1000})
 changes.append({"features": ("fluo1", "area", "stims"), "batch_size": 1000})
 
 submit(changes, "dcc_custom_features", time_limit=4)
+
+#%% Different sets
+
+datasets = dcc.config.defaults["training_sets"] + dcc.config.defaults["eval_sets"]
+
+training_sets = [list(range(len(dcc.config.defaults["training_sets"])))]
+for _ in range(5):
+    
+    already = True
+    while already:
+        sets = np.random.choice(len(datasets), 4, replace=False)
+        sets.sort()
+        sets = list(sets)
+        already = any([sets==x for x in training_sets])
+    training_sets.append(sets)
+
+changes = []
+for sets in training_sets:
+    eval_sets = list(set(range(len(datasets))).difference(sets))
+    changes += [
+        {
+            "training_sets": [datasets[i] for i in sets],
+            "eval_sets": [datasets[i] for i in eval_sets]
+            }
+        ]*3
+
+submit(changes, "dcc_random_partitioning", time_limit=4)
