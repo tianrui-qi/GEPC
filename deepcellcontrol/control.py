@@ -179,13 +179,13 @@ class _MPC(_Controller):
 
         # Predict:
         with tf.device("GPU"):
-            yhat = self.model.predict(x, batch_size=1000)
+            yhat = self.model.predict(x, batch_size=100)
 
         # Format yhat into list similar to strategies:
         # yhat = np.split(yhat,np.cumsum([i.shape[0] for i in strategies]),axis=0)[:-1]
         yhat = np.reshape(yhat, newshape=strategies.shape[0:2] + yhat.shape[1:])
 
-        return np.squeeze(yhat)
+        return np.squeeze(yhat, axis=-1)
 
     def compute_scores(self, predictions, objectives):
         """
@@ -670,7 +670,7 @@ class SplitLSTMCNN_MPC(_MPC):
             scores[obj_ind] = np.sum(
                 error_landscape[np.newaxis] * predictions[obj_ind], axis=(1,2)
                 )
-
+            
         return scores
     
     def compile_x(self, inputs, strategies):
@@ -708,7 +708,7 @@ class SplitLSTMCNN_MPC(_MPC):
         
         return self.state_h, self.state_c, strategies
     
-    def show_predict(self, inputs, strategies):
+    def show_predict(self, inputs , strategies = None):
         """
         Predict cells response based on inputs and strategies.
         This is only for verification purposes and is not used
@@ -720,9 +720,10 @@ class SplitLSTMCNN_MPC(_MPC):
             Past observed variables (Fluorescence, cell length etc...) and past 
             control inputs (DMD inputs...). Dimensions are 
             (cells, past_steps, features)
-        strategies : 2D numpy array of bools
+        strategies : 2D numpy array of bools, optional
             Array containing strategies for each cell over the entire
-            prediction horizon. Size is cells -by- horizon.
+            prediction horizon. Size is cells -by- horizon. If None, 
+            the last computed strategies will be used.
 
         Returns
         -------
@@ -733,6 +734,8 @@ class SplitLSTMCNN_MPC(_MPC):
         """
         
         self.state_h, self.state_c = self.encoder.predict(inputs)
+        if strategies is None:
+            strategies = self.strategy
         x = self.compile_x(None, strategies[:,np.newaxis,:])
         predictions = self.model.predict(x)
         
