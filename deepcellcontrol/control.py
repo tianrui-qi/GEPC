@@ -13,6 +13,7 @@ import tensorflow as tf
 import numpy as np
 
 from .models import split
+from .data import gaussian_img
 
 
 class _Controller:
@@ -164,9 +165,12 @@ class _MPC(_Controller):
 
         Returns
         -------
-        yhat : 3D numpy array of floats.
+        yhat : ND numpy array of floats (N=2 + prediction dimension).
             Output from the prediction model, for each cell and each strategy.
-            Size is cells -by- strategies_per_cell -by- horizon.
+            Size is cells -by- strategies_per_cell -by- (prediction dimensions).
+            prediction dimensions = (horizon,) for single trace,
+                                  = (fluo_bin, horizon) for response landscape
+            
 
         """
 
@@ -175,13 +179,13 @@ class _MPC(_Controller):
 
         # Predict:
         with tf.device("GPU"):
-            yhat = self.model.predict(x, batch_size=1000)
+            yhat = self.model.predict(x, batch_size=100)
 
         # Format yhat into list similar to strategies:
         # yhat = np.split(yhat,np.cumsum([i.shape[0] for i in strategies]),axis=0)[:-1]
-        yhat = np.reshape(yhat, newshape=strategies.shape[0:2] + (yhat.shape[1],))
+        yhat = np.reshape(yhat, newshape=strategies.shape[0:2] + yhat.shape[1:])
 
-        return yhat
+        return np.squeeze(yhat, axis=-1)
 
     def compute_scores(self, predictions, objectives):
         """
@@ -540,6 +544,198 @@ class SplitLSTMMPC(_MPC):
         """
         
         self.state_h, self.state_c = self.encoder.predict(inputs)
+        x = self.compile_x(None, strategies[:,np.newaxis,:])
+        predictions = self.model.predict(x)
+        
+        return predictions
+    
+class SplitLSTMCNN_MPC(_MPC):
+    """
+    Model predictive controller based on a split version of the LSTM 
+    encoder- CNN decoder model. Because the past only needs to be encoded once and 
+    then be evaluated against hundreds of optogenetic strategies, this version
+    is much faster.
+    Child class of _MPC.
+
+    Attributes
+    ----------
+    model : Keras model object.
+        LSTM encoder - CNN decoder as defined in models.py.
+    """
+    
+    def __init__(self, model_file, *args, **kwargs):
+        """
+        Instanciation.
+
+        Parameters
+        ----------
+        model_file : str
+            Filepath to model weights file.
+        n_bins: int
+            Number of bins for fluorescence values
+        *args and **kwargs : See _MPC class
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Initialize parent properties:
+        super().__init__(*args, **kwargs)
+    
+        # Initialize model:
+        whole_model = tf.keras.models.load_model(model_file)
+        encoder, decoder = split(whole_model, decode_mode='cnn')
+        self.encoder = encoder
+        self.model = decoder
+        
+        # This only needs to be generated once:
+        horizon, n_bins = self.model.layers[-1].output_shape[1:3]
+        bin_width = 1 / (n_bins+1)
+        bin_centers = np.arange(bin_width, 1, bin_width)
+        self.fluo_landscape = np.repeat(
+            bin_centers[np.newaxis], horizon, axis=0
+            ).T
+
+    def get_strategy(self, inputs, objectives):
+        """
+        Identify optimal strategies.
+        For CNN, objectives must be reshaped into objective landscapes before
+        being passed to get_strategy
+
+        Parameters
+        ----------
+        inputs : 3D numpy array
+            Past observed variables (Fluorescence, cell length etc...) and past 
+            control inputs (DMD inputs...). Dimensions are 
+            (cells, past_steps, features)
+        objectives : list
+            List containing control objectives. Each list element contains a 1D
+            numpy array of future objective values for each cell to process in
+            parallel.
+
+        Returns
+        -------
+        strategies : 2D numpy array of bools
+            Array containing strategies for each cell over the entire
+            prediction horizon. Size is cells -by- horizon.
+
+        """
+        
+        # Here, before moving on with the strategy search, we run the encoder
+        # part of the network:
+        with tf.device("CPU"):
+            state_h, state_c = self.encoder.predict(inputs)
+        self.state_h = np.repeat(
+            state_h, self.strategy_optimizer.num_particles, axis=0
+            )
+        self.state_c = np.repeat(
+            state_c, self.strategy_optimizer.num_particles, axis=0
+            )
+        
+        # Moving on:
+        return super().get_strategy(inputs, objectives)
+        
+    def compute_scores(self, predictions, objectives):
+        """
+        Compute expected RMSE over model predictions for each cell's objective.
+
+        Parameters
+        ----------
+        predictions : 4D numpy array of floats
+            Output from the prediction model, for each cell and each strategy.
+            Size is cells -by- strategies_per_cell -by- (fluo_bin -by- horizon).
+        objectives : list
+            List containing control objectives as 2D landscapes. 
+            Default is an error landscapes (fluo_bin -by- horizon) that is the
+            error in each bin relative to the desired objective landscape
+        Returns
+        -------
+        scores : 2D numpy array of floats
+            RMSE between each strategy per cell and corresponding objective.
+            Size is cells -by- strategies_per_cell.
+
+        """
+
+        # Init array:
+        scores = np.empty(shape=predictions.shape[0:2], dtype=float)
+
+        for obj_ind, objective in enumerate(objectives):
+            
+            # Compute error landscape:
+            error_landscape = ((self.fluo_landscape - objective)**2).T
+            
+            # Compute expected RMSE (sum over fluo_bin and horizon):
+            scores[obj_ind] = np.sum(
+                error_landscape[np.newaxis] * predictions[obj_ind], axis=(1,2)
+                )
+            
+        return scores
+    
+    def compile_x(self, inputs, strategies):
+        """
+        Compile X array to do predictions over, formatted for the LSTM model.
+
+        Parameters
+        ----------
+        inputs : 3D numpy array
+            Past observed variables (Fluorescence, cell length etc...) and past 
+            control inputs (DMD inputs...). Dimensions are 
+            (cells, past_steps, features)
+            Note: In the case of the Split LSTM, the inputs are not actually
+            used in this function, because they are already processed by 
+            get_strategy into the latent states.
+        strategies : 3D numpy array of bools
+            Array containing multiple strategies for each cell to predict the
+            response to. Size is cells -by- strategies_per_cell -by- horizon.
+
+        Returns
+        -------
+        list
+            List of two 2D arrays for LSTM model. First array is past values of
+            observed variables + past control inputs, size is
+            (cell * strategies_per_cell) -by- past_steps -by- features. Second
+            array is future control inputs, size is
+            (cell * strategies_per_cell) -by- horizon -by- 1.
+
+        """
+        
+        strategies = np.reshape(
+            strategies, 
+            (strategies.shape[0]*strategies.shape[1], strategies.shape[2])
+            )
+        
+        return self.state_h, self.state_c, strategies
+    
+    def show_predict(self, inputs , strategies = None):
+        """
+        Predict cells response based on inputs and strategies.
+        This is only for verification purposes and is not used
+        in the rest of the class.
+
+        Parameters
+        ----------
+        inputs : 3D numpy array of float32
+            Past observed variables (Fluorescence, cell length etc...) and past 
+            control inputs (DMD inputs...). Dimensions are 
+            (cells, past_steps, features)
+        strategies : 2D numpy array of bools, optional
+            Array containing strategies for each cell over the entire
+            prediction horizon. Size is cells -by- horizon. If None, 
+            the last computed strategies will be used.
+
+        Returns
+        -------
+        predictions : 3D numpy array of float32
+            FLuorescence predictions for each control inputs under the 
+            corresponding strategies
+
+        """
+        
+        self.state_h, self.state_c = self.encoder.predict(inputs)
+        if strategies is None:
+            strategies = self.strategy
         x = self.compile_x(None, strategies[:,np.newaxis,:])
         predictions = self.model.predict(x)
         

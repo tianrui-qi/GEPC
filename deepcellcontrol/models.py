@@ -66,7 +66,7 @@ def split(model, decode_mode="mlp"):
     model : Model
         Encoder-decoder model.
     decode_mode : str, optional
-        Decoder architecture type, options are "lstm" or "mlp".
+        Decoder architecture type, options are "lstm" or "mlp" or "cnn".
         The default is "mlp".
 
     Returns
@@ -79,9 +79,11 @@ def split(model, decode_mode="mlp"):
     """
     
     # Collect hyper_parameters:
+    name_list = [layer.name for layer in model.layers]
+    input_layer = name_list[0]
     hyper_parameters = dict(
-        past_steps = model.get_layer("past_inputs").output_shape[0][1],
-        features = ["" for _ in range(model.get_layer("past_inputs").output_shape[0][2])], # dummy list to for the len() call
+        past_steps = model.get_layer(input_layer).output_shape[0][1],
+        features = ["" for _ in range(model.get_layer(input_layer).output_shape[0][2])], # dummy list to for the len() call
         lstm_units = model.get_layer("encoder_0").output_shape[-1],
         latent_dim = model.get_layer("encoder_1").output_shape[0][-1],
         output_mode = model.get_layer("decoder_1").__class__.__name__.lower(), # Only useful for lstm decoder
@@ -95,7 +97,15 @@ def split(model, decode_mode="mlp"):
             if layer.name.startswith("decoder_"):
                 hyper_parameters["mlp_layers"]+=1
                 hyper_parameters["horizon"] = layer.output_shape[-1]
-            
+    elif decode_mode == "cnn": 
+        hyper_parameters["cnn_bins"] = 8*model.get_layer('decoder_1').output_shape[1]
+        cnn_filters = []
+        for layer in model.layers:
+            if layer.name.startswith("decoder_"):
+                cnn_filters += [layer.output_shape[-1],]
+                hyper_parameters["horizon"] = layer.output_shape[-2]
+        hyper_parameters["cnn_filters"] = cnn_filters[2:-1]
+    
     
     # Create encoder and transfer weights from model:
     encoder = lstm_encoder(hyper_parameters)
@@ -107,6 +117,9 @@ def split(model, decode_mode="mlp"):
         decoder = lstm_decoder(hyper_parameters)
     elif decode_mode == "mlp":
         decoder = mlp_decoder(hyper_parameters)
+    elif decode_mode == "cnn":
+        decoder = cnn_decoder(hyper_parameters)
+    
     for layer in model.layers:
         if layer.name.startswith("decoder_"):
             _transfer(model, decoder, layer.name)
@@ -379,6 +392,42 @@ def _mlpdecoder(state_h, state_c, future_light, hyper_parameters):
     
     return prediction
 
+def cnn_decoder(hyper_parameters):
+    """
+    Get CNN decoder network
+
+    Parameters
+    ----------
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    model : Model
+        Compiled CNN decoder model.
+
+    """
+    
+    # Inputs:
+    state_h = Input((hyper_parameters["latent_dim"],),name='state_h') 
+    state_c = Input((hyper_parameters["latent_dim"],),name='state_c') 
+    future_light = Input((hyper_parameters["horizon"],),name='future_light')
+  
+    # Decoder:
+    prediction = _cnndecoder(state_h, state_c, future_light, hyper_parameters)
+
+    # Finalize model:
+    model = Model([state_h, state_c, future_light], prediction)
+    model.compile(
+        loss=hyper_parameters["loss"],
+        optimizer = Adam(
+            learning_rate=hyper_parameters["learning_rate"]
+            )
+        )
+    
+    return model
+
 def _cnndecoder(state_h, state_c, future_light, hyper_parameters):
     """
     CNN decoder definition
@@ -462,7 +511,7 @@ def _cnndecoder(state_h, state_c, future_light, hyper_parameters):
 
 def lstm_cnn(hyper_parameters):
     """
-    Get LSTM-MLP encoder-decoder network
+    Get LSTM-CNN encoder-decoder network
 
     Parameters
     ----------
@@ -473,7 +522,7 @@ def lstm_cnn(hyper_parameters):
     Returns
     -------
     model : Model
-        Compiled LSTM-MLP model.
+        Compiled LSTM-CNN model.
 
     """
     

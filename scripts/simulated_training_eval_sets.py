@@ -29,7 +29,7 @@ nostim_start = 3*12 # 3*12 Timepoints with light off
 eval_cells = 1_000 #1_000
 eval_cutoff = 24*12 # 24*12 # Number of past timepoints
 eval_future_realizations = 1000 #1_000 # Number of future realizations per cell
-eval_horizon = 4*12 # 4*12 # Number of future timepoints
+eval_horizon = 8*12 # 4*12 # Number of future timepoints
 
 #%% Kwargs of submission
 
