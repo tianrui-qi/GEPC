@@ -156,6 +156,49 @@ KI_colors = ["#d84d32",
             "#8f8539"]
 KI_color_dict = {KI_vals[i]: KI_colors[i] for i in range(len(KI_vals))}
 
+
+#%% Plot responses to pure light, to show variability
+
+n_hours = 2
+n_cells = 80
+alpha=0.1
+lw = 1.5
+
+#  # Constant E
+cell_class = 'CcaSR_Autoactivation'
+random_bit = dcc.utilities.random_stimulations(
+                        timepoints=3*n_hours*12,
+                        nostim_timepoints=0,
+                        total_simulations=7)[0]
+
+light_sequence = [1]*12*n_hours + [0]*12*n_hours + [int(bit) for bit in random_bit]
+light_sequence = [0]*n_hours*12 + [0,0,1,1]*n_hours*12 + [1]*n_hours*6*12 + \
+                    [0,0,1,1]*n_hours*12 + [0]*n_hours*8*12
+x = [t/12. for t in range(len(light_sequence)+1)]
+
+
+dcc.utilities.OptoPlotBackground(light_sequence, ymax=150, x=x)
+    
+for i in range(n_cells):
+
+    # Simulate cell
+    cell = dcc.simulations.CcaSR_Autoactivation()
+    
+    # Simulate
+    cell.set_light_events(light_sequence)     
+    series = cell.run(len(light_sequence)*5, 
+                           solver="original", 
+                           realizations=1)
+    
+    plt.plot(x, [state['F'] for state in series],
+                 color='b',
+                 alpha=alpha, lw=lw)
+    
+plt.xlim([0,np.max(x)])
+plt.ylim([0,150])
+plt.tight_layout()
+plt.savefig(f'{fig_path}/figN_{cell_class}_sample_responses.png', dpi=300)
+
 #%% Get information about simulations
 
 simul_dir_list = glob.glob(dcc_repo_path + '/assets/models/2023*')

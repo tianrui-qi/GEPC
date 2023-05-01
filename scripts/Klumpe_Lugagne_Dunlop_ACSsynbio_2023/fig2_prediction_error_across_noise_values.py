@@ -472,6 +472,158 @@ axes[1].set_xlabel('RMSE (mean across time)')
 plt.tight_layout()
 plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_default_effect_of_training_set_size.png', dpi=300)
 
+#%% Default model x [short] training set size
+
+# Which cell class, and horizon values to plot
+cell_class = 'CcaSR_gillespie'
+
+# Keep simulations with default past steps, default horizon, and same h1/h2 ratio
+simul_slice = default_past_steps & default_horizon & default_h1 & \
+            default_h2 & default_camera_sim & default_solver
+            
+short = ['short' in ts for ts in df_meta['training_sets']]
+
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class) & short].sort_values(by=['training_sets']).reset_index()
+
+
+alpha = 0.5
+n_bins = 100
+x_max = 1200
+markersize=8
+
+fig, axes = plt.subplots(2,1, figsize=(8,8), sharex=True)
+
+for i in df_past.index:
+    simul = df_past.loc[i]
+    simul_id = simul['simul_id']
+    training_set_folder = simul['training_sets']
+    
+    if training_set_folder == 'training_set_short':
+        training_set_size = 10_000
+    else:
+        training_set_size = int(training_set_folder.split('_')[-2])
+        
+    if training_set_size > 1:
+        training_set_size = int(0.9*training_set_size)
+        
+        
+    for j, validated in enumerate([False, True]):
+        if validated & (training_set_size==1):
+            continue
+        
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, validated=validated) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        
+        # Distribution across the prediction
+        axes[j].hist(np.mean(RMSE, axis=1), 
+                      bins=np.linspace(0, x_max, n_bins+1),
+                      color=training_set_color_dict[training_set_size],
+                    alpha=alpha,                 
+                    label=f'trained on {training_set_size} cells',
+                    density=True)
+        
+        
+        
+        # x = np.sort(np.mean(RMSE, axis=1))
+        # y = np.arange(1,len(x)+1) / len(x)
+        # axes[j].plot(x,y, '.',
+        #           markersize=markersize,
+        #           alpha=alpha,
+        #           color=training_set_color_dict[training_set_size],
+        #           label=f'trained on {training_set_size} cells')
+        
+        axes[j].set_title(f'Validated {validated}')
+        axes[j].set_xlim([0, x_max])
+        axes[j].set_ylabel('Frequency')
+
+
+axes[0].legend()
+axes[1].set_xlabel('RMSE (mean across time)')
+
+plt.tight_layout()
+plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_default_effect_of_short_training_set_size.png', dpi=300)
+
+#%% Default model x training set size [summary]
+
+# Which cell class, and horizon values to plot
+cell_class = 'CcaSR_gillespie'
+
+# Keep simulations with default past steps, default horizon, and same h1/h2 ratio
+simul_slice = default_past_steps & default_horizon & default_h1 & \
+            default_h2 & default_camera_sim & default_solver
+            
+df_past = df_meta.loc[simul_slice & (df_meta['cell_class']==cell_class)].sort_values(by=['training_sets']).reset_index()
+
+training_set_size_list = [key for key in training_set_color_dict.keys()]
+
+alpha = 0.5
+n_bins = 100
+x_max = 1200
+markersize=8
+lw = 1.5
+
+fig, axes = plt.subplots(2,2, figsize=(3,4.5), sharey=True)
+
+for i in df_past.index:
+    simul = df_past.loc[i]
+    simul_id = simul['simul_id']
+    training_set_folder = simul['training_sets']
+    
+    if training_set_folder == 'training_set_short':
+        training_set_size = 10_000
+    elif training_set_folder =='training_set':
+        training_set_size = 10_000
+    else:
+        training_set_size = int(training_set_folder.split('_')[-2])
+        
+    if training_set_size > 1:
+        training_set_size = int(0.9*training_set_size)
+        
+    if 'short' in training_set_folder:
+        x_plot = 1
+    else:
+        x_plot = 0
+        
+        
+    for j, validated in enumerate([False, True]):
+        ax = axes[j,x_plot]
+        
+        if validated & (training_set_size==1):
+            continue
+        
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, validated=validated) 
+        RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        RMSE_t_avg = np.mean(RMSE,axis=1)
+        
+        x = training_set_size_list.index(training_set_size)
+        ax.plot(x, np.median(RMSE_t_avg),
+                    '.', markersize=markersize,
+                    color=training_set_color_dict[training_set_size])
+        ax.plot([x,x], [np.nanquantile(RMSE_t_avg, q=0.25),
+                         np.nanquantile(RMSE_t_avg, q=0.75)],
+                     '-', lw=lw, 
+                     color=training_set_color_dict[training_set_size])
+        
+        if validated & (training_set_folder=='training_set'):
+            for xx in range(2):
+                for yy in range(2):
+                    axes[xx,yy].plot([-0.5,len(training_set_size_list)],
+                                     np.median(RMSE_t_avg)*np.ones(2),'--',
+                                     color=0.5*np.ones(3),lw=lw, zorder=0)
+            
+        
+        # ax.set_title(f'Validated {validated}')
+        # ax.set_ylabel('RMSE (a.u.)')
+        ax.set_xticks(np.arange(len(training_set_size_list)))
+        ax.set_xticklabels(training_set_size_list, rotation=90)
+        ax.set_ylim([0,1200])
+        ax.set_xlim([-0.5,len(training_set_size_list)-0.5])
+
+
+plt.tight_layout()
+plt.savefig(dcc_repo_path+f'/assets/figures/fig2_{cell_class}_default_training_set_size_summary.png', dpi=300)
+
+
 #%% Default model x horizon
 
 # Which cell class, and horizon values to plot
