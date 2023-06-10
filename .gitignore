@@ -147,3 +147,6 @@ config.py
 *.py.swp
 
 .idea/
+
+# CMA-ES output folder:
+outcmaes/
