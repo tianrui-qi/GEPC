@@ -1,19 +1,24 @@
 # -*- coding: utf-8 -*-
 """
+Script to analyze the outcome of various re-trainings of the networks
+Fig S1, S2, S5 and S6 plotted here
+You will need scikit-learn (v1.2.2 at time of this writing)
+
 Created on Sat Apr 15 16:01:50 2023
 
 @author: jeanbaptiste
 """
 import copy
 import json
+import os
+import time
 
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import tensorflow.keras
-from sklearn.manifold import TSNE # for t-SNE dimensionality reduction
+from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
-
 
 import deepcellcontrol as dcc
 
@@ -21,19 +26,49 @@ datasets_folder = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/data/"
 models_folder = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/"
 figures_folder = "D:/deepmpc_paper/revisions/"
 
-#%% Load evaluation dataset:
-params = copy.deepcopy(dcc.config.defaults)
-params["datasets_folder"] = datasets_folder
-params["training_sets"] = [] # this way we only load the eval sets
+def predict(model, inputs):
+    
+    step_size = 20_000
+    predictions = []
+    for i in range(0, inputs[0].shape[0], step_size):
+        j = min(i+step_size, inputs[0].shape[0])
+        predictions += [model.predict(
+                [inputs[0][i:j,:], inputs[1][i:j,:]],
+                verbose = 1,
+                batch_size=1000,
+            )]
+    predictions = np.concatenate(predictions, axis=0)
+    
+    return predictions
 
-_, evaluation_set = dcc.data.load_datasets(params)
+#%% Load saved eval data
 
-# Get eval data:
-evaluation_set.batch_size = 200_000
-eval_inputs, groundtruth = next(evaluation_set)
-groundtruth = groundtruth[:,:,0]
+features = ('fluo1',
+ 'area',
+ 'sharpness',
+ 'cell_count',
+ 'chamber_mean_fluo1',
+ 'chamber_std_fluo1',
+ 'neighbor_stims',
+ 'stims')
 
-#%% Increasing networtk size, 1000 batch size
+import pickle
+with open(figures_folder + "/ODE_final_eval_inputs.pkl", "rb") as f:
+    data = pickle.load(f)
+    eval_inputs = data["inputs"]
+    groundtruth = data["groundtruth"]
+
+# Normalize inputs:
+fake_dataset = {}
+for f, feature in enumerate(features):
+    fake_dataset[feature] = eval_inputs[0][:,:,f].copy()
+fake_dataset = dcc.data.Normalization().normalize(fake_dataset)
+norm_inputs = np.empty_like(eval_inputs[0])
+for f, feature in enumerate(features):
+    norm_inputs[:,:,f] = fake_dataset[feature]
+eval_inputs[0] = norm_inputs
+
+#%% Evaluate Increasing networtk size
 
 folders_100 = {
     "replicate 1": (
@@ -89,7 +124,7 @@ folders_1000 = {
         ),
     }
 
-folders = folders_1000
+folders = folders_100 # We get the same results for 1000 batch size
 rmse_record = {}
 for replicate, folders_list in folders.items():
     
@@ -100,11 +135,11 @@ for replicate, folders_list in folders.items():
             models_folder + folder + "/model_besteval.hdf5"
             )
         nb_params = model.count_params()
-        predictions = model.predict(eval_inputs, verbose=1)
+        predictions = predict(model, eval_inputs)
         
         # Compute RMSE:
         rmse = np.sqrt(
-            np.mean((4095*(predictions-groundtruth))**2,axis=1)
+            np.mean(((4095*predictions-groundtruth))**2,axis=1)
             )
         if nb_params not in rmse_record:
             rmse_record[nb_params] = [rmse]
@@ -113,10 +148,10 @@ for replicate, folders_list in folders.items():
         
         print(f"{replicate}, {nb_params} params. RMSE - mean: {np.mean(rmse)}, median: {np.median(rmse)}")
 
-#%%
+#%% Plot increasing network size (Fig S1)
+
 plt.figure(1, dpi=300)
 plt.figure(2, dpi=300)
-# plt.figure(3, dpi=300)
 
 # Log-spaced bins:
 nbins = 100
@@ -146,26 +181,65 @@ plt.xlabel("Root mean square error (a.u.)")
 plt.ylabel("Count")
 plt.grid(axis="x", which="major")
 plt.legend(title="Parameters")
-plt.savefig(figures_folder+"IncreasingNetworks_1000_distros.png", dpi=300)
-plt.savefig(figures_folder+"IncreasingNetworks_1000_distros.svg", dpi=300)
-plt.savefig(figures_folder+"IncreasingNetworks_1000_distros.pdf", dpi=300)
+plt.savefig(figures_folder+"IncreasingNetworks_100_distros.png", dpi=300)
+plt.savefig(figures_folder+"IncreasingNetworks_100_distros.svg", dpi=300)
+plt.savefig(figures_folder+"IncreasingNetworks_100_distros.pdf", dpi=300)
 
 plt.figure(2)
 plt.ylabel("Root mean square error (a.u.)")
 plt.xticks(range(len(rmse_record)), rmse_record.keys())
 plt.title("median")
-# plt.ylim(160,240)
-plt.savefig(figures_folder+"IncreasingNetworks_1000_bars.png", dpi=300)
-plt.savefig(figures_folder+"IncreasingNetworks_1000_bars.svg", dpi=300)
-plt.savefig(figures_folder+"IncreasingNetworks_1000_bars.pdf", dpi=300)
-
-plt.ylim(160,240)
-plt.savefig(figures_folder+"IncreasingNetworks_1000_bars_cut.png", dpi=300)
-plt.savefig(figures_folder+"IncreasingNetworks_1000_bars_cut.svg", dpi=300)
-plt.savefig(figures_folder+"IncreasingNetworks_1000_bars_cut.pdf", dpi=300)
+plt.savefig(figures_folder+"IncreasingNetworks_100_bars.png", dpi=300)
+plt.savefig(figures_folder+"IncreasingNetworks_100_bars.svg", dpi=300)
+plt.savefig(figures_folder+"IncreasingNetworks_100_bars.pdf", dpi=300)
 
 
-#%% Leave one out features
+#%% Evaluate time
+
+folders_list = folders["replicate 1"]
+timing = {}
+for f, folder in enumerate(folders_list):
+    
+    # Run prediction:
+    model = tf.keras.models.load_model(
+        models_folder + folder + "/model_besteval.hdf5"
+        )
+    nb_params = model.count_params()
+    encoder, decoder = dcc.models.split(model)
+    _t = time.time()
+    latent = encoder.predict(eval_inputs[0], verbose=1, batch_size=1000)
+    encoder_timing = time.time() - _t
+    _t = time.time()
+    predictions = decoder.predict([latent, eval_inputs[1]], verbose=1, batch_size=1000)
+    decoder_timing = time.time() - _t
+    
+    timing[nb_params] = [encoder_timing/100_000, decoder_timing/100_000]
+
+    print(timing)
+    time.sleep(2*60) # Give time to GPU to cool down
+
+#%% Plot time (Fig S1)
+
+plt.figure(dpi=300)
+r = 0
+ticks = {'ticks': [], 'labels': []}
+for nbparams, record in timing.items():
+    ticks['ticks'].append(r)
+    ticks['labels'].append(nbparams)
+    plt.bar(r-.2, record[0], color="xkcd:light purple", width=.4, edgecolor="k")
+    plt.bar(r+.2, record[1], color="purple", width=.4, edgecolor="k")
+    r+=1
+    
+plt.yscale("log")
+plt.ylabel("Computation time (s)")
+plt.xticks(**ticks)
+# figname = f"Models_comparison_timing"
+plt.savefig(figures_folder+"IncreasingNetworks_timing.png", dpi=300)
+plt.savefig(figures_folder+"IncreasingNetworks_timing.svg", dpi=300)
+plt.savefig(figures_folder+"IncreasingNetworks_timing.pdf", dpi=300)
+plt.show()
+
+#%% Evaluate Leave one out features
 
 folders = {
     "replicate 1": (
@@ -232,17 +306,17 @@ for replicate, folders_list in folders.items():
         model = tf.keras.models.load_model(
             models_folder + folder + "model_besteval.hdf5"
             )
-        predictions = model.predict([masked_past, light], verbose=1)
+        predictions = predict(model, [masked_past, light])
         
         # Compute RMSE:
         rmse = np.sqrt(
-            np.mean((4095*(predictions-groundtruth))**2,axis=1)
+            np.mean(((4095*predictions-groundtruth))**2,axis=1)
             )
         rmse_record[name].append(rmse)
         
         print(f"{replicate}, {missing}. RMSE - mean: {np.mean(rmse)}, median: {np.median(rmse)}")
 
-#%%
+#%% Plot leave one out features (Fig S5)
 plt.figure(1, dpi=300)
 plt.figure(2, dpi=300)
 # plt.figure(3, dpi=300)
@@ -288,26 +362,13 @@ plt.savefig(figures_folder+"Features_distros.pdf", dpi=300)
 
 plt.figure(2)
 plt.ylabel("Root mean square error (a.u.)")
-plt.xticks(range(len(ordered_list)), [x[0] for x in ordered_list])
+plt.xticks(range(len(ordered_list)), [x[0] for x in ordered_list], rotation=45, ha="right")
 plt.title("median")
 plt.savefig(figures_folder+"Features_bars.png", dpi=300)
 plt.savefig(figures_folder+"Features_bars.svg", dpi=300)
 plt.savefig(figures_folder+"Features_bars.pdf", dpi=300)
 
-plt.ylim(160,320)
-plt.savefig(figures_folder+"Features_bars_cut.png", dpi=300)
-plt.savefig(figures_folder+"Features_bars_cut.svg", dpi=300)
-plt.savefig(figures_folder+"Features_bars_cut.pdf", dpi=300)
-
-plt.ylim(160,240)
-plt.savefig(figures_folder+"Features_bars_cut2.png", dpi=300)
-plt.savefig(figures_folder+"Features_bars_cut2.svg", dpi=300)
-plt.savefig(figures_folder+"Features_bars_cut2.pdf", dpi=300)
-# plt.figure(3)
-# plt.ylabel("Root mean square error (a.u.)")
-# plt.xticks(list(missings.keys()), list(missings.values()))
-# plt.title("median")
-#%%
+#%% Load and split encoder in reference network
 
 folder = "2023-04-17_10-29-30_f3b85ec3-880d-4bb6-b522-e12b2c968866/"
 model = tf.keras.models.load_model(
@@ -317,7 +378,7 @@ encoder, _ = dcc.models.split(model)
 encoded_past = encoder.predict(eval_inputs[0], verbose=1)
 encoded_past = np.concatenate(encoded_past, axis = -1)
 
-#%% Configure t-SNE function. 
+#%% Configure and fit t-SNE function. 
 tsne = TSNE(
     n_components=2, # default=2, Dimension of the embedded space.
     perplexity=30, # default=30.0, The perplexity is related to the number of nearest neighbors that is used in other manifold learning algorithms.
@@ -342,12 +403,10 @@ tsne_embed = tsne.fit_transform(encoded_past[:])
 plt.scatter(tsne_embed[:,0], tsne_embed[:,1], s=.1, alpha=1)
 plt.grid("both", "both")
 
-
 # np.save(figures_folder+"tsne_past.npy", eval_inputs[0])
 # np.save(figures_folder+"tsne_embedded.npy", embedded)
 
-
-#%%
+#%% Fit PCA
 
 pca = PCA(n_components=2, random_state=1)
 pca_embed = pca.fit_transform(encoded_past[:])
@@ -355,7 +414,7 @@ pca_embed = pca.fit_transform(encoded_past[:])
 plt.scatter(pca_embed[:,0], pca_embed[:,1], s=.1, alpha=1)
 plt.grid("both", "both")
 
-#%%
+#%% Plot t-SNE (FIg S6)
 
 def closest(x, y, embedded, number = 10):
     
@@ -405,8 +464,6 @@ def plot_sample(sample, features = all_features):
     plt.xlim([x[first_index], x[-1]])
     plt.grid(which="both", axis="both")
     plt.ylim(0, 1)
-
-#%%
 
 # tsne_embed = np.load(figures_folder+"tsne_embedded.npy")
 
@@ -476,4 +533,158 @@ plt.figure(len(points))
 plt.savefig(figures_folder+"Embeddings_tsne_pca.png", dpi=300)
 plt.savefig(figures_folder+"Embeddings_tsne_pca.svg", dpi=300)
 plt.savefig(figures_folder+"Embeddings_tsne_pca.pdf", dpi=300)    
+
+#%% Load evaluation dataset for datasets shuffle and generate eval data:
+
+files = (
+ 'Z:/data/Microscope/jeanbaptiste/deepmpc/trainingsets/2022-04-24_TrainingSet8/deepcellcontrol_dataset/2022-04-24_TrainingSet8_dataset.pkl',
+ )
+features = ('fluo1',
+ 'area',
+ 'sharpness',
+ 'cell_count',
+ 'chamber_mean_fluo1',
+ 'chamber_std_fluo1',
+ 'neighbor_stims',
+ 'stims'
+ )
+test_datasets = dcc.data.Datasets(
+    files,
+    features = features,
+    formatter = dcc.data.LSTMFormatter
+    )
+test_datasets.test_ratio = 1
+test_datasets.horizon = 24
+test_datasets.past_steps = [36, 144]
+test_datasets.batch_size = 10_000
+test_datasets.mode = "evaluation"
+test_datasets.data_type='raw_dataset'
+test_datasets.load()
+test_datasets.normalize()
+test_datasets.data_type='normalized_dataset'
+
+# Get eval data:
+test_datasets.batch_size = 200_000
+eval_inputs, groundtruth = next(test_datasets)
+groundtruth = groundtruth[:,:,0]
+
+np.save(figures_folder+"setstest_past.npy", eval_inputs[0])
+np.save(figures_folder+"setstest_stims.npy", eval_inputs[1])
+np.save(figures_folder+"setstest_groundtruth.npy", groundtruth)
+
+#%% Evaluate datasets shuffle
+
+eval_inputs = (
+    np.load(figures_folder+"setstest_past.npy"),
+    np.load(figures_folder+"setstest_stims.npy")
+    )
+groundtruth = np.load(figures_folder+"setstest_groundtruth.npy")
+
+folders = (
+    '2023-04-23_23-20-59_0d071bfe-ea37-4aa1-8250-ee52f06cb956',
+    '2023-04-23_23-20-59_3bae1d7a-e1fe-43bc-b1d4-a123252ed056',
+    '2023-04-23_23-20-59_4dd4f7ad-8013-4683-b507-30923da4d4e9',
+    '2023-04-23_23-20-59_92ba8625-f873-4b60-925d-f66bbbd1b687',
+    '2023-04-23_23-20-59_497c66d5-f15f-42cd-8d7c-ef43d328719a',
+    '2023-04-23_23-20-59_0577bf50-fdef-4b7e-b52e-ab14ce94a533',
+    '2023-04-23_23-20-59_4175ad1b-1b72-4ca6-aced-edb512f37ca7',
+    '2023-04-23_23-20-59_49859dc4-97da-402c-a1ea-e292ebba41de',
+    '2023-04-23_23-20-59_78119a0e-b5fc-4069-a9bf-f978a5e076b4',
+    '2023-04-23_23-20-59_a916d769-9cca-49d0-9066-d227b33bfccb',
+    '2023-04-23_23-20-59_b5e8aca9-2ac3-40f5-83b2-0d162312a00d',
+    '2023-04-23_23-20-59_b97938cc-0b7b-4f29-89f3-652aeaef0a6f',
+    '2023-04-23_23-20-59_c22d6713-d03d-4ea4-af82-721d92c44d86',
+    '2023-04-23_23-20-59_c23ee585-2415-441a-a0c2-06a06356d01d',
+    '2023-04-23_23-20-59_c800658a-de7b-4dd5-bfc3-f85fe1f5e321',
+    '2023-04-25_16-07-13_b58f7b2c-502f-4167-874b-2c6d9f04d5e9',
+    '2023-04-25_16-07-13_94539583-fd41-4d68-80f8-f70231a3d1c9',
+    '2023-04-25_16-07-13_89c782fc-092d-46b9-87b8-49c3d0d6231d'
+     )
+
+rmse_records = []
+for folder in folders:
     
+    with open(models_folder+folder+"/submission_parameters.json", "r") as f:
+        record = json.load(f)
+    record["rmse"] = []
+    
+    for oldrecord in rmse_records:
+        if oldrecord["training_sets"] == record["training_sets"]:
+            record = oldrecord
+            break
+    
+    print(record["training_sets"], end="\n\n")
+    
+    model = tf.keras.models.load_model(
+        models_folder + folder + "/model.hdf5"
+        )
+    predictions = predict(model, eval_inputs)
+    
+    # Compute RMSE:
+    rmse = np.sqrt(
+        np.mean((4095*(predictions-groundtruth))**2,axis=1)
+        )
+    record["rmse"] += [rmse]
+    
+    if record not in rmse_records:
+        rmse_records.append(record)
+
+#%% Plot dataset shuffle (Fig S2)
+
+plt.figure(1, dpi=300)
+plt.figure(2, dpi=300)
+
+# Log-spaced bins:
+nbins = 100
+bins = np.logspace(0, 4, nbins + 1, base=10)
+
+f = 0
+names = []
+order = dcc.config.defaults["training_sets"] + dcc.config.defaults["eval_sets"]
+for record in rmse_records:
+    
+    name = [str(order.index(x)+1) for x in record["training_sets"]]
+    name.sort()
+    name = " + ".join(name)
+    names.append(name)
+
+rmse_records = [rmse_records[i] for i in np.argsort(names)]
+names.sort()
+for record, name in zip(rmse_records, names):
+    rmses = record["rmse"]
+    rmse_cat = np.concatenate(rmses)
+    # Plot hist:
+    plt.figure(1)
+    n, _, _ = plt.hist(rmse_cat, bins=bins, histtype="step", label=name)
+    
+    plt.figure(2)
+    avg_rmse = 0
+    for ind, rmse in enumerate(rmses):
+        plt.plot(f+ind*.2-.2, np.median(rmse), "ko", fillstyle="none")
+        avg_rmse += np.median(rmse)/len(rmses)
+    plt.bar(f,avg_rmse, label=name)
+    
+    f+=1
+
+plt.figure(1)
+plt.xscale("log")
+plt.xlim([5, 5000])
+plt.xlabel("Root mean square error (a.u.)")
+plt.ylabel("Count")
+plt.grid(axis="x", which="major")
+plt.legend(title="Datasets used for training")
+plt.savefig(figures_folder+"ShuffledSets_distros.png", dpi=300)
+plt.savefig(figures_folder+"ShuffledSets_distros.svg", dpi=300)
+plt.savefig(figures_folder+"ShuffledSets_distros.pdf", dpi=300)
+# plt.show()
+
+plt.figure(2)
+plt.ylabel("Root mean square error (a.u.)")
+plt.xticks(range(len(rmse_records)), names, rotation=45, ha="right")
+plt.title("median")
+plt.xlabel("Datasets used for training")
+# plt.ylim(160,240)
+plt.savefig(figures_folder+"ShuffledSets_bars.png", dpi=300)
+plt.savefig(figures_folder+"ShuffledSets_bars.svg", dpi=300)
+plt.savefig(figures_folder+"ShuffledSets_bars.pdf", dpi=300)
+# plt.show()
