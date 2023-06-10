@@ -1,24 +1,23 @@
 # -*- coding: utf-8 -*-
 """
+Train the linear regression model & get the results for table S1
+
 Created on Fri Apr 22 16:16:27 2022
 
 @author: jeanbaptiste
 """
 
 import copy
-import os
 import time
-import sys
 import json
 import uuid
-import pickle
 
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import tensorflow.keras
 
-sys.path.insert(0,"/project/dunlop/shared_python_packages/deepcellcontrol/")
+# sys.path.insert(0,"/project/dunlop/shared_python_packages/deepcellcontrol/")
 import deepcellcontrol as dcc
 
 # Load params:
@@ -26,7 +25,7 @@ params = copy.deepcopy(dcc.config.defaults)
 
 # Save folder:
 params["save_folder"] = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{uuid.uuid4()}"
-params["past_steps"] = 24
+params["past_steps"] = 72
 params["features"] = (
     'fluo1',
     'area',
@@ -42,74 +41,65 @@ params["training_parameters"]["epochs"] = 200
 params["datasets_folder"] = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/data/"
 params["models_folder"] = "D:/deepcellcontrol/assets/models/"
 
-save_folder = params["models_folder"]+ params["save_folder"]
-
 # Load datasets:
 training_set, evaluation_set = dcc.data.load_datasets(params)
 
-#%% Init model:
-linear_combination = dcc.models.linear_predictor(params)
-
-# Train and evaluate:
-linear_combination = dcc.timeseries.batch_train_eval(
-    training_set, linear_combination, params, evaluation_dataset=evaluation_set
-    )
-
-#%% Load 2-hour horizon evaluation:
-
-metrics, eval_d = dcc.timeseries.evaluate(
-    evaluation_set, linear_combination, batch_size=100_000, num_batches = 1, return_eval=True
-    )
-
-# RMSE over prediction horizon:
-rmse = np.sqrt(
-    np.mean((4095*(eval_d["prediction"]-eval_d["groundtruth"]))**2,axis=1)
-    )
-rmse_order = np.argsort(rmse)
-
-# Original LSTM:
-lstm_folder = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-35_b0d0b5c3-158d-4476-926b-75b2607d6154/"
-with open(lstm_folder + "/training_parameters.json","r") as f:
-    lstm_params = json.load(f)
-lstm_params["datasets_folder"] = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/data/"
-lstm_dataset, lstm_eval = dcc.data.load_datasets(lstm_params)
-lstm = tf.keras.models.load_model(lstm_folder+ "/model_besteval.hdf5")
-_, lstm_eval_d = dcc.timeseries.evaluate(
-    lstm_eval, lstm, batch_size=100_000, num_batches = 1, return_eval=True
-    )
-lstm_rmse = np.sqrt(
-    np.mean((4095*(lstm_eval_d["prediction"]-lstm_eval_d["groundtruth"]))**2,axis=1)
-    )
-lstm_rmse_order = np.argsort(lstm_rmse)
-
-#%% Panel D - RMSE distro
-
-plt.figure()
-
-# Log-spaced bins:
-nbins = 100
-bins = np.logspace(0, 4, nbins + 1, base=10)
-# Plot hist:
-n, _, _ = plt.hist(rmse, bins=bins, color="b")
-# Plot 25th, median, and 75th %ile:
-qs = np.quantile(rmse, [.25, .5, .75])
-for q in qs:
-    plt.plot([q, q], [0, 5000], "b--", zorder=-1)
-
-_ = plt.hist(lstm_rmse, bins=bins, histtype="step", color="orange")
-qs = np.quantile(lstm_rmse, [.25, .5, .75])
-for q in qs:
-    plt.plot([q, q], [0, 5000], "--", color="orange", zorder=-1)
+evaluation_set.batch_size = 100_000
+evaluation_set.past_steps = 144
+eval_inputs, eval_gt = next(evaluation_set)
 
 
-plt.xscale("log")
-plt.xlim([5, 5000])
-plt.ylim([0, 5000])
-plt.xlabel("Root mean square error (a.u.)")
-plt.ylabel("Count")
-plt.savefig(save_folder+"RMSEdistro.png", dpi=300)
-plt.savefig(save_folder+"RMSEdistro.svg", dpi=300)
-plt.show()
+pasts = [6, 12, 24, 36, 48, 72, 96, 120, 144]
 
-print(f"Linear RMSE - mean: {np.mean(rmse)}, median: {np.median(rmse)}")
-print(f"LSTM RMSE - mean: {np.mean(lstm_rmse)}, median: {np.median(lstm_rmse)}")
+#%% train models:
+
+for past in pasts:
+    params["save_folder"] = f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_{uuid.uuid4()}"
+    params["past_steps"] = past
+    evaluation_set.past_steps = past
+    save_folder = params["models_folder"]+ params["save_folder"]
+
+    linear_combination = dcc.models.linear_predictor(params)
+    
+    # Train and evaluate:
+    _ = dcc.timeseries.batch_train_eval(
+        training_set, linear_combination, params, evaluation_dataset=evaluation_set
+        )
+
+
+#%% Eval and plot:
+models = [
+    "D:/deepcellcontrol/assets/models/2023-05-19_09-52-40_085a1e1d-d9ea-44b0-8a0e-968ceac892ea",
+    "D:/deepcellcontrol/assets/models/2023-05-18_23-39-40_a3b9ef48-1c4d-4930-bb32-8a589170d2c5",
+    "D:/deepcellcontrol/assets/models/2023-05-18_23-55-51_8a76c151-bf3c-43d5-8799-4ea13239228a",
+    "D:/deepcellcontrol/assets/models/2023-05-19_00-12-10_43d1d3e6-57a5-43dd-b47b-fe28123d9292",
+    "D:/deepcellcontrol/assets/models/2023-05-19_00-28-22_db66f324-9107-4d35-9958-d8b5e5438dae",
+    "D:/deepcellcontrol/assets/models/2023-05-19_00-44-59_fd24db6c-f596-4d78-adbf-b14de7e6f866",
+    "D:/deepcellcontrol/assets/models/2023-05-19_08-58-19_348be4ad-f486-42e1-9d19-6615061b9a25",
+    "D:/deepcellcontrol/assets/models/2023-05-19_09-35-32_54361e35-c20a-4d0c-a3c7-f777bd5b3a32",
+    "D:/deepcellcontrol/assets/models/2023-05-19_11-23-12_db274182-b76a-4664-9dd1-2ff69ec62345",
+    "D:/deepcellcontrol/assets/models/2023-05-19_11-39-34_2507e929-7933-47c5-a64b-5f67216bbc68",
+    ]
+    
+rmses = [None]*len(pasts)
+for model in models:
+    
+    linear_combination = tf.keras.models.load_model(model + "/model.hdf5")
+    with open(model + "/training_parameters.json", "r") as f:
+        past = json.load(f)["past_steps"]
+    print(past)
+    
+    prediction = linear_combination.predict(
+        [eval_inputs[0][:,-past:], eval_inputs[1]], verbose = 1
+        )
+
+    # RMSE over prediction horizon:
+    rmse = np.sqrt(
+        np.mean((4095*(prediction-eval_gt[:,:,0]))**2, axis=1)
+        )
+    
+    p = pasts.index(past)
+    rmses[p] = rmse
+
+    plt.bar(p, np.median(rmse))
+plt.xticks(list(range(len(pasts))), pasts)
