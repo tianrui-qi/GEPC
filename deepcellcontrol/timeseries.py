@@ -160,6 +160,7 @@ def evaluate(
     
     # Get batches and compile evaluation:
     rmse = mae = 0
+    xval_all, yval_all, yhat_all = [], [], []
     for _ in range(num_batches):
         
         # get X and Y data:
@@ -167,6 +168,10 @@ def evaluate(
         yval = np.squeeze(yval)
         yhat = network.predict(xval,verbose=verbose)
         yhat = np.squeeze(yhat)
+        if return_eval:
+            xval_all.append(xval)
+            yval_all.append(yval)
+            yhat_all.append(yhat)
         
         # Compile error metrics:
         rmse = rmse + np.sqrt(np.mean(np.square(yhat-yval),axis=0))  # RMSE over prediction horizon
@@ -179,7 +184,15 @@ def evaluate(
         print("RMSE = %g, MAE = %g"%(np.mean(rmse),np.mean(mae)))
     
     if return_eval:
-        return dict(rmse=rmse, mae=mae), dict(input=xval, groundtruth=yval, prediction=yhat)
+        inputs = [
+            np.concatenate([x[0] for x in xval_all], axis=0),
+            np.concatenate([x[1] for x in xval_all], axis=0),
+            ]
+        return dict(rmse=rmse, mae=mae), dict(
+            input=inputs,
+            groundtruth=np.concatenate(yval_all, axis=0),
+            prediction=np.concatenate(yhat_all, axis=0),
+            )
     return dict(rmse=rmse, mae=mae)
 
 
