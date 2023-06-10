@@ -607,25 +607,19 @@ class Datasets(Generator):
                 dataset["raw_dataset"]
                 )
     
-    def sample(self):
+    def _random_cell(self):
         """
-        Get single sample
+        Pick random cell out of the datasets
 
         Returns
         -------
-        past : TYPE
-            DESCRIPTION.
-        future : TYPE
-            DESCRIPTION.
+        dataset : dict
+            Dataset that the cell number was picked from.
+        cell_nb : int
+            Cell number in the dataset.
 
         """
         
-        if isinstance(self.past_steps, (list, tuple)):
-            min_steps, max_steps = self.past_steps
-        else:
-            min_steps = max_steps = self.past_steps
-        
-        # Get random cell from proper partition:
         if self.mode == "training":
             cell_nb = np.random.choice(self._training_set)
         else:
@@ -641,7 +635,29 @@ class Datasets(Generator):
         # Get dataset ref:
         dataset = self.data[set_nb][self.data_type]
         
+        return dataset, cell_nb
+    
+    def sample(self):
+        """
+        Get single sample
+
+        Returns
+        -------
+        past : TYPE
+            DESCRIPTION.
+        future : TYPE
+            DESCRIPTION.
+
+        """
+        
+        # Get random cell from partition:
+        dataset, cell_nb = self._random_cell()
+        
         # Random time point:
+        if isinstance(self.past_steps, (list, tuple)):
+            min_steps, max_steps = self.past_steps
+        else:
+            min_steps = max_steps = self.past_steps
         timepoint = np.random.randint(
             min_steps, dataset["stims"].shape[1] - self.horizon
         )
