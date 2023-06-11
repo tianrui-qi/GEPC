@@ -1025,6 +1025,48 @@ class CcaSR_Autoactivation(CcaSR_gillespie):
     """
     A circuit where F can additionally activate itself
     
+                            "Responsiveness"
+                                    |         
+                                    |                          
+                                    |         __
+                                    v        V  |
+    Light Input (U) ---> CcaSR (H) ---> GFP (F)--
+    
+    This class inherits from the `CcaSR_gillespie` class.
+    """
+    
+    def __init__(self, *args, **kwargs):
+        # Run parent class init:
+        super().__init__(*args, **kwargs)
+        
+        # Alter the reactions network:
+        self.params = {
+            'eta': 1, # production of H per light
+            'nu': 0.01, # dilution of all proteins (midpoint of c2, b, h2 from Chait)
+            'K_H': 90, # dissociation constant, H activation of F
+            'a': 1, # production of F per unit E (tunes hysteresis)
+            'nh': 3.6, # cooperativity of F activation by H (from Chait)
+            'nf': 3.6, # cooperativity of F activation by F (to match nh)
+            'K_F': 30, # for nondim. kappa = 10
+            'tau':12 # Response delay
+            }
+        self.species = {
+            'U':0, # Optogenetic input
+            'H':0., # CcaS-CcaR
+            'F': 0,  # GFP
+            }
+        self.reactions = (
+            Reaction('eta*U', {'H': 1}), # CcaSR activation
+            Reaction('nu*H', {'H': -1}), # CcaSR deactivation/dilution
+            Reaction('a/2 * (H**nh)/(K_H**nh+H**nh)', {'F': 1}), # GFP creation by H
+            Reaction('a/2 * (F**nf)/(K_F**nf+F**nf)', {'F': 1}), # GFP creation by itself
+            Reaction('nu*F', {'F': -1}), # GFP dilution
+            )
+
+class OldCcaSR_Autoactivation(CcaSR_gillespie):
+    """
+    A circuit where F can additionally activate itself
+    
                             "Responsiveness" (E)
                                     |         |
                                     |         V                  
@@ -1068,102 +1110,6 @@ class CcaSR_Autoactivation(CcaSR_gillespie):
             Reaction('a*E/2 * (F**nf)/(K_F**nf+F**nf)', {'F': 1}), # GFP creation by itself
             Reaction('nu*F', {'F': -1}), # GFP dilution
             )
-        
-class OldCcaSR_Autoactivation(CcaSR_gillespie):
-    """
-    A circuit where F can additionally activate itself
-    
-                            "Responsiveness" (E)
-                                    |         |
-                                    |         V                  
-                                    |         __
-                                    v        V  |
-    Light Input (U) ---> CcaSR (H) ---> GFP (F)--
-    
-    This class inherits from the `CcaSR_gillespie` class.
-    """
-    
-    def __init__(self, *args, **kwargs):
-        # Run parent class init:
-        super().__init__(*args, **kwargs)
-        
-        # Alter the reactions network:
-        self.params = {
-            'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
-            'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
-            'c2':0.0631, # Hill normalization parameter
-            'a':0.2827, # PcpcG2 promoter rate
-            'b':0.0104, # Proteins dilution rate
-            's':0.9958, # Not used in the end
-            'nh':3.6655, # Hill coefficient
-            'K':0.9, # Hill threshold (sort of)
-            'K_F':.012,
-            'tau':12, # Response delay
-            }
-        "Parameters used in the propensity calculations"
-        self.species = {
-            'U':0, # Optogenetic input
-            'H':0., # CcaS-CcaR
-            'E':round(np.random.poisson(self.params['h1']/self.params['h2'])), # "Extrinsic noise / responsiveness"
-            'F':0 # GFP
-            }
-        self.reactions = (
-            Reaction('h1', {'E': 1}), # "Extrinsic" creation
-            Reaction('h2*E', {'E': -1}), # "Extrinsic" dilution
-            Reaction('U', {'H': 1}), # CcaSR activation
-            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*E/2*((c2*H)**nh)/(K+(c2*H)**nh)', {'F': 1}), # GFP creation
-            Reaction('a*E/2*((F*b*h2/(a*h1))**nh)/(K_F+(F*b*h2/(a*h1))**nh)', {'F': 1}), # GFP creation
-            Reaction('b*F', {'F': -1}), # GFP dilution
-            )
-        
-
-class OldCcaSR_Autoactivation_noE(CcaSR_gillespie):
-    """
-    A circuit where F can additionally activate itself
-    
-                            
-                                             
-                                                             
-                                              __
-                                             V  |
-    Light Input (U) ---> CcaSR (H) ---> GFP (F)--
-    
-    This class inherits from the `CcaSR_gillespie` class.
-    """
-    
-    def __init__(self, *args, **kwargs):
-        # Run parent class init:
-        super().__init__(*args, **kwargs)
-        
-        # Alter the reactions network:
-        self.params = {
-            'E': 5.5, # 3 is mean responsiveness level for h1=0.07/25, h2=0.03/50
-            'h1':0.0710/25, # "Extrinsic responsiveness" generation rate
-            'h2':0.0303/50, # "Extrinsic responsiveness" dilution rate
-            'c2':0.0631, # Hill normalization parameter
-            'a':0.2827, # PcpcG2 promoter rate
-            'b':0.0104, # Proteins dilution rate
-            's':0.9958, # Not used in the end
-            'nh':3.6655, # Hill coefficient
-            'K':0.9, # Hill threshold (sort of)
-            'K_F':.012,
-            'tau':12, # Response delay
-            }
-        "Parameters used in the propensity calculations"
-        self.species = {
-            'U':0, # Optogenetic input
-            'H':0., # CcaS-CcaR
-            'F':0 # GFP
-            }
-        self.reactions = (
-            Reaction('U', {'H': 1}), # CcaSR activation
-            Reaction('c2*H', {'H': -1}), # CcaSR deactivation/dilution
-            Reaction('a*E/2*((c2*H)**nh)/(K+(c2*H)**nh)', {'F': 1}), # GFP creation
-            Reaction('a*E/2*((F*b*h2/(a*h1))**nh)/(K_F+(F*b*h2/(a*h1))**nh)', {'F': 1}), # GFP creation
-            Reaction('b*F', {'F': -1}), # GFP dilution
-            )
-
 
 class CcaSR_FeedforwardPositive(CcaSR_gillespie):
     """

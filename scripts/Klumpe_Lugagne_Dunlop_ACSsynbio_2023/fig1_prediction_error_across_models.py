@@ -9,6 +9,7 @@ Created on Tue Mar  7 18:48:08 2023
 import glob
 import sys
 import json
+import os
 
 import numpy as np
 import pandas as pd
@@ -134,58 +135,25 @@ def get_params(simul_id):
         
     return model_params, training_params
 
-
 #%% Global plot styles
 
-df_simul_config = pd.DataFrame({'cell_class': ['CcaSR_gillespie',
+df_simul_config = pd.DataFrame({'cell_class': ['CcaSR_gillespie_simple_noE',
                                                'CcaSR_gillespie_simple_noE',
                                                'CcaSR_gillespie_simple_noE',
-                                               'CcaSR_gillespie_simple_noE'],
-                                'camera_sim': [True, True, True, False],
-                                'solver': ['original','original','ode', 'ode'],
-                                'color': ["#327a42",
-                                            "#5a6eb8",
+                                               'CcaSR_gillespie'],
+                                'camera_sim': [False, True, True, True],
+                                'solver': ['ode','ode','original','original'],
+                                'color': ["#c561b0",
                                             "#57377b",
-                                            "#c561b0",]}
+                                            "#5a6eb8",
+                                            "#327a42",]}
                             )
-
-
-#%% Check training data
-
-plot_list = ['CcaSR_gillespie_simple_noE', 
-              'CcaSR_gillespie']
-alpha = 0.3
-
-for c, cell_class in enumerate(plot_list):
-    plt.figure()
-    
-    training_data_dir_list = glob.glob(dcc_repo_path + f'/assets/simulated/data/{cell_class}/2023*')#_10-55*')
-    
-    for t, training_dir in enumerate(np.sort(np.array(training_data_dir_list))):
-        fluo_training = np.load(training_dir+'/training_set/fluo1.npy')
-        
-        plt.hist(fluo_training.ravel(), 
-                     bins = np.linspace(0, 4095+1, 50),
-                     alpha=alpha, 
-                     histtype='step',
-                     linewidth=2,
-                     density=True, 
-                     label=str(t))
-        
-    plt.legend()
-    plt.ylim([0,0.008])
-    plt.title(cell_class)
-    plt.ylabel('Frequency')
-    plt.xlabel('fluorescence')
-    plt.tight_layout()
-    
-
 
 #%% Get information about simulations
 
 simul_dir_list = glob.glob(dcc_repo_path + '/assets/models/2023*')
                     
-simul_id_list = [simul_dir.split('/')[-1] for simul_dir in simul_dir_list]
+simul_id_list = []
 horizon_list = []
 training_folder_list = []
 solver_list = []
@@ -197,33 +165,38 @@ datasets_list = []
 h1_list = []
 h2_list = []
 
-for simul_id in simul_id_list:
+for s, simul_dir in enumerate(simul_dir_list):
     
-    model_params, training_params = get_params(simul_id)
-    
-    horizon_list += [training_params['horizon']]
-    past_steps_list += [training_params['past_steps']]
-    training_folder_list += [training_params['training_sets'][0]]
-    cell_class_list += [training_params['cell_class']]
-    epochs_list += [training_params['training_parameters']['epochs']]
-    datasets_list += [training_params['datasets_folder']]
-    
-    if 'h1' in model_params.keys():
-        h1_list += [model_params['h1']]
-    else:
-        h1_list += [np.nan]
-    if 'h2' in model_params.keys():
-        h2_list += [model_params['h2']]
-    else: 
-        h2_list += [np.nan]
-    if 'solver' in model_params.keys():
-        solver_list += [model_params['solver']]
-    else:
-        solver_list += ['original']
-    if 'camera_sim' in model_params.keys():
-        camera_sim_list += [model_params['camera_sim']]
-    else:
-        camera_sim_list += [True]
+    if os.path.isfile(f'{simul_dir}/training_parameters.json'):
+        
+        simul_id = simul_dir.split('/')[-1]
+        simul_id_list += [simul_id,]
+            
+        model_params, training_params = get_params(simul_id)
+        
+        horizon_list += [training_params['horizon']]
+        past_steps_list += [training_params['past_steps']]
+        training_folder_list += [training_params['training_sets'][0]]
+        cell_class_list += [training_params['cell_class']]
+        epochs_list += [training_params['training_parameters']['epochs']]
+        datasets_list += [training_params['datasets_folder']]
+        
+        if 'h1' in model_params.keys():
+            h1_list += [model_params['h1']]
+        else:
+            h1_list += [np.nan]
+        if 'h2' in model_params.keys():
+            h2_list += [model_params['h2']]
+        else: 
+            h2_list += [np.nan]
+        if 'solver' in model_params.keys():
+            solver_list += [model_params['solver']]
+        else:
+            solver_list += ['original']
+        if 'camera_sim' in model_params.keys():
+            camera_sim_list += [model_params['camera_sim']]
+        else:
+            camera_sim_list += [True]
     
 df_meta = pd.DataFrame({'simul_id': simul_id_list,
                         'horizon': horizon_list,
@@ -257,6 +230,278 @@ default_h2 = np.abs((df_meta['h2'] - _h2) / _h2) < 0.01
 default_h1h2 = np.abs(((df_meta['h1'] / df_meta['h2']) - _h1h2) / _h1h2) < 0.01
 
 default_models = default_training_size & default_past_steps & default_horizon & default_h1 & default_h2
+
+#%% Plotting functions
+def plot_err_distribution(err = 'RMSE',
+        n_bins=100, x_max = 610, histtype='stepfilled',
+        alpha=0.7, fig_path = fig_path,):
+
+    plt.figure(figsize=(5,3))
+    
+    for c in range(len(df_simul_config)):
+        
+        config = df_simul_config.loc[c]
+        camera_sim = config['camera_sim']
+        solver = config['solver']
+        cell_class = config['cell_class']
+        color = config['color']
+        config_bool = (df_meta['camera_sim']==camera_sim)&(df_meta['solver']==solver)&(df_meta['cell_class']==cell_class)
+        
+        simul_id = df_meta.loc[default_models & config_bool, 'simul_id'].values[0]
+        
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True)
+        x = np.arange(np.shape(fluo)[-1])/12
+        
+        if err=='RMSE':
+            
+            x = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+            
+        elif err=='Normalized_RMSE':
+            
+            x = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+            x = x / fluo_pred[:,0]
+            
+        elif err=='Error_predicting_avg':
+            
+            fluo_avg = np.mean(fluo, axis=1)
+                
+            x = np.abs(fluo_pred[:,0] - fluo_avg) / fluo_pred[:,0]
+        else:
+            print('Wrong error measure (see kwarg "err")')
+        
+        plt.hist(np.mean(x, axis=1), 
+                  bins = np.linspace(0,x_max,n_bins+1),
+                  color=color,
+                  alpha=alpha,
+                  histtype=histtype,
+                  linewidth=1.5,
+                  density=True)
+        
+    plt.xlabel(f'{err} (time average)')
+    plt.ylabel('Frequency')
+    plt.xlim([0,x_max])
+    plt.tight_layout()
+    plt.savefig(f'{fig_path}/fig1_{err}_distribution.png',dpi=300)
+
+def plot_percentile_predictions(err = 'RMSE',
+                                percentile = [50, 500, 950],
+                                plot_past = 3*12,
+                                lw = 0.75,):
+    
+    fig, axes = plt.subplots(len(percentile), len(df_simul_config),
+                              figsize=(3*len(df_simul_config), 2*len(percentile)),
+                              sharex=True)
+    
+    for c in range(len(df_simul_config)):
+        
+        config = df_simul_config.loc[c]
+        camera_sim = config['camera_sim']
+        solver = config['solver']
+        cell_class = config['cell_class']
+        color = config['color']
+        config_bool = (df_meta['camera_sim']==camera_sim)&(df_meta['solver']==solver)&(df_meta['cell_class']==cell_class)
+        
+        simul_id = df_meta.loc[default_models & config_bool, 'simul_id'].values[0]
+        
+        # Find best and worst error
+        fluo, fluo_pred = get_fluo_and_pred(simul_id) 
+        
+        if err=='RMSE':
+            x = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+            
+        elif err=='Normalized_RMSE':
+            
+            x = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+            x = x / fluo_pred[:,0]
+            
+        elif err=='Error_predicting_avg':
+            
+            fluo_avg = np.mean(fluo, axis=1)
+                
+            x = np.abs(fluo_pred[:,0] - fluo_avg) / fluo_pred[:,0]
+        else:
+            print('Wrong error measure (see kwarg "err")')
+        
+        x_avg = np.mean(x, axis=1)
+        sorted_error = np.argsort(x_avg)
+        
+        plot_list = [sorted_error[i] for i in percentile]
+        
+        stims, past_fluo, futures_fluo = get_eval_data(simul_id)
+        model_params, training_params = get_params(simul_id)
+        
+        cutoff = past_fluo.shape[1]
+        
+        
+        for i, pl in enumerate(plot_list):
+            ax = axes[i,c]
+                
+            # Stimulations
+            plt.sca(ax)
+            dcc.utilities.OptoPlotBackground(
+                stims[pl,cutoff-plot_past:cutoff+training_params["horizon"]],
+                x=np.arange(-plot_past, training_params["horizon"])/12,
+                ymax = 4095
+                )
+            
+            # Past
+            ax.plot(np.arange(-plot_past, 0)/12, 
+                          past_fluo[pl, -plot_past:],
+                          color, lw=3*lw)
+            
+            # Future
+            ax.plot(np.arange(0, training_params["horizon"])/12, 
+                      futures_fluo[pl, :, :training_params['horizon']].T, 
+                      color=color, alpha=0.01)
+            ax.plot(np.arange(0, training_params["horizon"])/12, 
+                      np.mean(futures_fluo[pl, :, :training_params['horizon']], axis=0), 
+                      color=0.6*np.ones(3), alpha=1, lw=3*lw)
+            
+            # Prediction
+            ax.plot(np.arange(0, training_params["horizon"])/12, 
+                      fluo_pred[pl, 0],
+                      color='k', lw=3*lw)
+            
+            # Prediction starts line
+            ax.plot([-0.5/12, -0.5/12], [0, 4095], color="gray")
+            
+            # Limits and labels
+            ax.set_ylim([0,4095])
+            ax.set_yticklabels([])
+            ax.set_xticklabels([])
+            # plt.title(f'Cell {c}')
+            # axes[i].set_xlabel("time (h)")
+            # axes[i].set_ylabel("Fluorescence (a.u.)")
+            # axes[i].set_title(f'{100 * percentile[i] / len(sorted_error):.0f}th percentile')
+        axes[-1,c].set_xlim([-plot_past/12, training_params["horizon"]/12])
+        # plt.suptitle(f'{cell_class}, camera_sim {camera_sim}, solver:{solver}')
+        plt.tight_layout()
+        plt.savefig(fig_path+f'/fig1_{cell_class}_predictions_percentiles_{err}.png', dpi=300)
+
+def plot_err_over_time(err = 'RMSE',
+                       q = 0.5,
+                       alpha = 0.3, 
+                       y_max = 450):
+    
+    plt.figure(figsize=(5,3))
+    for c in range(len(df_simul_config)):
+        
+        config = df_simul_config.loc[c]
+        camera_sim = config['camera_sim']
+        solver = config['solver']
+        cell_class = config['cell_class']
+        color = config['color']
+        config_bool = (df_meta['camera_sim']==camera_sim)&(df_meta['solver']==solver)&(df_meta['cell_class']==cell_class)
+        
+        simul_id = df_meta.loc[default_models & config_bool, 'simul_id'].values[0]
+        
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True)
+        x = np.arange(np.shape(fluo)[-1])/12
+        
+        if err == 'RMSE':
+            
+            e = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+            
+        elif err=='Normalized_RMSE':
+            
+            e = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+            e = e / fluo_pred[:,0]
+            
+        elif err=='Error_predicting_avg':
+            
+            fluo_avg = np.mean(fluo, axis=1)
+                
+            e = np.abs(fluo_pred[:,0] - fluo_avg) / fluo_pred[:,0]
+            
+        else:
+            print('Wrong error measure (see kwarg "err")')
+        
+        plt.plot(x, np.median(e, axis=0),
+                      '.-', color=color, )
+                      # label=f'{cell_class}, camera noise {camera_sim}, solver: {solver})
+        
+        # Lightweight shading: 95%
+        plt.fill_between(
+            x,
+            np.nanquantile(e, axis=0, q=0.5 - q/2),
+            np.nanquantile(e, axis=0, q=0.5 + q/2),
+            color=color,
+            alpha=alpha,
+            lw=0,
+            )
+        
+    # plt.legend()   
+    plt.xlabel('time( h)')
+    plt.ylabel(f'RMSE: Middle {q*100:.0f}%')
+    plt.title(f'{err}')
+    plt.ylim([0,y_max])
+    plt.grid(True, 'both','both')
+    plt.tight_layout()
+    plt.savefig(f'{fig_path}/fig1_qplot_{err}_over_time.png',dpi=300)
+    
+    
+def plot_individual_traces_binned(err = 'Error_predicting_avg',
+                q_list = [[0.9,1.0], [0.45, 0.55], [0,0.1]],
+                alpha = 0.3, lw=0.5,
+                y_max = 0.5):
+    
+
+    fig, axes = plt.subplots(1, len(df_simul_config),
+                             figsize=(2.5*len(df_simul_config), 4),
+                             sharey=True)
+    for c in range(len(df_simul_config)):
+        
+        ax = axes[c]
+            
+        config = df_simul_config.loc[c]
+        camera_sim = config['camera_sim']
+        solver = config['solver']
+        cell_class = config['cell_class']
+        color = config['color']
+        config_bool = (df_meta['camera_sim']==camera_sim)&(df_meta['solver']==solver)&(df_meta['cell_class']==cell_class)
+        
+        simul_id = df_meta.loc[default_models & config_bool, 'simul_id'].values[0]
+        
+        fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True)
+        x = np.arange(np.shape(fluo)[-1])/12
+        
+        if err == 'RMSE':
+            
+            e = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+            
+        elif err=='Normalized_RMSE':
+            
+            e = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+            e = e / fluo_pred[:,0]
+            
+        elif err=='Error_predicting_avg':
+            
+            fluo_avg = np.mean(fluo, axis=1)
+                
+            e = np.abs(fluo_pred[:,0] - fluo_avg) / fluo_pred[:,0]
+            
+        else:
+            print('Wrong error measure (see kwarg "err")')
+            
+        q_color = ['#080708', color, '#9c9c9c']
+            
+        for q, q_bound in enumerate(q_list):
+            
+            e_ind = np.argsort(np.mean(e,axis=1))[int(q_bound[0]*1000):int(q_bound[1]*1000)]
+            
+            ax.plot(x, e[e_ind].T,
+                          '-', 
+                          color=q_color[q], 
+                          alpha=alpha,
+                          linewidth=lw)
+        
+        ax.set_xlabel('time( h)')
+        ax.set_ylim([0,y_max])
+        ax.grid(True, 'both','both')
+    
+    axes[0].set_ylabel(f'{err}')
+    plt.tight_layout()
+    plt.savefig(f'{fig_path}/fig1_{err}_over_time_individual_traces.png',dpi=300)
 
 #%% Plot responses to pure light
 
@@ -317,282 +562,147 @@ plt.tight_layout()
 plt.savefig(f'{fig_path}/fig1_sample_activation_different_noise.png',
             dpi=300)
 
-#%% Distribution of average error
+#%% Plot responses to pure light (verbose)
 
-alpha = 0.7
-n_bins = 100
-x_max = 610
+n_hours = 4
+n_cells = 1
+alpha = 0.8
+lw = 2.5
 
-plt.figure(figsize=(5,3))
+H_color = '#e89f3f'
+E_color = 'g'
+
+# Get light
+random_bit = dcc.utilities.random_stimulations(
+                        timepoints=3*n_hours*12,
+                        nostim_timepoints=0,
+                        total_simulations=7)[0]
+
+light_sequence = [1]*12*n_hours + [0]*12*n_hours + [int(bit) for bit in random_bit]
+# light_sequence = [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24 + [1]*24 + [0]*24
+x = [t/12. for t in range(len(light_sequence)+1)]
+
+fig, axes = plt.subplots(5,1, figsize=(6,20))
+
+for i in range(5):
+    plt.sca(axes[i])
+    
+    # Plot light
+    dcc.utilities.OptoPlotBackground(light_sequence, ymax=4095, x=x)
 
 for c in range(len(df_simul_config)):
     
     config = df_simul_config.loc[c]
-    camera_sim = config['camera_sim']
-    solver = config['solver']
-    cell_class = config['cell_class']
-    color = config['color']
-    config_bool = (df_meta['camera_sim']==camera_sim)&(df_meta['solver']==solver)&(df_meta['cell_class']==cell_class)
     
-    simul_id = df_meta.loc[default_models & config_bool, 'simul_id'].values[0]
-    
-    fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True)
-    x = np.arange(np.shape(fluo)[-1])/12
+    for i in range(n_cells):
+        cell_class = config['cell_class']
+        if cell_class=='CcaSR_gillespie_simple_noE':
+            cell = dcc.simulations.CcaSR_gillespie_simple_noE()
+        elif cell_class=='CcaSR_gillespie':
+            cell = dcc.simulations.CcaSR_gillespie()
+        else:
+            print('Wrong class string')
+        cell.set_light_events(light_sequence) 
         
-    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
+        series = cell.run(len(light_sequence)*5, 
+                               solver=config['solver'])
+        
+        fluo = [state['F'] for state in series]
+            
+        fluo = np.array(fluo)
+        if config['camera_sim']: 
+            fluo = dcc.simulations.camera_sim(fluo)
+        else:
+            fluo = dcc.simulations.camera_sim(fluo, noise_perc=0)
     
-    plt.hist(np.mean(RMSE, axis=1), 
-              bins = np.linspace(0,x_max,n_bins+1),
-              color=color,
-              alpha=alpha,
-              linewidth=3,
-              density=True)
+        # Plot all results in subpanel 1
+        axes[0].plot(x, fluo, 
+                  lw=lw, 
+                  alpha=alpha,
+                  color=config['color'])
+        
+        # For deterministic solution without noise
+        if (config['camera_sim']==False) & (config['solver']=='ode'):
+            axes[1].plot(x, [state['F'] for state in series],
+                         lw=lw, 
+                         alpha=alpha,
+                         color='b')
+            axes[1].plot(x, [state['H'] for state in series],
+                         lw=lw, 
+                         alpha=alpha,
+                         color=H_color)
+        # For deterministic solutions
+        if config['solver']=='ode':
+            axes[2].plot(x, fluo,
+                         lw=lw,
+                         alpha=alpha,
+                         color=config['color'])
+        
+        # for stochastc with no E
+        if (config['solver']=='original') & (config['cell_class']=='CcaSR_gillespie_simple_noE'):
+            axes[3].plot(x, [state['F'] for state in series],
+                         lw=lw, 
+                         alpha=alpha,
+                         color='b')
+            axes[3].plot(x, [state['H'] for state in series],
+                         lw=lw, 
+                         alpha=alpha,
+                         color=H_color)
+            
+        # for stochastic with  E
+        if (config['solver']=='original') & (config['cell_class']=='CcaSR_gillespie'):
+            axes[4].plot(x, [state['H'] for state in series],
+                         lw=lw, 
+                         alpha=alpha,
+                         color=H_color)
+            axes[4].plot(x, [state['E'] for state in series],
+                         lw=lw, 
+                         alpha=alpha,
+                         color=E_color)
+            axes[4].plot(x, [state['F'] for state in series],
+                         lw=lw, 
+                         alpha=alpha,
+                         color='b')
+        
     
-plt.xlabel('RMSE (time average)')
-plt.ylabel('Frequency')
-plt.xlim([0,x_max])
+for i in range(5):
+    axes[i].set_xlabel('Time (h)')
+    axes[i].set_xlim([0,20])
+    if i in [0, 2]:
+        axes[i].set_ylabel('Fluorescence (AU)')
+        axes[i].set_ylim([0,4095])
+    else:
+        axes[i].set_ylabel('# proteins')
+        axes[i].set_ylim([0,120])
+
 plt.tight_layout()
-plt.savefig(f'{fig_path}/fig1_total_RMSE_distribution.png',dpi=300)
+for extension in ['png','svg']:
+    plt.savefig(f'{fig_path}/fig1_sample_activation_different_noise_verbose.{extension}',
+            dpi=300)
+
+#%% Error distribution
+
+plot_err_distribution(err = 'RMSE')
+plot_err_distribution(err = 'Normalized_RMSE', 
+                      x_max = 0.3)
+plot_err_distribution(err = 'Error_predicting_avg', 
+                      x_max = 0.3, histtype='step')
+
+#%% Q-plot of error  v. time 
+
+plot_err_over_time(err='RMSE')
+plot_err_over_time(err='Normalized_RMSE',
+                  y_max = 0.3)
+plot_err_over_time(err='Error_predicting_avg',
+                  y_max = 0.15)
 
 #%% Plot select predictions
 
-lw = 0.75
-for c in range(len(df_simul_config)):
-    
-    config = df_simul_config.loc[c]
-    camera_sim = config['camera_sim']
-    solver = config['solver']
-    cell_class = config['cell_class']
-    color = config['color']
-    config_bool = (df_meta['camera_sim']==camera_sim)&(df_meta['solver']==solver)&(df_meta['cell_class']==cell_class)
-    
-    simul_id = df_meta.loc[default_models & config_bool, 'simul_id'].values[0]
-    
-    # Find best and worst error
-    fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-    RMSE_sum_across_time = np.mean(np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1)), axis=1)
-    sorted_error = np.argsort(RMSE_sum_across_time)
-    
-    percentile = [250, 500, 750]
-    plot_list = [sorted_error[i] for i in percentile]
-    
-    stims, past_fluo, futures_fluo = get_eval_data(simul_id)
-    model_params, training_params = get_params(simul_id)
-    
-    plot_past = 3*12 # Only plot the past 3 hours (even though whole past is used)
-    cutoff = past_fluo.shape[1]
-    
-    fig, axes = plt.subplots(len(plot_list), 1,
-                              figsize=(3, 2*len(plot_list)),
-                              sharex=True)
-    for i, pl in enumerate(plot_list):
-            
-        # Stimulations
-        plt.sca(axes[i])
-        dcc.utilities.OptoPlotBackground(
-            stims[pl,cutoff-plot_past:cutoff+training_params["horizon"]],
-            x=np.arange(-plot_past, training_params["horizon"])/12,
-            ymax = 4095
-            )
-        
-        # Past
-        axes[i].plot(np.arange(-plot_past, 0)/12, 
-                      past_fluo[pl, -plot_past:],
-                      color, lw=3*lw)
-        
-        # Future
-        axes[i].plot(np.arange(0, training_params["horizon"])/12, 
-                  futures_fluo[pl, :, :training_params['horizon']].T, 
-                  color=color, alpha=0.01)
-        
-        # Prediction
-        axes[i].plot(np.arange(0, training_params["horizon"])/12, 
-                  fluo_pred[pl, 0],
-                  color='k', lw=3*lw)
-        
-        # Prediction starts line
-        axes[i].plot([-0.5/12, -0.5/12], [0, 4095], color="gray")
-        
-        # Limits and labels
-        axes[i].set_ylim([0,4095])
-        axes[i].set_yticklabels([])
-        axes[i].set_xticklabels([])
-        # plt.title(f'Cell {c}')
-        # axes[i].set_xlabel("time (h)")
-        # axes[i].set_ylabel("Fluorescence (a.u.)")
-        # axes[i].set_title(f'{100 * percentile[i] / len(sorted_error):.0f}th percentile')
-    axes[-1].set_xlim([-plot_past/12, training_params["horizon"]/12])
-    # plt.suptitle(f'{cell_class}, camera_sim {camera_sim}, solver:{solver}')
-    plt.tight_layout()
-    plt.savefig(fig_path+f'/fig1_{cell_class}_predictions_percentiles_camera_sim_{camera_sim}_solver_{solver}.png', dpi=300)
+plot_percentile_predictions(err = 'Normalized_RMSE',
+                            percentile = [50, 250, 500, 750, 950])
+plot_percentile_predictions(err = 'Error_predicting_avg')
 
-#%% Median prediction summary
+#%% Time evolution of error for worst predictions
 
-lw = 1
-fig, axes = plt.subplots(1, len(df_simul_config), 
-                         figsize=(3*len(df_simul_config), 2.5))
-
-percentile = 500
-
-for c, simul in enumerate([3,2,1,0]):
-    
-    config = df_simul_config.loc[simul]
-    camera_sim = config['camera_sim']
-    solver = config['solver']
-    cell_class = config['cell_class']
-    color = config['color']
-    config_bool = (df_meta['camera_sim']==camera_sim)&(df_meta['solver']==solver)&(df_meta['cell_class']==cell_class)
-    
-    simul_id = df_meta.loc[default_models & config_bool, 'simul_id'].values[0]
-    
-    # Find best and worst error
-    fluo, fluo_pred = get_fluo_and_pred(simul_id) 
-    RMSE_sum_across_time = np.mean(np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1)), axis=1)
-    sorted_error = np.argsort(RMSE_sum_across_time)
-    
-    pl = sorted_error[percentile]
-    
-    stims, past_fluo, futures_fluo = get_eval_data(simul_id)
-    model_params, training_params = get_params(simul_id)
-    
-    plot_past = 3*12 # Only plot the past 3 hours (even though whole past is used)
-    cutoff = past_fluo.shape[1]
-    
-    ax = axes[c]
-            
-    # Stimulations
-    plt.sca(ax)
-    dcc.utilities.OptoPlotBackground(
-        stims[pl,cutoff-plot_past:cutoff+training_params["horizon"]],
-        x=np.arange(-plot_past, training_params["horizon"])/12,
-        ymax = 4095
-        )
-    
-    # Past
-    ax.plot(np.arange(-plot_past, 0)/12, 
-                  past_fluo[pl, -plot_past:],
-                  color, lw=3*lw)
-    
-    # Which future
-    
-    # Future
-    ax.plot(np.arange(0, training_params["horizon"])/12, 
-              futures_fluo[pl, 0, :training_params['horizon']].T, 
-              color=color, lw=3*lw)
-    
-    # Prediction
-    ax.plot(np.arange(0, training_params["horizon"])/12, 
-              fluo_pred[pl, 0],
-              color='k', lw=3*lw)
-    
-    # Prediction starts line
-    ax.plot([-0.5/12, -0.5/12], [0, 4095], color="gray")
-    
-    # Limits and labels
-    ax.set_ylim([0,4095])
-    ax.set_yticklabels([])
-    ax.set_xticklabels([])
-    ax.set_xlim([-plot_past/12, training_params["horizon"]/12])
-# plt.suptitle(f'{cell_class}, camera_sim {camera_sim}, solver:{solver}')
-plt.tight_layout()
-plt.savefig(fig_path+f'/fig1_{cell_class}_median_predictions_camera_sim_{camera_sim}_solver_{solver}.png', dpi=300)
-
-
-#%% Q-plot of error  v. fluorescence(better for overlay?)
-
-n_bins=20
-q = 0.5
-default_models = default_training_size & default_past_steps & default_horizon & default_h1 & default_h2
-
-for cell_class in ['CcaSR_gillespie_simple_noE', 'CcaSR_gillespie']:
-    fig, axes = plt.subplots(1,2, figsize=(10,3), sharey=True)
-                                           
-    df_cc = df_meta.loc[default_models & (df_meta['cell_class']==cell_class)].reset_index()
-    
-    for c in range(len(df_cc)):
-        simul_id = df_cc.loc[c,'simul_id']
-        camera_sim = df_cc.loc[c,'camera_sim']
-        solver = df_cc.loc[c,'solver']
-        color = df_simul_config.loc[(df_simul_config['camera_sim']==camera_sim)&(df_simul_config['solver']==solver),'color'].values[0]
-    
-        for i in range(2):    
-            # Look at one hour
-            fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True) 
-            fluo = fluo[:,:,i*12:(i+1)*12]
-            fluo_pred = fluo_pred[:,:,i*12:(i+1)*12]
-        
-            # Calulate error
-            SE = (fluo - fluo_pred)**2
-            bins = np.linspace(0,4100, n_bins+1)
-            RMSE_bins = np.zeros((n_bins, 
-                                    np.shape(SE)[0]))
-            
-            # Look at error in each bin
-            for b in range(n_bins):
-                
-                SE_bin = np.nan*np.ones_like(SE)
-                SE_bin[(fluo>bins[b])&(fluo<bins[b+1])] = SE[(fluo>bins[b])&(fluo<bins[b+1])]
-                # Median across each cell's future and time points?
-                RMSE_bins[b] = np.sqrt(np.nanmean(SE_bin, axis=(1,2)))
-        
-            axes[i].plot(bins[:-1], np.median(RMSE_bins, axis=1),
-                          '.-', color=color, 
-                          label=f'camera noise {camera_sim}, solver: {solver}')
-            axes[i].fill_between(
-                bins[:-1],
-                np.nanquantile(RMSE_bins, axis=1, q=0.5-q/2),
-                np.nanquantile(RMSE_bins, axis=1, q=0.5+q/2),
-                color=color,
-                alpha=.2,
-                )
-        
-            axes[i].legend()   
-            axes[i].set_title(f'hour {i+1}')
-            axes[i].set_xlabel('fluorescence')
-            axes[i].set_ylabel(f'RMSE ({np.shape(fluo)[1]} futures of {np.shape(fluo)[0]} cells)\nMiddle {q*100:.0f}%')
-            axes[i].set_ylim([0,600])
-    plt.tight_layout()
-    plt.savefig(f'{fig_path}/fig1_{cell_class}_qplot_err_across_diff_noise.png',dpi=300)
-    
-#%% Q-plot of error  v. time (better for overlay?)
-
-q = 0.5
-alpha=0.3
-plt.figure(figsize=(5,3))
-for c in range(len(df_simul_config)):
-    
-    config = df_simul_config.loc[c]
-    camera_sim = config['camera_sim']
-    solver = config['solver']
-    cell_class = config['cell_class']
-    color = config['color']
-    config_bool = (df_meta['camera_sim']==camera_sim)&(df_meta['solver']==solver)&(df_meta['cell_class']==cell_class)
-    
-    simul_id = df_meta.loc[default_models & config_bool, 'simul_id'].values[0]
-    
-    fluo, fluo_pred = get_fluo_and_pred(simul_id, return_all=True)
-    x = np.arange(np.shape(fluo)[-1])/12
-        
-    RMSE = np.sqrt(np.mean((fluo - fluo_pred)**2, axis=1))
-    
-    plt.plot(x, np.median(RMSE, axis=0),
-                  '.-', color=color, )
-                  # label=f'{cell_class}, camera noise {camera_sim}, solver: {solver})
-    
-    # Lightweight shading: 95%
-    plt.fill_between(
-        x,
-        np.nanquantile(RMSE, axis=0, q=0.5 - q/2),
-        np.nanquantile(RMSE, axis=0, q=0.5 + q/2),
-        color=color,
-        alpha=alpha,
-        lw=0,
-        )
-    
-# plt.legend()   
-plt.xlabel('time( h)')
-plt.ylabel(f'RMSE: Middle {q*100:.0f}%')
-plt.ylim([0,450])
-plt.grid(True, 'both','both')
-plt.tight_layout()
-plt.savefig(f'{fig_path}/fig1_qplot_err_across_diff_noise_over_time.png',dpi=300)
+plot_individual_traces_binned(err='Error_predicting_avg', lw=0.5)
+plot_individual_traces_binned(err='Normalized_RMSE', lw=0.5)

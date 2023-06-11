@@ -51,11 +51,13 @@ WORKERS=8
 cell_class_list = ['CcaSR_gillespie_simple_noE',
                    'CcaSR_gillespie']
 
+cell_class_list = ['CcaSR_gillespie',]
+
 for cell_class in cell_class_list:
     # Submit qsub request for single job:
     # ARGS: cell_class (str), workers (int, default None), new_params_dir (str, optional)
     job_id = qsub.submit(
-        dcc_repo_path + "scripts/get_training_eval_sets.py",
+        dcc_repo_path + "scripts/simulated_training_eval_sets.py",
         conda_env="dcc_env_shared",
         args = [cell_class, WORKERS,],
         hardware_requirements = dict(
@@ -81,7 +83,7 @@ for do_camera_sim in [1, 0]:
         # Submit qsub request for single job:
         # ARGS: cell_class (str), workers (int, default None), new_params_dir (str, optional)
         job_id = qsub.submit(
-            dcc_repo_path + "scripts/get_training_eval_sets.py",
+            dcc_repo_path + "scripts/simulated_training_eval_sets.py",
             conda_env="dcc_env_shared",
             args = [cell_class, WORKERS, new_params_dir, solver, do_camera_sim],
             hardware_requirements = dict(
@@ -107,7 +109,7 @@ for new_params in simple_params_list:
     # Submit qsub request for single job:
     # ARGS: cell_class (str), workers (int, default None), new_params_dir (str, optional)
     job_id = qsub.submit(
-        dcc_repo_path + "scripts/get_training_eval_sets.py",
+        dcc_repo_path + "scripts/simulated_training_eval_sets.py",
         conda_env="dcc_env_shared",
         args = [cell_class, WORKERS, new_params_dir,],
         hardware_requirements = dict(
@@ -135,7 +137,7 @@ for new_params in simple_params_list:
     # Submit qsub request for single job:
     # ARGS: cell_class (str), workers (int, default None), new_params_dir (str, optional)
     job_id = qsub.submit(
-        dcc_repo_path + "scripts/get_training_eval_sets.py",
+        dcc_repo_path + "scripts/simulated_training_eval_sets.py",
         conda_env="dcc_env_shared",
         args = [cell_class, WORKERS, new_params_dir,],
         hardware_requirements = dict(
@@ -177,7 +179,7 @@ for new_params in cascade_params_list:
     # Submit qsub request for single job:
     # ARGS: cell_class (str), workers (int, default None), new_params_dir (str, optional)
     job_id = qsub.submit(
-        dcc_repo_path + "scripts/get_training_eval_sets.py",
+        dcc_repo_path + "scripts/simulated_training_eval_sets.py",
         conda_env="dcc_env_shared",
         args = [cell_class, WORKERS, new_params_dir,],
         hardware_requirements = dict(
@@ -242,7 +244,7 @@ for new_params in new_params_list:
     # Submit qsub request for single job:
     # ARGS: cell_class (str), workers (int, default None), new_params_dir (str, optional)
     job_id = qsub.submit(
-        dcc_repo_path + "scripts/get_training_eval_sets.py",
+        dcc_repo_path + "scripts/simulated_training_eval_sets.py",
         conda_env="dcc_env_shared",
         args = [cell_class, WORKERS, new_params_dir,],
         hardware_requirements = dict(
