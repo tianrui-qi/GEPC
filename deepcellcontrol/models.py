@@ -95,7 +95,7 @@ def split(model, decode_mode="mlp"):
         hyper_parameters["mlp_layers"] = -1
         hyper_parameters["mlp_dim"] = model.get_layer("decoder_0").output_shape[-1]
         for layer in model.layers:
-            if layer.name.startswith("decoder_"):
+            if layer.name.startswith("decoder_") and layer.name != "decoder_inputs":
                 hyper_parameters["mlp_layers"]+=1
                 hyper_parameters["horizon"] = layer.output_shape[-1]
     elif decode_mode == "cnn": 
