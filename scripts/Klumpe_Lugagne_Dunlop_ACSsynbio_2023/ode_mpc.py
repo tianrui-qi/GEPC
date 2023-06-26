@@ -10,6 +10,7 @@ Created on Fri Apr 28 16:50:03 2023
 import time
 import json
 import pickle
+import copy
 
 from scipy.integrate import solve_ivp
 from scipy.linalg import inv
@@ -22,17 +23,36 @@ import tensorflow.keras
 
 import deepcellcontrol as dcc
 
-
-username='hklumpe'
-dcc_repo_path = f"Y:/projectnb/dunlop/{username}/deepcellcontrol/"
-fig_path = dcc_repo_path+'/assets/figures/'
-
+# Parameters:
+eval_set = "D:/deepcellcontrol/assets/simulated_fullstate/"
+save_folder = "D:/deepcellcontrol/assets/ACS_revisions/"
 SAMPLING = 5
+horizon = 24
+past_steps = 72
 
-eval_set = dcc_repo_path + "/assets/simulated/data/CcaSR_gillespie/2023-04-18_05-07-48_simulated_f1350fca-2fff-4964-9d0c-6de2f26805bb/evaluation_set/"
-past = np.load(eval_set + "past_fluo.npy")
+# Load evaluation set, format inputs:
+past = np.load(eval_set + "past.npy")
 stims = np.load(eval_set + "stims.npy")
-futures = np.load(eval_set + "futures_fluo.npy")
+futures = np.load(eval_set + "meas_futures.npy")
+present = past.shape[1]
+inputs = (
+    np.stack(
+        (past[:,-past_steps:,-1], stims[:,present-past_steps:present]),
+        axis=-1
+    ),
+    stims[:,present:present+horizon]
+    )
+actual_state = past[:,-1,:3]
+
+# Normalize inputs for LSTM & linear models:
+features = ["fluo1", "stims"]
+fake_dataset = {}
+for f, feature in enumerate(features):
+    fake_dataset[feature] = inputs[0][:,:,f].copy()
+fake_dataset = dcc.data.Normalization().normalize(fake_dataset)
+norm_inputs = np.empty_like(inputs[0])
+for f, feature in enumerate(features):
+    norm_inputs[:,:,f] = fake_dataset[feature]
 
 #%% Class definition for ODE based model + State estimation:
 
@@ -349,13 +369,13 @@ class ODEModel():
         
         params = self.params()
         
-        measurements = past[:,0]
+        measurements = past[:,0] # Must have inverted camera transformation beforehand
         commands = past[:,-1]
         
         # Initialize:
         X = np.array([[params["h1"]/params["h2"], measurements[0]]]).T
         P = np.array([[params["h1"]/params["h2"], 0], [0, 1000]])
-        h = 0
+        h = (params["eta"]/params["nu"])/2 # If 1/2 stimulations is green
         C = np.array([[0, 0.9958]])
         R = np.array([[self.technical_noise]])
 
@@ -396,7 +416,7 @@ class ODEModel():
         
         return state
     
-    def predict(self, inputs, return_state = False, return_timing = False):
+    def predict(self, inputs, return_state = False, return_timing = False, actual_state = None):
         """
         Predict cells response to optogenetic stimulations.
 
@@ -427,6 +447,8 @@ class ODEModel():
         
         # Format inputs:
         past, stims = inputs
+        past = past.copy()
+        past[:,:,0] = self.camera_invert(past[:,:,0])
         
         # Init loop variables and run through cells:
         predictions, states = [], []
@@ -440,6 +462,12 @@ class ODEModel():
             if return_state:
                 states+=[state]
             
+            # If actual state was given, set it:
+            if actual_state is not None:
+                for s, value in enumerate(actual_state[cell]):
+                    if value is not None and not np.isnan(value):
+                        state[-1,s] = value
+            
             # Prediction:
             sequence = np.concatenate((past[cell,:,-1], stims[cell]))
             _t = time.time()
@@ -450,33 +478,66 @@ class ODEModel():
             predictions += [np.clip(result[:,2], 0, 4095)]
         
         # Format outputs:
-        predictions = np.array(predictions)
+        predictions = self.camera_apply(np.array(predictions))
         output = (predictions,)
         if return_state:
-            output += (np.array(states),)
+            states = np.array(states)
+            states[:,:,2] = self.camera_apply(states[:,:,2])
+            output += (states,)
         if return_timing:
             output += (timing,)
             
         return output
+    
+    @staticmethod
+    def camera_invert(X, camera_mult=40, camera_offset=100):
+        """
+        Invert the transformation applied by dcc.simulations.camera_sim()
 
-#%% "Train" the model: (~12 hours)
+        Parameters
+        ----------
+        X : ndarray
+            Input data that has been through the "camera simulation".
+        camera_mult : int or float, optional
+            The multiplicative factor of the "camera". The default is 40.
+        camera_offset : int or float, optional
+            The offset of the "camera".. The default is 100.
 
-# model = ODEModel()
-# model.fit(training_set)
-# model.save(figures_folder + "/fitted_ode_model.json")
+        Returns
+        -------
+        TYPE
+            DESCRIPTION.
+
+        """
+        return (X-camera_offset)/camera_mult
+
+    @staticmethod
+    def camera_apply(X, camera_mult=40, camera_max=4095, camera_offset=100):
+        """
+        Re-transform simulated data into "camera data"
+
+        Parameters
+        ----------
+        X : ndarray
+            Input simulated data (typically from ODE integration).
+        camera_mult : int or float, optional
+            The multiplicative factor of the "camera". The default is 40.
+        camera_max : int or float, optional
+            The max value of the camera's dynamic range. The default is 4095.
+        camera_offset : int or float, optional
+            The offset of the "camera".. The default is 100.
+
+        Returns
+        -------
+        None.
+
+        """
+        return np.clip(X*camera_mult+camera_offset, 0, camera_max)
 
 #%% Evaluate performance for different filtering parameters
 
-technical_noise_values = [1e-2, 1e-1, 1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8]
-# h1h2_factors = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3]
-
-horizon = 24
-past_steps = 72
-present = past.shape[1]
-inputs = (
-    np.stack((past[:,-past_steps:], stims[:,present-past_steps:present]), axis=-1),
-    stims[:,present:present+horizon]
-    )
+technical_noise_values = [1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8]
+technical_noise_values = np.logspace(np.log10(1),np.log10(100), 10)
 
 records = []
 for technical_noise in technical_noise_values:
@@ -486,12 +547,12 @@ for technical_noise in technical_noise_values:
         model.technical_noise = technical_noise
         
         predictions, states, timing = model.predict(
-            inputs, return_state=True, return_timing=True
+            [x[:500] for x in inputs], return_state=True, return_timing=True
             )
         
         rmse = np.sqrt(
             np.nanmean(
-                (predictions[:,np.newaxis,:] - futures[:,:,:horizon])**2,
+                ((predictions[:,np.newaxis,:] - futures[:500,:,:horizon])/futures[:500,:,:horizon])**2,
                 axis=1
                 )
             )
@@ -505,11 +566,425 @@ for technical_noise in technical_noise_values:
             )
         print(f"R: {technical_noise}, RMSE: {np.mean(rmse)}")
 
-#Save results to disk:
-with open(figures_folder + "/ODE_noiseh1h2_records_fitted.pkl", "wb") as f:
-    pickle.dump(records, f)
+#%% ODE predictions:
+
+# No variables given:
+model = ODEModel()
+model.technical_noise = 10
+ode_predictions_givenNone, ode_states, ode_timing = model.predict(
+    inputs, return_state=True, return_timing=True
+    )
+np.save(save_folder + "ode_predictions_givenNone.npy", ode_predictions_givenNone)
+print("Given None")
+
+# H given:
+masked_state = actual_state.copy()
+masked_state[:,1] = np.nan
+masked_state[:,2] = np.nan
+ode_predictions_givenH, _, _ = model.predict(
+    inputs, return_state=True, return_timing=True, actual_state = masked_state
+    )
+np.save(save_folder + "ode_predictions_givenH.npy", ode_predictions_givenH)
+print("Given H")
+
+# E given:
+masked_state = actual_state.copy()
+masked_state[:,0] = np.nan
+masked_state[:,2] = np.nan
+ode_predictions_givenE, _, _ = model.predict(
+    inputs, return_state=True, return_timing=True, actual_state = masked_state
+    )
+np.save(save_folder + "ode_predictions_givenE.npy", ode_predictions_givenE)
+print("Given E")
+
+# F given:
+masked_state = actual_state.copy()
+masked_state[:,0] = np.nan
+masked_state[:,1] = np.nan
+ode_predictions_givenF, _, _ = model.predict(
+    inputs, return_state=True, return_timing=True, actual_state = masked_state
+    )
+np.save(save_folder + "ode_predictions_givenF.npy", ode_predictions_givenF)
+print("Given F")
+
+# H,E,F given:
+masked_state = actual_state.copy()
+ode_predictions_givenHEF, _, _ = model.predict(
+    inputs, return_state=True, return_timing=True, actual_state = masked_state
+    )
+np.save(save_folder + "ode_predictions_givenHEF.npy", ode_predictions_givenHEF)
+print("Given H,E,F")
+
+#%% Evaluate for LSTM-MLP model:
+
+# Load trained model:
+lstmmlp_folder = "D:/deepcellcontrol/assets/models/2023-06-13_18-27-48_92d1594f-b5c5-41db-876b-65b9ddb1e5e2/"
+lstmmlp = tf.keras.models.load_model(lstmmlp_folder+ "/model.hdf5")
+encoder, decoder = dcc.models.split(lstmmlp)
+
+# Run encoder & decoder, time execution:
+_t = time.time()
+latent = encoder.predict(norm_inputs, verbose=1, batch_size=1000)
+encoder_timing = time.time() - _t
+_t = time.time()
+lstmmlp_predictions = decoder.predict([latent, inputs[1]], verbose=1, batch_size=1000)
+decoder_timing = time.time() - _t
+np.save(save_folder + "lstmmlp_predictions.npy", lstmmlp_predictions)
+
+#%% Evaluate for linear regression model:
+
+linear_folder = "D:/deepcellcontrol/assets/models/2023-06-12_16-33-19_f7295c11-6e7b-4d99-b257-f30a2f5a538d/"
+linear = tf.keras.models.load_model(linear_folder+ "/model.hdf5")
+_t = time.time()
+linear_predictions = linear.predict([norm_inputs, inputs[1]], verbose=1, batch_size=1000)
+linear_timing = time.time() - _t
+np.save(save_folder + "linear_predictions.npy", linear_predictions)
+
+#%% Evaluate RMSEs
+
+ode_given = ["None", "H", "E", "F", "HEF"]
+
+# ODE models:
+ode_rmse = []
+for given in ode_given:
+    predictions = np.load(save_folder + f"ode_predictions_given{given}.npy")
+    rmse = np.sqrt(
+        np.nanmean(
+            ((predictions[:,np.newaxis,:] - futures[:,:,:horizon])/futures[:,:,:horizon])**2,
+            axis=1
+            )
+        )
+    ode_rmse.append(rmse)
+
+# LSTM-MLP:
+predictions = np.load(save_folder + "lstmmlp_predictions.npy")
+lstmmlp_rmse = np.sqrt(
+    np.nanmean(
+        ((4095*predictions[:,np.newaxis,:] - futures[:,:,:horizon])/futures[:,:,:horizon])**2,
+        axis=1
+        )
+    )
+
+# Linear regression:
+predictions = np.load(save_folder + "linear_predictions.npy")
+linear_rmse = np.sqrt(
+    np.nanmean(
+        ((4095*predictions[:,np.newaxis,:] - futures[:,:,:horizon])/futures[:,:,:horizon])**2,
+        axis=1
+        )
+    )
+
+#%% Plot RMSE distributions:
+
+bins = np.logspace(-2,np.log10(10), 100)
+
+colors = ["#6A0DAD", "#8F00FF", "#FF00FF", "#DDA0DD", "#D8BFD8"]
+for given, rmse, color in zip(ode_given, ode_rmse, colors):
+    plt.hist(rmse.flatten(), bins, histtype="step", color=color, label=given)
+
+plt.hist(lstmmlp_rmse.flatten(), bins, histtype="step", color="b", label="LSTM-MLP")
+# plt.hist(linear_rmse.flatten(), bins, histtype="step", color="orange", label="Linear")
+plt.legend()
+plt.xscale("log")
+plt.xlim(3e-2, 2)
+plt.xlabel("Root mean square error (a.u.)")
+plt.ylabel("Count")
+
+plt.savefig(save_folder + "SI_Fig_X_Kalman_distros.svg", dpi=300)
+plt.savefig(save_folder + "SI_Fig_X_Kalman_distros.png", dpi=300)
+plt.savefig(save_folder + "SI_Fig_X_Kalman_distros.pdf", dpi=300)
+
+#%% Plot RMSE bars:
+
+x = 0    
+
+# None
+index = 0
+plt.bar(x, np.median(ode_rmse[index]), color=colors[index])
+# plt.errorbar(
+#     x,
+#     np.median(ode_rmse[index]), 
+#     yerr=np.quantile(ode_rmse[index], [.25, .75])[:,np.newaxis],
+#     color="k"
+#     )
+x+=1
+
+# H
+index = 1
+plt.bar(x, np.median(ode_rmse[index]), color=colors[index])
+# plt.errorbar(
+#     x,
+#     np.median(ode_rmse[index]), 
+#     yerr=np.quantile(ode_rmse[index], [.25, .75])[:,np.newaxis],
+#     color="k"
+#     )
+x+=1
+
+# F
+index = 3
+plt.bar(x, np.median(ode_rmse[index]), color=colors[index])
+# plt.errorbar(
+#     x,
+#     np.median(ode_rmse[index]), 
+#     yerr=np.quantile(ode_rmse[index], [.25, .75])[:,np.newaxis],
+#     color="k"
+#     )
+x+=1
+
+# linear
+# plt.bar(x, np.median(linear_rmse), color="orange")
+# plt.errorbar(
+#     x,
+#     np.median(linear_rmse), 
+#     yerr=np.quantile(linear_rmse, [.25, .75])[:,np.newaxis],
+#     color="k"
+#     )
+# x+=1
+
+# LSTM-MLP
+plt.bar(x, np.median(lstmmlp_rmse), color="b")
+# plt.errorbar(
+#     x,
+#     np.median(lstmmlp_rmse), 
+#     yerr=np.quantile(lstmmlp_rmse, [.25, .75])[:,np.newaxis],
+#     color="k"
+#     )
+x+=1
 
 
+# E
+index = 2
+plt.bar(x, np.median(ode_rmse[index]), color=colors[index])
+# plt.errorbar(
+#     x,
+#     np.median(ode_rmse[index]), 
+#     yerr=np.quantile(ode_rmse[index], [.25, .75])[:,np.newaxis],
+#     color="k"
+#     )
+x+=1
+
+
+# H,E,F
+index = 4
+plt.bar(x, np.median(ode_rmse[index]), color=colors[index])
+# plt.errorbar(
+#     x,
+#     np.median(ode_rmse[index]),
+#     yerr=np.quantile(ode_rmse[index], [.25, .75])[:,np.newaxis],
+#     color="k"
+#     )
+x+=1
+
+
+plt.xticks(
+    list(range(6)),
+    [
+        "ODE model",
+        "ODE model\ngiven H",
+        "ODE model\ngiven F",
+        # "Linear regression",
+        "LSTM-MLP",
+        "ODE model\ngiven E",
+        "ODE model\ngiven H,E,F",
+     ],
+    rotation=45,
+    ha="right"
+    )
+plt.ylabel("Normalized RMSE")
+# plt.yscale("log")
+plt.savefig(save_folder + "SI_Fig_X_Kalman_bars.svg", dpi=300)
+plt.savefig(save_folder + "SI_Fig_X_Kalman_bars.png", dpi=300)
+plt.savefig(save_folder + "SI_Fig_X_Kalman_bars.pdf", dpi=300)
+
+#%% Plot percentile samples
+
+groundtruth = np.mean(futures[:,:,:horizon], axis=1)
+predictions = np.load(save_folder + f"ode_predictions_givenNone.npy")
+fullstate_predictions = np.load(save_folder + f"ode_predictions_givenHEF.npy")
+lstmmlp_predictions = np.load(save_folder + "lstmmlp_predictions.npy")
+rmse = np.mean(np.sqrt(
+    np.nanmean(
+        ((predictions[:,np.newaxis,:] - futures[:,:,:horizon])/futures[:,:,:horizon])**2,
+        axis=1
+        )
+    ), axis=-1)
+sort = np.argsort(rmse)
+cells = [sort[500], sort[1000], sort[1500], sort[1800]]
+titles = ["25th percentile", "median", "75th percentile", "90th percentile"]
+
+# groundtruth = futures[:,0,:horizon]
+for cell, title in zip(cells, titles):
+    cell_stims = np.concatenate((inputs[0][cell,:,-1],inputs[1][cell,:]))
+    x = np.arange(inputs[0].shape[1], inputs[0].shape[1]+predictions.shape[1])
+    
+    fig, ax1 = plt.subplots()
+    dcc.utilities.OptoPlotBackground(cell_stims, ymax = 4095)
+    plt.plot([inputs[0].shape[1]-.5, inputs[0].shape[1]-.5], [0, 4095], "w--")
+    
+    ax1.plot(np.concatenate((inputs[0][cell,:,0], groundtruth[cell,:])), "k")
+    ax1.plot(x, fullstate_predictions[cell],"w--")
+    # ax1.plot(ode_states[cell,:,2],"--", color = "purple")
+    ax1.plot(x, predictions[cell],"purple")
+    ax1.plot(x, 4095*lstmmlp_predictions[cell],"b")
+    labels = list(range(-6,3))
+    ax1.set_xticks([x*12+inputs[0].shape[1] for x in labels], labels)
+    ax1.set_xlim(0, len(cell_stims)-1)
+    ax1.set_ylim(0,4095)
+    ax1.set_ylabel("Fluorescence F (a.u.)", fontsize=14)
+    ax1.set_xlabel("Time (hours)")
+    
+    ax2 = ax1.twinx()
+    ax2.plot(past[cell,-past_steps:,1], color=[.5,.5,.5])
+    # ax2.plot(ode_states[cell,:,1],"--", color=[.5,.5,.5])
+    ax2.set_ylabel("Responsiveness E (molecules)", fontsize=14)
+    ax2.yaxis.label.set_color([.5,.5,.5])
+    
+    ax3 = ax1.twinx()
+    ax3.spines.right.set_position(("axes", 1.15))
+    ax3.plot(past[cell,-past_steps:,0], color="#D2B48C")
+    # ax3.plot(ode_states[cell,:,0],"--", color="#D2B48C")
+    ax3.set_ylabel("Dimer H (molecules)", fontsize=14)
+    ax3.yaxis.label.set_color("#D2B48C")
+    
+    plt.title(title, fontsize=14)
+    plt.savefig(save_folder + f"SI_Fig_X_Kalman_Sample_{cell}.svg", dpi=300)
+    plt.savefig(save_folder + f"SI_Fig_X_Kalman_Sample_{cell}.pdf", dpi=300)
+    plt.savefig(save_folder + f"SI_Fig_X_Kalman_Sample_{cell}.png", dpi=300)
+    plt.show()
+
+#%% Prediction vs State error scatter plots
+from scipy.stats import pearsonr, spearmanr
+
+predictions = np.load(save_folder + f"ode_predictions_givenNone.npy")
+rmse = np.mean(np.sqrt(
+    np.nanmean(
+        ((predictions[:,np.newaxis,:] - futures[:,:,:horizon])/futures[:,:,:horizon])**2,
+        axis=1
+        )
+    ), axis=-1)
+
+colors = ["#D2B48C", [.5,.5,.5], "purple"]
+for s, species in enumerate(["H", "E", "F"]):
+    
+    plt.figure(figsize=[3.5,3], dpi=300)
+    
+    if species == "F":
+        state_estim = (ode_states[:,-1,s]-100)/40
+    else:
+        state_estim = ode_states[:,-1,s]
+    
+    state_error = np.abs((state_estim - past[:,-1,s])/past[:,-1,s])
+    prediction_error = rmse
+    tokeep = np.logical_not(np.isinf(state_error))
+    corr_res = spearmanr(state_error[tokeep], prediction_error[tokeep])
+    print((corr_res.statistic, corr_res.pvalue))
+    
+    plt.scatter(state_error, prediction_error, alpha=.05, color = colors[s])
+    plt.xscale("log")
+    plt.yscale("log")
+    # plt.title(species)
+    plt.ylim(3e-2, 2)
+    plt.xlim(1e-5, 2)
+    # plt.gca().set_aspect('equal')
+    plt.savefig(save_folder + f"SI_Fig_X_Kalman_Corr_{species}.svg", dpi=300)
+    plt.savefig(save_folder + f"SI_Fig_X_Kalman_Corr_{species}.pdf", dpi=300)
+    plt.savefig(save_folder + f"SI_Fig_X_Kalman_Corr_{species}.png", dpi=300)
+    plt.show()
+
+#%% Generate evaluation set that also saves responsiveness and H values:
+
+cells = 2000
+realizations = 1000
+
+stims = dcc.utilities.getRandomStimulations(cells, 144)
+present = 120
+
+fluo, resp, dimer = [], [], []
+futures = []
+
+_t = time.time()
+for c in range(cells):
+    
+    cell = dcc.simulations.CcaSR_gillespie()
+    
+    cell.set_light_events(stims[c]) # Set future light events
+    ts = cell.run(present*5) # Run until the end
+    fluo.append([x['F'] for x in ts[1:]]) # Append fluorescence to list (skip first timepoint before any stim)
+    resp.append([x['E'] for x in ts[1:]]) # Append fluorescence to list (skip first timepoint before any stim)
+    dimer.append([x['H'] for x in ts[1:]]) # Append fluorescence to list (skip first timepoint before any stim)
+    
+    cell_future = np.empty((realizations,24)) # Allocate "empty" future
+    for s in range(realizations):
+        clone = copy.deepcopy(cell) # Copy "Past" cell ("Present" species state and time are also copied)
+        ts = clone.run(stims.shape[1]*5) # Run this potential "future"
+        cell_future[s,:] = [x['F'] for x in ts[1:]] # Save fluorescence time-series to "future" array (Don't need first time-point as it's always the same)
+    futures.append(cell_future)
+    t_cell = (time.time() - _t)/(c+1)
+    print('%d/%d cells simulated, %.01f s/cell'% (c+1,stims.shape[0],t_cell))
+
+
+fluo = np.array(fluo)
+resp = np.array(resp)
+dimer = np.array(dimer)
+meas_fluo = dcc.simulations.camera_sim(fluo.copy())
+
+past = np.stack((dimer, resp, fluo, meas_fluo), axis=-1)
+
+futures = np.array(futures)
+meas_futures = dcc.simulations.camera_sim(futures.copy())
+
+np.save("D:/deepcellcontrol/assets/simulated_fullstate/past.npy", past)
+np.save("D:/deepcellcontrol/assets/simulated_fullstate/futures.npy", futures)
+np.save("D:/deepcellcontrol/assets/simulated_fullstate/meas_futures.npy", meas_futures)
+np.save("D:/deepcellcontrol/assets/simulated_fullstate/stims.npy", stims)
+
+#%%
+inputs = [np.stack((fluo[:,:72], stims[:,:72]), axis=-1), stims[:,72:]]
+
+
+groundtruth = futures[:,:,:24]
+
+model = ODEModel()
+model.technical_noise = 40
+actual_state = past[:,-1,:3]
+masked_state = actual_state.copy()
+# masked_state[:,1] = np.nan
+masked_state[:,2] = np.nan
+predictions, states, timing = model.predict(
+    inputs, return_state=True, return_timing=True, actual_state = masked_state
+    )
+ode_rmse = np.sqrt(
+    np.nanmean(
+        (predictions[:,np.newaxis, :] - groundtruth)**2,
+        axis=1
+        )
+    )
+print(np.mean(ode_rmse))
+
+lstmmlp_rmse = np.sqrt(
+    np.nanmean(
+        (4095*lstmmlp_predictions[:,:] - groundtruth)**2,
+        axis=1
+        )
+    )
+print(np.median(lstmmlp_rmse))
+
+for cell in range(len(predictions)):
+    fig, ax1 = plt.subplots()
+    cell_stims = np.concatenate((inputs[0][cell,:,-1],inputs[1][cell,:]))
+    dcc.utilities.OptoPlotBackground(cell_stims, ymax = 4095)
+    ax1.plot(np.concatenate((inputs[0][cell,:,0], groundtruth[cell,:])), "k")
+    ax1.plot(states[cell,:,2],"--", color = "purple")
+    x = np.arange(inputs[0].shape[1], inputs[0].shape[1]+predictions.shape[1])
+    ax1.plot(x, predictions[cell],"purple")
+    # ax1.plot(x, 4095*lstm_predictions[cell],"b")
+    ax1.set_xlim(0, len(cell_stims)-1)
+    ax1.set_ylim(0,4095)
+    ax2 = ax1.twinx()
+    ax2.plot(resp[cell,:], color=[.5,.5,.5])
+    ax2.plot(states[cell,:,1],"--", color=[.5,.5,.5])
+    plt.title(cell)
+    plt.show()
     
 #%% Plot tables S3 & S4:
 
@@ -544,33 +1019,6 @@ plt.savefig(figures_folder + "/ODE_h1h2_records_chait.pdf", dpi=300)
 plt.show()
 # plt.axis("image")
 
-#%% Sample predictions:
-
-technical_noise = 1e3
-
-model = ODEModel()
-# model.load(figures_folder + "/fitted_ode_model.json")
-
-model.technical_noise = technical_noise
-
-predictions, states, timing = model.predict(
-    [x[:10] for x in inputs], return_state=True, return_timing=True
-    )
-
-# groundtruth = np.mean(futures[:,:,:horizon], axis=1)
-groundtruth = futures[:,0,:horizon]
-for cell in range(len(predictions)):
-    fig, ax1 = plt.subplots()
-    cell_stims = np.concatenate((inputs[0][cell,:,-1],inputs[1][cell,:]))
-    dcc.utilities.OptoPlotBackground(cell_stims, ymax = 4095)
-    ax1.plot(np.concatenate((inputs[0][cell,:,0], groundtruth[cell,:])), "k")
-    ax1.plot(states[cell,:,2],"b--")
-    x = np.arange(inputs[0].shape[1], inputs[0].shape[1]+predictions.shape[1])
-    ax1.plot(x, predictions[cell],"b")
-    ax2 = ax1.twinx()
-    ax2.plot(states[cell,:,1],"--", color=[.5,.5,.5])
-    plt.title(cell)
-    plt.show()
 
 #%%
 import os
@@ -643,48 +1091,6 @@ with open(figures_folder + "/ODE_final_eval_records.pkl", "wb") as f:
 for record in records_final:
     print(np.median(record["rmse"]))
 
-#%% Evaluate for LSTM-MLP & Linear regression model:
-
-features = ["fluo1", "stims"]
-
-# Normalize inputs:
-fake_dataset = {}
-for f, feature in enumerate(features):
-    fake_dataset[feature] = inputs[0][:,:,f].copy()
-fake_dataset = dcc.data.Normalization().normalize(fake_dataset)
-norm_inputs = np.empty_like(inputs[0])
-for f, feature in enumerate(features):
-    norm_inputs[:,:,f] = fake_dataset[feature]
-
-# Original LSTM:
-lstmmlp_folder = "Y:/projectnb/dunlop/hklumpe/deepcellcontrol/assets/models/2023-03-23_21-22-29_simulated_c8e48998-6920-4e9a-8ea5-6577f5483e53/"
-lstmmlp = tf.keras.models.load_model(lstmmlp_folder+ "/model.hdf5")
-encoder, decoder = dcc.models.split(lstmmlp)
-_t = time.time()
-latent = encoder.predict(norm_inputs, verbose=1, batch_size=1000)
-encoder_timing = time.time() - _t
-_t = time.time()
-predictions = decoder.predict([latent, inputs[1]], verbose=1, batch_size=1000)
-decoder_timing = time.time() - _t
-lstmmlp_rmse = np.sqrt(
-    np.nanmean(
-        (4095*predictions[:,np.newaxis,:] - futures[:,:,:horizon])**2,
-        axis=1
-        )
-    )
-
-# # Trained linear regression model:
-# linear_folder = "D:/deepcellcontrol/assets/models/2023-05-07_16-54-00_38dab3ab-152a-4b39-b162-4743d0f5514a/"
-# linear = tf.keras.models.load_model(linear_folder+ "/model.hdf5")
-# _t = time.time()
-# predictions = linear.predict([norm_inputs, inputs[1]], verbose=1, batch_size=1000)
-# linear_timing = time.time() - _t
-# linear_rmse = np.sqrt(
-#     np.mean(((4095*predictions-groundtruth))**2,axis=1)
-#     )
-
-print(np.mean(lstmmlp_rmse))
-# print(np.median(linear_rmse))
 
 #%% Plot Median RMSE and timing (Fig. S7):
 
