@@ -396,7 +396,13 @@ def mlp_nopast(hyper_parameters):
 
     """
     
+    # This is not actually used:
+    past_events = Input(
+        (None, len(hyper_parameters["features"])),
+        name='past_inputs'
+        )
     
+    # Input:
     future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
     
     # Hidden layers:
@@ -415,7 +421,7 @@ def mlp_nopast(hyper_parameters):
             )(hidden)
 
     # Finalize model:
-    model = Model(future_light, prediction)
+    model = Model([past_events, future_light], prediction)
     model.compile(
         loss=hyper_parameters["loss"],
         optimizer = Adam(
