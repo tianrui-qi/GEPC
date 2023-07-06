@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This script generates plots for Figure 4 and Movie S3
+This script generates plots for Figure 4, SI Fig 14, and Movie S3
 
 Created on Fri Sep  2 14:03:54 2022
 

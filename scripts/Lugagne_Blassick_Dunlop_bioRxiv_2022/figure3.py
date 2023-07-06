@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This script generates plots for Figure 3, SI Figs 9 & 10-13, and Movies S1 and S2
+This script generates plots for Figure 3, SI Figs 9-13, and Movies S1 and S2
 
 Some of the plots can only be generated with access to raw microscopy image data
 that is not on the zenodo archive.
