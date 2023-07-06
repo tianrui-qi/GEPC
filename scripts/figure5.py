@@ -9,25 +9,29 @@ Created on Thu Aug 11 11:45:33 2022
 import json
 import pickle
 import os
+import sys
 
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-import tensorflow as tf
 from scipy.signal import savgol_filter
 
-import deepcellcontrol as dcc
+
+# Experiments (zenodo archive)
+experiments_folder = "Z:/data/Microscope/Papers/Lugagne_Blassick_Dunlop_NatComm_2023/experiments/"
+
+# Raw microscopy images (not on zenodo):
+raw_data = "Z:/data/Microscope/jeanbaptiste/deepmpc/control/"
+
+# Save images to:
+save_folder = "D:/papers/deepmpc/figure5/"
 
 # experiments path:
-xp_path = "Y:/data/Microscope/jeanbaptiste/deepmpc/control/"
 experiments = [
     "2022-07-26_DeepMPC_tetA_1/",
     "2022-08-01_DeepMPC_tetA_1/",
     "2022-08-02_DeepMPC_tetA_1/",
     ]
-
-# Save images to:
-save_folder = "C:/Users/Administrator/jb/deepmpc_paper/figure5/"
 
 def compute_growth(fluo, area):
     
@@ -74,14 +78,18 @@ for xp, xpname in enumerate(experiments):
     xp_data.append({})
     
     # Cells fluo and objectives are already saved to numpy arrays::
-    xp_data[xp]["fluo"] = np.load(xp_path+xpname+"cells_fluo.npy")[:,:cutoff]
+    xp_data[xp]["fluo"] = np.load(
+        experiments_folder+xpname+"cells_fluo.npy"
+        )[:,:cutoff]
     xp_data[xp]["fluo"][xp_data[xp]["fluo"]==0] = np.nan
-    xp_data[xp]["objectives"] = np.load(xp_path+xpname+"objectives.npy")[:,:cutoff]
+    xp_data[xp]["objectives"] = np.load(
+        experiments_folder+xpname+"objectives.npy"
+        )[:,:cutoff]
     
     # Cell area:
-    with open(xp_path+xpname+"fallback_control_parameters.json", "r") as f:
+    with open(experiments_folder+xpname+"fallback_control_parameters.json", "r") as f:
         control_parameters = json.load(f)
-    with open(xp_path+xpname+"mothers.pkl", "rb") as f:
+    with open(experiments_folder+xpname+"mothers.pkl", "rb") as f:
         mothers = pickle.load(f)
     cells_area = []
     for s in mothers:
@@ -173,9 +181,9 @@ for obj_lvl, color in zip(obj_levels, obj_colors):
 plt.xlabel("time (hours)")
 plt.ylabel("Growth rate (1/hour)")
 
-plt.savefig(save_folder+"/PanelB_growth.png", dpi=300)
-plt.savefig(save_folder+"/PanelB_growth.svg", dpi=300)
-plt.savefig(save_folder+"/PanelB_growth.pdf", dpi=300)
+plt.savefig(save_folder+"/Panel_C_growth.png", dpi=300)
+plt.savefig(save_folder+"/Panel_C_growth.svg", dpi=300)
+plt.savefig(save_folder+"/Panel_C_growth.pdf", dpi=300)
 plt.show()
 
 #%% Panel D - growth rate distributions over time
@@ -240,9 +248,9 @@ plt.xlabel("Time (hours)")
 plt.ylabel("Growth rate (1/hour)")
 
 plt.tight_layout()
-plt.savefig(save_folder+f"/PanelD_distros.png", dpi=300)
-plt.savefig(save_folder+f"/PanelD_distros.svg", dpi=300)
-plt.savefig(save_folder+f"/PanelD_distros.pdf", dpi=300)
+plt.savefig(save_folder+f"/Panel_D_distros.png", dpi=300)
+plt.savefig(save_folder+f"/Panel_D_distros.svg", dpi=300)
+plt.savefig(save_folder+f"/Panel_D_distros.pdf", dpi=300)
 plt.show()
 
 #%% Panel E - Percentage of growing cells
@@ -269,12 +277,12 @@ plt.plot([antibio_time/12, antibio_time/12],[0,1],"--", color="grey", zorder=0)
 plt.ylim([0,1])
 plt.ylabel("Survival rate")
 plt.xlabel("time (hours)")
-plt.savefig(save_folder+"/survival_rate.png", dpi=300)
-plt.savefig(save_folder+"/survival_rate.svg", dpi=300)
-plt.savefig(save_folder+"/survival_rate.pdf", dpi=300)
+plt.savefig(save_folder+"/Panel_E_survival_rate.png", dpi=300)
+plt.savefig(save_folder+"/Panel_E_survival_rate.svg", dpi=300)
+plt.savefig(save_folder+"/Panel_E_survival_rate.pdf", dpi=300)
 plt.show()
 
-#%% SI Fig. 8 - All cells growth histogram
+#%% SI Fig. 16 - All cells growth histogram
 
 growth = []
 for xp in xp_data:
@@ -292,13 +300,14 @@ plt.ylim(yl)
 plt.xlabel("growth rate (1/hour)")
 plt.ylabel("count (normalized)")
 
-plt.savefig(save_folder+"/All_cells_growth.png", dpi=300)
-plt.savefig(save_folder+"/All_cells_growth.svg", dpi=300)
-plt.savefig(save_folder+"/All_cells_growth.pdf", dpi=300)
+plt.savefig(save_folder+"/SI_Fig_16_All_cells_growth.png", dpi=300)
+plt.savefig(save_folder+"/SI_Fig_16_All_cells_growth.svg", dpi=300)
+plt.savefig(save_folder+"/SI_Fig_16_All_cells_growth.pdf", dpi=300)
 plt.show()
 
 
-#%% SI Fig. 9 - Growing/Dying Kymographs
+#%% SI Fig. 17 - Growing/Dying Kymographs
+sys.path.append("D:/delta")
 import delta
 
 growth_threshold = .3
@@ -371,7 +380,7 @@ for obj_lvl, color in zip(obj_levels, obj_colors):
     print(f"Obj {obj_lvl} healthy: XP {x}, cell {c}")
     
     # Get cell kymograph:
-    kymograph_img = get_kymograph(xp_path+experiments[x], c, interval)
+    kymograph_img = get_kymograph(raw_data+experiments[x], c, interval)
     _width = kymograph_img[0].shape[1]
     line = int(antibio_time/interval)*_width
     kymograph_img = np.concatenate(kymograph_img, axis=1)
@@ -391,7 +400,7 @@ for obj_lvl, color in zip(obj_levels, obj_colors):
     print(f"Obj {obj_lvl} dead: XP {x}, cell {c}")
     
     # Get cell kymograph:
-    kymograph_img = get_kymograph(xp_path+experiments[x], c, interval)
+    kymograph_img = get_kymograph(raw_data+experiments[x], c, interval)
     _width = kymograph_img[0].shape[1]
     line = int(antibio_time/interval)*_width
     kymograph_img = np.concatenate(kymograph_img, axis=1)
@@ -407,7 +416,7 @@ for obj_lvl, color in zip(obj_levels, obj_colors):
     plt.show()
 
 
-#%% SI Fig. 10 - Alive/dead cells mean growth rates:
+#%% SI Fig. 18 - Alive/dead cells mean growth rates:
 
 growth_threshold = .3
 
@@ -439,9 +448,9 @@ plt.plot([antibio_time/12, antibio_time/12],[-0.2,1.3],"--", color="grey", zorde
 plt.ylabel("Growth rate (1/hour)")
 plt.xlabel("time (hours)")
 plt.grid(axis="y")
-plt.savefig(save_folder+"/split_growth_rate.png", dpi=300)
-plt.savefig(save_folder+"/split_growth_rate.svg", dpi=300)
-plt.savefig(save_folder+"/split_growth_rate.pdf", dpi=300)
+plt.savefig(save_folder+"/SI_Fig_18_split_growth_rate.png", dpi=300)
+plt.savefig(save_folder+"/SI_Fig_18_split_growth_rate.svg", dpi=300)
+plt.savefig(save_folder+"/SI_Fig_18_split_growth_rate.pdf", dpi=300)
 plt.show()
 
 

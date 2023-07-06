@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-This script generates plots for Figure 2, and SI Figures 1 & 2
+This script generates plots for Figure 2, and SI Figures 3 & 4. Note that panel
+H is plotted in its own script, ode_mpc.py
+
+Note that it uses microscopy images for some plots and can not be reproduced 
+from the zenodo archive data only.
 
 Created on Tue Jul 12 16:16:25 2022
 
 @author: jeanbaptiste
 """
+import sys
 import json
 import pickle
 import os
@@ -17,19 +22,23 @@ import tensorflow as tf
 
 import deepcellcontrol as dcc
 
-# Raw datasets path:
-images_raw = "Y:/data/Microscope/jeanbaptiste/deepmpc/trainingsets/"
-
 # Save images to:
-save_folder = "C:/Users/Administrator/jb/deepmpc_paper/figure2/"
+save_folder = "D:/papers/deepmpc/figure2/"
 
-# Trained models:
+# Datasets (zenodo archive)
+datasets_folder = "Z:/data/Microscope/Papers/Lugagne_Blassick_Dunlop_NatComm_2023/datasets/"
+
+# Trained models (zenodo archive):
+models_folder = "Z:/data/Microscope/Papers/Lugagne_Blassick_Dunlop_NatComm_2023/models/"
 model_folder_dict = {
-    12: "Z:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-39_98118f0c-60c8-42a0-b873-6749a2128406",
-    24: "Z:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-35_b0d0b5c3-158d-4476-926b-75b2607d6154",
-    36: "Z:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-35_2d5eec41-ec65-4f75-afb1-f526a2dbbbc0",
-    48: "Z:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/2022-05-07_20-14-35_a9392a1f-6163-49c4-bae0-9e0894d8198f"
+    12: models_folder + "2022-05-07_20-14-39_98118f0c-60c8-42a0-b873-6749a2128406",
+    24: models_folder + "2022-05-07_20-14-35_b0d0b5c3-158d-4476-926b-75b2607d6154",
+    36: models_folder + "2022-05-07_20-14-35_2d5eec41-ec65-4f75-afb1-f526a2dbbbc0",
+    48: models_folder + "2022-05-07_20-14-35_a9392a1f-6163-49c4-bae0-9e0894d8198f"
     }
+
+# Raw microscopy data path (not on zenodo):
+images_raw = "Z:/data/Microscope/jeanbaptiste/deepmpc/trainingsets/"
 
 # Load datasets, model etc:
 def load_model(model_folder):
@@ -37,13 +46,13 @@ def load_model(model_folder):
     with open(model_folder + "/training_parameters.json","r") as f:
         params = json.load(f)
 
-    params["datasets_folder"] = dcc.config.defaults["datasets_folder"]
+    params["datasets_folder"] = datasets_folder
 
     # Load dataset:
     dataset, eval_set = dcc.data.load_datasets(params)
 
     # Load best eval model:
-    model = tf.keras.models.load_model(model_folder + "/model_besteval.hdf5")
+    model = tf.keras.models.load_model(model_folder + "/model.hdf5")
     
     return params, dataset, eval_set, model
 
@@ -61,9 +70,8 @@ for horizon, model_folder in model_folder_dict.items():
 
 #%% Panel A - Kymograph
 # Note: this panel will not work if you do not have access to the raw images 
-# data. Also it requires DeLTA.
+# Note: this panel requires DeLTA to run (commit 8ceb015).
 
-import sys
 sys.path.append("D:/delta")
 import delta
 
@@ -75,7 +83,7 @@ cell_nb = 285
 stims = raw_dataset["stims"][cell_nb]
 interval = 4
 
-# Figure out which pos and roi it is:
+# Figure out which pos and roi correspond to cell_nb:
 experiment = images_raw + os.path.basename(subset["experiment"])
 pos_list = os.listdir(experiment+"/delta_results")
 pos_list.sort()
@@ -160,12 +168,7 @@ plt.figure(figsize=(6, 12), dpi=300)
 plt.subplot(3,1,1)
 
 # Plot stimulations:
-dcc.utilities.OptoPlotBackground(
-    stims,
-    x = x,
-    ymin = 0,
-    ymax = 4095,
-    )
+dcc.utilities.OptoPlotBackground(stims, x = x, ymin = 0, ymax = 4095)
 
 # Plot fluorescence:
 plt.plot(x,raw_dataset["fluo1"][cell_nb],"k",label="Mother")
@@ -290,7 +293,7 @@ plt.show()
 #%% Panel E - 25th percentile
 
 plt.figure()
-prediction_plot(eval_d, rmse_order[25_007])
+prediction_plot(eval_d, rmse_order[25_000])
 plt.savefig(save_folder+"Panel_E_25thperc.png", dpi=300)
 plt.savefig(save_folder+"Panel_E_25thperc.svg", dpi=300)
 plt.show()
@@ -298,59 +301,84 @@ plt.show()
 #%% Panel E - 50th percentile
 
 plt.figure()
-prediction_plot(eval_d, rmse_order[50_012])
+prediction_plot(eval_d, rmse_order[50_000])
 plt.savefig(save_folder+"Panel_E_median.png", dpi=300)
 plt.savefig(save_folder+"Panel_E_median.svg", dpi=300)
 plt.show()
 
 #%% Panel E - 75th percentile
 
-prediction_plot(eval_d, rmse_order[75_002])
+prediction_plot(eval_d, rmse_order[75_000])
 plt.savefig(save_folder+"Panel_E_75thperc.png", dpi=300)
 plt.savefig(save_folder+"Panel_E_75thperc.svg", dpi=300)
 plt.show()
 
-#%% SI Fig 1 - 95th percentile
+#%% SI Fig 3 - 95th percentile
 
 plt.figure(figsize=(8,6))
 for i in range(4):
     plt.subplot(2,2,i+1)
     prediction_plot(eval_d, rmse_order[95_000+i])
-plt.savefig(save_folder+"SI_Fig_95th_perc.png", dpi=300)
-plt.savefig(save_folder+"SI_Fig_95th_perc.svg", dpi=300)
+plt.savefig(save_folder+"SI_Fig_3_95th_perc.png", dpi=300)
+plt.savefig(save_folder+"SI_Fig_3_95th_perc.svg", dpi=300)
 plt.show()
 
 #%% Panel F - Amount of past timeseries data
 
+# Load data:
 params, dataset, eval_set, model = load_model(model_folder_dict[24])
-model.save(save_folder+"/model24.hdf5")
+eval_set.past_steps = 72
+eval_set.batch_size = 100_000
+inputs, groundtruth = next(eval_set)
+groundtruth = groundtruth[:,:,0]*4095
 
-plt.figure()
+# Original LSTM:
+lstmmlp_folder = model_folder_dict[24]
+lstmmlp = tf.keras.models.load_model(lstmmlp_folder+ "/model.hdf5")
 
+# Had to split data into chunks otherwise got OOMs:
+chunks = 10
+past_chunks = np.split(inputs[0], chunks, axis=0)
+stims_chunks = np.split(inputs[1], chunks, axis=0)
+
+# Run through past steps range, evaluate:
 rmse_all = []
-for past_steps in range(1,1+4*12):
+for past_steps in range(1,1+6*12):
     
-    print(past_steps)
-    model = tf.keras.models.load_model(save_folder+"/model24.hdf5")
+    predictions = []
+    for past, stims in zip(past_chunks, stims_chunks):
+        predictions.append(
+            model.predict(
+                [past[:,-past_steps:,:], stims], batch_size=1000
+                )
+            )
+    predictions = np.concatenate(predictions, axis=0)*4095
     
-    eval_set.past_steps = past_steps
-    metrics, eval_d = dcc.timeseries.evaluate(
-        eval_set, model, batch_size=100_000, num_batches = 1, return_eval=True
+    rmse = np.quantile(
+        np.sqrt(np.mean((predictions-groundtruth)**2, axis=1)), [.25, .5, .75]
         )
-    rmse = np.sqrt(np.mean((eval_d["prediction"]-eval_d["groundtruth"])**2))
+        
     rmse_all.append(rmse)
+    
+    print(f"{past_steps}: {rmse}")
+
 
 rmse_all = np.array(rmse_all)
-np.save(save_folder+"past_steps_rmse.npy", rmse_all)
+# np.save(save_folder+"past_steps_rmse.npy", rmse_all)
 
+# Plot:
+plt.figure()
 color = [float(i)/255 for i in [15, 104, 245]]
-x = np.arange(1,1+4*12,1)/12
-plt.plot(x, rmse_all*4095, linewidth=3, color = color)
-plt.grid(which="both", axis="y")
+x = np.arange(1,1+6*12,1)/12
+plt.fill_between(x, rmse_all[:,0], rmse_all[:,2], color=color, alpha=.5)
+plt.plot(x, rmse_all[:,1], linewidth=3, color=color)
+plt.ylim([0,850])
+plt.xlim([0,6])
+# plt.grid(which="both", axis="y")
 plt.xlabel("past (hours)")
 plt.ylabel("Root mean square error (a.u.)")
-plt.savefig(save_folder+"Panel_J.png", dpi=300)
-plt.savefig(save_folder+"Panel_J.svg", dpi=300)
+plt.savefig(save_folder+"Panel_F.png", dpi=300)
+plt.savefig(save_folder+"Panel_F.svg", dpi=300)
 plt.show()
 
 #%% Panel G - RMSE per horizon
@@ -369,9 +397,9 @@ for horizon in model_folder_dict:
     with open(save_folder+f"eval_d_horizon{horizon}.pkl","rb") as f:
         eval_d = pickle.load(f)
 
-    # RMSE over samples:
+    # RMSE across samples:
     rmse = np.sqrt(
-        np.mean(np.square((eval_d["prediction"]-eval_d["groundtruth"])*4095),axis=0)
+        np.mean((eval_d["prediction"]-eval_d["groundtruth"])**2,axis=0)
         )
     # rmse = np.mean(np.abs((eval_d["prediction"]-eval_d["groundtruth"])*4095),axis=0)
     
@@ -379,18 +407,18 @@ for horizon in model_folder_dict:
     
     color = [float(i)/255 for i in colors[horizon]]
     label = f"{int(horizon/12)}-hour"
-    plt.plot(x, rmse, zorder=50-horizon, color = color, linewidth=3, label=label)
+    plt.plot(x, rmse*4095, zorder=50-horizon, color = color, linewidth=3, label=label)
 
 # plt.grid(which="both", axis="both")
 # plt.yscale("log")
 plt.xlabel("Horizon (hours)")
 plt.ylabel("Root mean square error (a.u.)")
 plt.legend(title="Horizon")
-plt.savefig(save_folder+"Panel_I.png", dpi=300)
-plt.savefig(save_folder+"Panel_I.svg", dpi=300)
+plt.savefig(save_folder+"Panel_G.png", dpi=300)
+plt.savefig(save_folder+"Panel_G.svg", dpi=300)
 plt.show()
 
-#%% SI Fig 2 - Other horizons evaluations & RMSEs
+#%% SI Fig 4 - Other horizons evaluations & RMSEs
 
 horizon_list = [12, 36, 48]
 
@@ -436,6 +464,6 @@ for h, horizon in enumerate(horizon_list):
     prediction_plot(eval_d, rmse_order[75_000])
 
 
-plt.savefig(save_folder+"SI_Fig_X_OtherHorizonsEval.png", dpi=300)
-plt.savefig(save_folder+"SI_Fig_X_OtherHorizonsEval.svg", dpi=300)
+plt.savefig(save_folder+"SI_Fig_4_OtherHorizonsEval.png", dpi=300)
+plt.savefig(save_folder+"SI_Fig_4_OtherHorizonsEval.svg", dpi=300)
 plt.show()

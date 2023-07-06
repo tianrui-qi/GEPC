@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-This script generates plots for Figure 3, SI Figs 3-6, and Movies S1 and S2
+This script generates plots for Figure 3, SI Figs 9 & 10-13, and Movies S1 and S2
+
+Some of the plots can only be generated with access to raw microscopy image data
+that is not on the zenodo archive.
 
 Created on Tue Jul 12 16:16:25 2022
 
@@ -8,6 +11,7 @@ Created on Tue Jul 12 16:16:25 2022
 """
 import pickle
 import os
+import sys
 
 import numpy as np
 import cv2
@@ -17,15 +21,17 @@ import tensorflow as tf
 
 import deepcellcontrol as dcc
 
-# experiments path:
-experiments = "Z:/data/Microscope/jeanbaptiste/deepmpc/control/"
-horizon_exp = experiments+"2022-05-07_DeepMPC_horizons_tests/"
+# Experiments (zenodo archive)
+experiments_folder = "Z:/data/Microscope/Papers/Lugagne_Blassick_Dunlop_NatComm_2023/experiments/"
 
-# Folder with all trained models:
-models_scc = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/"
+# Trained models (zenodo archive):
+models_folder = "Z:/data/Microscope/Papers/Lugagne_Blassick_Dunlop_NatComm_2023/models/"
+
+# Raw microscopy images (not on zenodo):
+raw_data = "Z:/data/Microscope/jeanbaptiste/deepmpc/control/"
 
 # Save images to:
-save_folder = "D:/deepmpc_paper/figure3/"
+save_folder = "D:/papers/deepmpc/figure3/"
 
 def load_cells(mothers, partition):
     #Load cells belonging to one of the 12h, 24h, 36h, 48h horizion partitions
@@ -45,6 +51,7 @@ def load_cells(mothers, partition):
 
 #%% Load Horizons test experiment
 
+horizon_exp = experiments_folder+"2022-05-07_DeepMPC_horizons_tests/"
 with open(horizon_exp+"mothers.pkl", "rb") as f:
     mothers = pickle.load(f)
     
@@ -54,7 +61,7 @@ with open(horizon_exp+"positions_partitioning.pkl", "rb") as f:
 with open(horizon_exp+"controller_model_folders.pkl", "rb") as f:
     model_folders = pickle.load(f)
 for k, v in model_folders.items():
-    model_folders[k] = models_scc + os.path.basename(v)
+    model_folders[k] = models_folder + os.path.basename(v)
 
 #%% Panel A - DeepMPC illustration 3 strategies
 
@@ -165,7 +172,7 @@ for _ in range(25):
         verbose=1, batch_size=2000
         )
 
-#%% SI Fig. 3 - bPSO evaluation
+#%% SI Fig. 9 - bPSO evaluation
 import os
 import time
 
@@ -183,11 +190,8 @@ oneshot_bitdiff = {}
 particles_nbs = [2, 5, 10, 20, 40, 60, 100]
 iteration_nbs = [1, 2, 5, 10, 25, 50, 100]
 
-# particles_nbs = [10, 20, 40]
-# iteration_nbs = [1, 10, 25]
 
 for horizon in [12, 24, 36, 48]:
-# for horizon in [24]:
     
     rmse[horizon] = {}
     timing[horizon] = {}
@@ -272,7 +276,7 @@ for horizon in [12, 24, 36, 48]:
         np.sqrt(np.mean((predictions-objectives)**2, axis=1))
     )
 
-#%% Plot the results:
+#%% Plot the bPSO results:
 plt.figure(figsize=(8,12), dpi=300)
 for h, horizon in enumerate([12, 24, 36, 48]):
     
@@ -317,9 +321,9 @@ for h, horizon in enumerate([12, 24, 36, 48]):
     plt.xlim(xl)
 
 
-plt.savefig(save_folder+"SI_Fig_XX_bPSOeval.png", dpi=300)
-plt.savefig(save_folder+"SI_Fig_XX_bPSOeval.svg", dpi=300)
-plt.savefig(save_folder+"SI_Fig_XX_bPSOeval.pdf", dpi=300)
+plt.savefig(save_folder+"SI_Fig_9_bPSOeval.png", dpi=300)
+plt.savefig(save_folder+"SI_Fig_9_bPSOeval.svg", dpi=300)
+plt.savefig(save_folder+"SI_Fig_9_bPSOeval.pdf", dpi=300)
 plt.show()
 
 #%% Panel B - Control Population
@@ -339,7 +343,6 @@ plt.xlabel("Time (hours)")
 plt.xlim([x[0], x[-1]])
 plt.xticks(ticks=np.arange(0,x[-1],2,dtype=int))
 plt.ylim(0, 2500)
-plt.legend()
 
 plt.savefig(save_folder+"Panel_B_controlpop.png", dpi=300)
 plt.savefig(save_folder+"Panel_B_controlpop.svg", dpi=300)
@@ -397,9 +400,10 @@ plt.savefig(save_folder+"Panel_C_controlsingle.pdf", dpi=300)
 plt.show()
 
 #%% SI Movie 1 - Pre-load single cell fluo movies
+# Note: this will not work if you do not have access to the raw images 
+# Note: this requires DeLTA to run (commit 8ceb015).
 
-import sys
-sys.path.append("C:/Users/Administrator/jb/delta")
+sys.path.append("D:/delta")
 import delta
 
 # Necessary on some systems:
@@ -414,13 +418,15 @@ for c in range(3):
 
     cell_nb = rmse_order[int((c+1)*len(rmse_order)/4)]
     
+    raw_xpf = raw_data + os.path.basename(os.path.normpath(horizon_exp))
+    
     with open(horizon_exp+"/roi_boxes.pkl","rb") as f:
         roi_boxes = pickle.load(f)
     seg_model = tf.keras.models.load_model(horizon_exp+"/delta_segmentation.hdf5")
     
     pos_nb, roi_nb = global_nb[:, cell_nb]
     pos = delta.pipeline.load_position(
-        horizon_exp+f"/delta_positions/Pos{pos_nb:06d}.pkl"
+        raw_xpf+f"/delta_positions/Pos{pos_nb:06d}.pkl"
         )
     
     # Load images:
@@ -428,11 +434,11 @@ for c in range(3):
     fluo_stack = []
     for f in range(0, cutoff):
         img_stack += [cv2.imread(
-            horizon_exp+f"/pos{pos_nb+1:04d}/chan01_frame{f+1:06d}.tif",
+            raw_xpf+f"/pos{pos_nb+1:04d}/chan01_frame{f+1:06d}.tif",
             cv2.IMREAD_ANYDEPTH
             )]
         fluo_stack += [cv2.imread(
-            horizon_exp+f"/pos{pos_nb+1:04d}/chan02_frame{f+1:06d}.tif",
+            raw_xpf+f"/pos{pos_nb+1:04d}/chan02_frame{f+1:06d}.tif",
             cv2.IMREAD_ANYDEPTH
             )]
         print(f)
@@ -623,7 +629,7 @@ for X in compiled:
 import delta
 delta.utilities.vidwrite(res, save_folder + "SI_movie_1_unroll_twittercut.mp4", crf=20)
 
-#%% SI Fig. 4 - Other horizons control resuts plots
+#%% SI Fig. 10 - Other horizons control resuts plots
 
 plt.figure(figsize=(18,12), dpi=300)
 
@@ -685,13 +691,13 @@ for h, horizon in enumerate([12, 36, 48]):
     plt.ylim(0, 3)
 
 
-plt.savefig(save_folder+"SI_Fig_4_OtherHorizonsControl.png", dpi=300)
-plt.savefig(save_folder+"SI_Fig_4_OtherHorizonsControl.svg", dpi=300)
-plt.savefig(save_folder+"SI_Fig_4_OtherHorizonsControl.pdf", dpi=300)
+plt.savefig(save_folder+"SI_Fig_10_OtherHorizonsControl.png", dpi=300)
+plt.savefig(save_folder+"SI_Fig_10_OtherHorizonsControl.svg", dpi=300)
+plt.savefig(save_folder+"SI_Fig_10_OtherHorizonsControl.pdf", dpi=300)
 
 plt.show()
 
-#%% SI Fig. 5 - Horizons RMSE over time
+#%% SI Fig. 11 - Horizons RMSE over time
 
 cutoff = 228
 x = np.arange(0, cutoff, 1)/12
@@ -724,13 +730,13 @@ plt.xticks(ticks=np.arange(0,x[-1],2,dtype=int))
 plt.grid(which="both", axis="y")
 plt.legend(title="Horizon")
 
-plt.savefig(save_folder+"SI_Fig_5_RMSEtime.png", dpi=300)
-plt.savefig(save_folder+"SI_Fig_5_RMSEtime.svg", dpi=300)
-plt.savefig(save_folder+"SI_Fig_5_RMSEtime.pdf", dpi=300)
+plt.savefig(save_folder+"SI_Fig_11_RMSEtime.png", dpi=300)
+plt.savefig(save_folder+"SI_Fig_11_RMSEtime.svg", dpi=300)
+plt.savefig(save_folder+"SI_Fig_11_RMSEtime.pdf", dpi=300)
 
 plt.show()
 
-#%% SI Fig. 6 - Horizons RMSE distribution
+#%% SI Fig. 12 - Horizons RMSE distribution
 
 plt.figure()
 
@@ -785,9 +791,9 @@ plt.grid(which="both", axis="y")
 plt.xlabel("Horizon (hours)")
 plt.ylabel("Root mean square error (a.u.)")
 
-plt.savefig(save_folder+"SI_Fig_6_RMSEdistros.png", dpi=300)
-plt.savefig(save_folder+"SI_Fig_6_RMSEdistros.svg", dpi=300)
-plt.savefig(save_folder+"SI_Fig_6_RMSEdistros.pdf", dpi=300)
+plt.savefig(save_folder+"SI_Fig_12_RMSEdistros.png", dpi=300)
+plt.savefig(save_folder+"SI_Fig_12_RMSEdistros.svg", dpi=300)
+plt.savefig(save_folder+"SI_Fig_12_RMSEdistros.pdf", dpi=300)
 
 plt.show()
 
@@ -796,9 +802,9 @@ plt.show()
 movie_shape = (100,100)
 cutoff = 19*12
 movie_folders = (
-    experiments + "2022-05-09_DeepMPC_sinemovie_1",
-    experiments + "2022-05-11_DeepMPC_sinemovie_2",
-    experiments + "2022-05-24_DeepMPC_sinemovie_3"
+    experiments_folder + "2022-05-09_DeepMPC_sinemovie_1",
+    experiments_folder + "2022-05-11_DeepMPC_sinemovie_2",
+    experiments_folder + "2022-05-24_DeepMPC_sinemovie_3"
     )
 
 # Load data:
@@ -901,185 +907,11 @@ plt.savefig(save_folder+"Panel_E_cells.pdf", dpi=300, bbox_inches='tight')
 cv2.imwrite(save_folder+"Panel_E_cells.tif", cells_kymograph[:,:,::-1])
 plt.show()
 
-#%% SI Fig. 13 - Panels A & B - Error and inputs kymographs + Distributions
-
-def color_hist(values, bins, colors):
-    
-    hist, edges = np.histogram(values, bins=bins)
-    hist = hist.astype(float)
-    hist /= max(hist)
-    for h, v in enumerate(hist):
-        plt.fill_between(
-            edges[h:h+2], [v, v], facecolor=colors[h], edgecolor=None
-            )
-
-error_kymograph = []
-inputs_kymograph = []
-inputs_frame = np.zeros((100,100,3), dtype=np.uint8)
-error_frame = np.zeros((100,100,3), dtype=np.uint8)
-ermap = cm.get_cmap("magma")
-error_comp = lambda I: (np.log10(np.abs(I))-np.log10(10))/(np.log10(1000)-np.log10(10))
-# error_comp = lambda I: (np.abs(I)-20)/(1000-20)
-for f in frame_nbs:
-    error = error_comp(whole_movie[:,:,f]-obj_movie[:,:,f])
-    error = np.clip(error, 0, 1)
-    error = ermap(error)[:,:,:3]
-    error_kymograph.append(error.copy())
-    
-    inputs_frame[:] = 0
-    inputs_frame[:,:,1][inputs_movie[:,:,f]>0.5] = 255
-    inputs_frame[:,:,0][inputs_movie[:,:,f]<0.5] = 255
-    inputs_kymograph.append(inputs_frame.copy())
-    
-    
-    bins = np.logspace(np.log10(.1), np.log10(4095), 30, base=10)
-    colors = [ermap(error_comp(b)) for b in bins]
-    color_hist(np.abs(whole_movie[:,:,f]-obj_movie[:,:,f]).flatten(), bins, colors)
-    plt.xscale("log")
-    plt.xlim([1,4095])
-    plt.ylim([0, 1.1])
-    plt.savefig(
-        save_folder+f"SI_Fig_X_sinewaves_dist{f:03d}.svg", 
-        dpi=300, 
-        bbox_inches='tight'
-        )
-    plt.show()
-
-error_kymograph[0][:] = 0
-# Concatenate kymographs into strips
-inputs_kymograph = np.concatenate(inputs_kymograph, axis=1)
-error_kymograph = np.concatenate(error_kymograph, axis=1)
-inputs_kymograph = (inputs_kymograph).astype(np.uint8)
-error_kymograph = (error_kymograph*255).astype(np.uint8)
-cv2.imwrite(save_folder+"SI_Fig_X_sinewaves_kymograph_error.tif", error_kymograph[:,:,::-1])
-cv2.imwrite(save_folder+"SI_Fig_X_sinewaves_kymograph_inputs.tif", inputs_kymograph[:,:,::-1])
-
-
-plt.imshow(error_kymograph, cmap=ermap)
-ticks = list(range(10,100,10)) + list(range(100,1000,100)) + [995]
-ticks = [255*error_comp(x) for x in ticks]
-labels = ["10"] + [""]*8 + ["100"] + [""]*8 + ["1000"]
-cbar = plt.colorbar(extend="both")
-cbar.set_ticks(ticks)
-cbar.set_ticklabels(labels)
-plt.savefig(save_folder+f"SI_Fig_X_sinewaves_colormap.svg", dpi=300)
-plt.show()
-
-#%% SI Fig. 13 - Panels C, D, E - Error timecourses
-
-x = np.arange(228,)/12
-
-plt.subplot(3,1,1)
-av_obj = np.mean(obj_movie,axis=(0,1))
-av_obj[:36] = np.nan
-plt.plot(x, av_obj, "k")
-plt.xlim([0,227/12])
-plt.ylim([0,2000])
-plt.xticks(list(range(0,20,2)))
-
-plt.subplot(3,1,2)
-abs_error = np.abs((whole_movie-obj_movie)).reshape(-1,228)
-abs_error[:,:36] = np.nan
-dcc.utilities.plotq(abs_error, color="purple")
-rmse = np.sqrt(np.mean((abs_error)**2,axis=0))
-rmse[:36] = np.nan
-plt.plot(x,rmse)
-mae = np.mean(abs_error,axis=0)
-mae[:36] = np.nan
-plt.plot(x,mae)
-plt.xlim([0,227/12])
-plt.xticks(list(range(0,20,2)))
-
-plt.subplot(3,1,3)
-plt.fill_between([0,227/12], [1,1], facecolor=[0,1,0])
-av_inputs = np.mean(inputs_movie,axis=(0,1))
-plt.fill_between(x, 1-av_inputs, facecolor=[1,0,0], edgecolor=None)
-plt.xlim([0,227/12])
-plt.ylim([0,1])
-plt.xticks(list(range(0,20,2)))
-
-plt.savefig(save_folder+f"SI_Fig_X_sinewaves_timecourses.svg", dpi=300)
-
-#%% SI Fig. 13 - Panel F - Gaussian Kernel Density Error v Objective
-
-import numpy as np
-from scipy.stats import gaussian_kde
-
-x = obj_movie[:,:,72:].flatten()
-y = abs_error[:,72:].flatten()
-
-# Downsample otherwise it takes ages:
-x = x[::10]
-y = np.log10(y[::10])
-
-k = gaussian_kde(np.vstack([x, y]))
-xi, yi = np.mgrid[x.min():x.max():x.size**0.5*1j,0:np.log10(4095):y.size**0.5*1j]
-zi = k(np.vstack([xi.flatten(), yi.flatten()]))
-
-# Plot
-ticks = list(range(1,10,1)) + list(range(10,100,10)) + list(range(100,1000,100)) + list(range(1000,4095,1000))
-ticks = [np.log10(x) for x in ticks]
-labels = [""]*9 + ["10"] + [""]*8 + ["100"] + [""]*8 + ["1000"] + [""]*3
-plt.contourf(xi, yi, zi.reshape(xi.shape))
-plt.yticks(ticks, labels)
-plt.ylim(1,np.log10(2000))
-plt.colorbar()
-plt.savefig(save_folder+f"SI_Fig_X_sinewaves_KDEerror.svg", dpi=300)
-
-#%% SI Fig. 13 - Panel G - Error v Phase
-
-# Compute phase
-phase = np.zeros((100, 100, 228-36))
-for i in range(100):
-    for j in range(100):
-        lower = next((k for k,x in enumerate(obj_movie[i,j,36:]) if x<=1250))
-        cross  = next((k for k,x in enumerate(obj_movie[i,j,36+lower:]) if x>1250))
-        delay = 1-(lower+cross)*5/(8*60)
-        phase[i,j,:] = delay + np.arange(0,228-36)*5/(8*60)
-phase = np.mod(phase,1)
-
-x = phase[:,:,37:].flatten()
-y = abs_error[:,73:].flatten()
-edges = np.linspace(0, 1, 50)
-
-# Compute error per phase bin:
-error_dist = []
-rmse_dist = []
-mean_dist = []
-for e in range(len(edges)-1):
-    emin, emax = edges[e:e+2]
-    mask = np.logical_and(x>=emin, x<emax)
-    yy = y[mask]
-    
-    error_dist.append(np.quantile(yy, q=[.25,.5,.75]))
-    mean_dist.append(np.mean(yy))
-    rmse_dist.append(np.sqrt(np.mean(yy**2)))
-
-# Plot:
-fig, ax1 = plt.subplots()
-ax2 = ax1.twinx()
-ax2.plot(np.linspace(0,1,100), 750*np.sin(np.linspace(0,1,100)*2*np.pi)+1250, "k", zorder = -100)
-ax1.plot(edges[:-1],[i[1] for i in error_dist], color="purple")
-ax1.fill_between(
-    edges[:-1],
-    [i[0] for i in error_dist],
-    [i[2] for i in error_dist],
-    color="purple",
-    alpha=.2,
-    )
-ax1.plot(edges[:-1], mean_dist, color="orange")
-ax1.plot(edges[:-1], rmse_dist, color="blue")
-plt.xticks(np.arange(0,1,.25))
-plt.xlim([0,1])
-plt.savefig(save_folder+f"SI_Fig_X_sinewaves_phase.svg", dpi=300)
-plt.show()
-
 #%% Panel E&F - Single cell kymograph and trajectory plots
 # Note: this panel will not work if you do not have access to the raw images 
-# data. Also it requires DeLTA.
+# Note: this panel requires DeLTA to run (commit 8ceb015).
 
-import sys
-sys.path.append("C:/Users/Administrator/jb/delta")
+sys.path.append("D:/delta")
 import delta
 
 # Necessary on some systems:
@@ -1101,6 +933,7 @@ for c, pix in enumerate(cell_ind):
     local_obj = np.load(xpf + "/local_objectives.npy")
     xp_cells_fluo = np.load(xpf + "/cells_fluo.npy")
     xp_cells_stims = np.load(xpf + "/cells_stims.npy")
+    raw_xpf = raw_data + os.path.basename(os.path.normpath(xpf))
     
     with open(xpf+"/roi_boxes.pkl","rb") as f:
         roi_boxes = pickle.load(f)
@@ -1148,7 +981,7 @@ for c, pix in enumerate(cell_ind):
                 _cell += 1
             total_pos+=1
     pos = delta.pipeline.load_position(
-        xpf+f"/delta_positions/Pos{pos_nb:06d}.pkl"
+        raw_xpf+f"/delta_positions/Pos{pos_nb:06d}.pkl"
         )
     
     # Load images:
@@ -1156,11 +989,11 @@ for c, pix in enumerate(cell_ind):
     fluo_stack = []
     for f in range(0, cutoff, interval):
         img_stack += [cv2.imread(
-            xpf+f"/pos{pos_nb+1:04d}/chan01_frame{f+1:06d}.tif",
+            raw_xpf+f"/pos{pos_nb+1:04d}/chan01_frame{f+1:06d}.tif",
             cv2.IMREAD_ANYDEPTH
             )]
         fluo_stack += [cv2.imread(
-            xpf+f"/pos{pos_nb+1:04d}/chan02_frame{f+1:06d}.tif",
+            raw_xpf+f"/pos{pos_nb+1:04d}/chan02_frame{f+1:06d}.tif",
             cv2.IMREAD_ANYDEPTH
             )]
         print(f)
@@ -1217,10 +1050,179 @@ for c, pix in enumerate(cell_ind):
         save_folder+f"Panel_{panels[c]}_kymograph.tif", kymograph[:,:,::-1]
         )
 
-#%% SI Movie 2 - Pre-load cell movies
+#%% SI Fig. 13 - Panels A & B - Error and inputs kymographs + Distributions
 
-import sys
-sys.path.append("C:/Users/Administrator/jb/delta")
+def color_hist(values, bins, colors):
+    
+    hist, edges = np.histogram(values, bins=bins)
+    hist = hist.astype(float)
+    hist /= max(hist)
+    for h, v in enumerate(hist):
+        plt.fill_between(
+            edges[h:h+2], [v, v], facecolor=colors[h], edgecolor=None
+            )
+
+error_kymograph = []
+inputs_kymograph = []
+inputs_frame = np.zeros((100,100,3), dtype=np.uint8)
+error_frame = np.zeros((100,100,3), dtype=np.uint8)
+ermap = cm.get_cmap("magma")
+error_comp = lambda I: (np.log10(np.abs(I))-np.log10(10))/(np.log10(1000)-np.log10(10))
+# error_comp = lambda I: (np.abs(I)-20)/(1000-20)
+for f in frame_nbs:
+    error = error_comp(whole_movie[:,:,f]-obj_movie[:,:,f])
+    error = np.clip(error, 0, 1)
+    error = ermap(error)[:,:,:3]
+    error_kymograph.append(error.copy())
+    
+    inputs_frame[:] = 0
+    inputs_frame[:,:,1][inputs_movie[:,:,f]>0.5] = 255
+    inputs_frame[:,:,0][inputs_movie[:,:,f]<0.5] = 255
+    inputs_kymograph.append(inputs_frame.copy())
+    
+    
+    bins = np.logspace(np.log10(.1), np.log10(4095), 30, base=10)
+    colors = [ermap(error_comp(b)) for b in bins]
+    color_hist(np.abs(whole_movie[:,:,f]-obj_movie[:,:,f]).flatten(), bins, colors)
+    plt.xscale("log")
+    plt.xlim([1,4095])
+    plt.ylim([0, 1.1])
+    plt.savefig(
+        save_folder+f"SI_Fig_13_sinewaves_dist{f:03d}.svg", 
+        dpi=300, 
+        bbox_inches='tight'
+        )
+    plt.show()
+
+error_kymograph[0][:] = 0
+# Concatenate kymographs into strips
+inputs_kymograph = np.concatenate(inputs_kymograph, axis=1)
+error_kymograph = np.concatenate(error_kymograph, axis=1)
+inputs_kymograph = (inputs_kymograph).astype(np.uint8)
+error_kymograph = (error_kymograph*255).astype(np.uint8)
+cv2.imwrite(save_folder+"SI_Fig_13_sinewaves_kymograph_error.tif", error_kymograph[:,:,::-1])
+cv2.imwrite(save_folder+"SI_Fig_13_sinewaves_kymograph_inputs.tif", inputs_kymograph[:,:,::-1])
+
+
+plt.imshow(error_kymograph, cmap=ermap)
+ticks = list(range(10,100,10)) + list(range(100,1000,100)) + [995]
+ticks = [255*error_comp(x) for x in ticks]
+labels = ["10"] + [""]*8 + ["100"] + [""]*8 + ["1000"]
+cbar = plt.colorbar(extend="both")
+cbar.set_ticks(ticks)
+cbar.set_ticklabels(labels)
+plt.savefig(save_folder+f"SI_Fig_13_sinewaves_colormap.svg", dpi=300)
+plt.show()
+
+#%% Panel G - Error timecourses
+
+x = np.arange(228,)/12
+
+plt.subplot(2,1,1)
+av_obj = np.mean(obj_movie,axis=(0,1))
+av_obj[:36] = np.nan
+plt.plot(x, av_obj, "k--")
+abs_error = np.abs((whole_movie-obj_movie)).reshape(-1,228)
+abs_error[:,:36] = np.nan
+dcc.utilities.plotq(abs_error, color="purple")
+rmse = np.sqrt(np.mean((abs_error)**2,axis=0))
+rmse[:36] = np.nan
+plt.plot(x,rmse)
+mae = np.mean(abs_error,axis=0)
+mae[:36] = np.nan
+plt.plot(x,mae)
+plt.xlim([0,227/12])
+plt.xticks(list(range(0,20,2)))
+
+plt.subplot(2,1,2)
+plt.fill_between([0,227/12], [1,1], facecolor=[0,1,0])
+av_inputs = np.mean(inputs_movie,axis=(0,1))
+plt.fill_between(x, 1-av_inputs, facecolor=[1,0,0], edgecolor=None)
+plt.xlim([0,227/12])
+plt.ylim([0,1])
+plt.xticks(list(range(0,20,2)))
+
+plt.savefig(save_folder+f"Panel_G_sinewaves_timecourses.svg", dpi=300)
+
+#%% SI Fig. 13 - Panel C - Gaussian Kernel Density Error v Objective
+
+import numpy as np
+from scipy.stats import gaussian_kde
+
+x = obj_movie[:,:,72:].flatten()
+y = abs_error[:,72:].flatten()
+
+# Downsample otherwise it takes ages:
+x = x[::10]
+y = np.log10(y[::10])
+
+k = gaussian_kde(np.vstack([x, y]))
+xi, yi = np.mgrid[x.min():x.max():x.size**0.5*1j,0:np.log10(4095):y.size**0.5*1j]
+zi = k(np.vstack([xi.flatten(), yi.flatten()]))
+
+# Plot
+ticks = list(range(1,10,1)) + list(range(10,100,10)) + list(range(100,1000,100)) + list(range(1000,4095,1000))
+ticks = [np.log10(x) for x in ticks]
+labels = [""]*9 + ["10"] + [""]*8 + ["100"] + [""]*8 + ["1000"] + [""]*3
+plt.contourf(xi, yi, zi.reshape(xi.shape))
+plt.yticks(ticks, labels)
+plt.ylim(1,np.log10(2000))
+plt.colorbar()
+plt.savefig(save_folder+f"SI_Fig_13_sinewaves_KDEerror.svg", dpi=300)
+
+#%% SI Fig. 13 - Panel D - Error v Phase
+
+# Compute phase
+phase = np.zeros((100, 100, 228-36))
+for i in range(100):
+    for j in range(100):
+        lower = next((k for k,x in enumerate(obj_movie[i,j,36:]) if x<=1250))
+        cross  = next((k for k,x in enumerate(obj_movie[i,j,36+lower:]) if x>1250))
+        delay = 1-(lower+cross)*5/(8*60)
+        phase[i,j,:] = delay + np.arange(0,228-36)*5/(8*60)
+phase = np.mod(phase,1)
+
+x = phase[:,:,37:].flatten()
+y = abs_error[:,73:].flatten()
+edges = np.linspace(0, 1, 50)
+
+# Compute error per phase bin:
+error_dist = []
+rmse_dist = []
+mean_dist = []
+for e in range(len(edges)-1):
+    emin, emax = edges[e:e+2]
+    mask = np.logical_and(x>=emin, x<emax)
+    yy = y[mask]
+    
+    error_dist.append(np.quantile(yy, q=[.25,.5,.75]))
+    mean_dist.append(np.mean(yy))
+    rmse_dist.append(np.sqrt(np.mean(yy**2)))
+
+# Plot:
+fig, ax1 = plt.subplots()
+ax2 = ax1.twinx()
+ax2.plot(np.linspace(0,1,100), 750*np.sin(np.linspace(0,1,100)*2*np.pi)+1250, "k", zorder = -100)
+ax1.plot(edges[:-1],[i[1] for i in error_dist], color="purple")
+ax1.fill_between(
+    edges[:-1],
+    [i[0] for i in error_dist],
+    [i[2] for i in error_dist],
+    color="purple",
+    alpha=.2,
+    )
+ax1.plot(edges[:-1], mean_dist, color="orange")
+ax1.plot(edges[:-1], rmse_dist, color="blue")
+plt.xticks(np.arange(0,1,.25))
+plt.xlim([0,1])
+plt.savefig(save_folder+f"SI_Fig_13_sinewaves_phase.svg", dpi=300)
+plt.show()
+
+#%% SI Movie 2 - Pre-load cell movies
+# Note: this will not work if you do not have access to the raw images 
+# Note: this requires DeLTA to run (commit 8ceb015).
+
+sys.path.append("D:/delta")
 import delta
 
 import os
@@ -1244,6 +1246,7 @@ for c, pix in enumerate(cell_ind):
     local_obj = np.load(xpf + "/local_objectives.npy")
     xp_cells_fluo = np.load(xpf + "/cells_fluo.npy")
     xp_cells_stims = np.load(xpf + "/cells_stims.npy")
+    raw_xpf = raw_data + os.path.basename(os.path.normpath(xpf))
     
     cell_data[c]["stims"] = xp_cells_stims[cell_nb]
     cell_data[c]["fluo"] = xp_cells_fluo[cell_nb]
@@ -1273,11 +1276,11 @@ for c, pix in enumerate(cell_ind):
     fluo_stack = []
     for f in range(0, cutoff):
         img_stack += [cv2.imread(
-            xpf+f"/pos{pos_nb+1:04d}/chan01_frame{f+1:06d}.tif",
+            raw_xpf+f"/pos{pos_nb+1:04d}/chan01_frame{f+1:06d}.tif",
             cv2.IMREAD_ANYDEPTH
             )]
         fluo_stack += [cv2.imread(
-            xpf+f"/pos{pos_nb+1:04d}/chan02_frame{f+1:06d}.tif",
+            raw_xpf+f"/pos{pos_nb+1:04d}/chan02_frame{f+1:06d}.tif",
             cv2.IMREAD_ANYDEPTH
             )]
         print(f)

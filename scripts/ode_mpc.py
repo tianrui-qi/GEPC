@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Script for evaluation of ODE-based forecasting. Specifically, Fig. S7, S8 are
-plotted here.
+Script for evaluation of ODE-based forecasting. Specifically, Fig 1H and S7, S8
+are plotted here.
 
 Created on Fri Apr 28 16:50:03 2023
 
@@ -22,9 +22,14 @@ import tensorflow.keras
 
 import deepcellcontrol as dcc
 
-datasets_folder = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/data/"
-models_folder = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/"
-figures_folder = "D:/deepmpc_paper/revisions/"
+# Datasets (zenodo archive)
+datasets_folder = "Z:/data/Microscope/Papers/Lugagne_Blassick_Dunlop_NatComm_2023/datasets/"
+
+# Trained models (zenodo archive):
+models_folder = "Z:/data/Microscope/Papers/Lugagne_Blassick_Dunlop_NatComm_2023/models/"
+
+# Save images to:
+save_folder = "D:/papers/deepmpc/revisions/"
 
 SAMPLING = 5
 
@@ -463,7 +468,7 @@ class ODEModel():
 
 model = ODEModel()
 model.fit(training_set)
-model.save(figures_folder + "/fitted_ode_model.json")
+model.save(save_folder + "/fitted_ode_model.json")
 
 #%% Evaluate performance for different filtering parameters
 
@@ -481,7 +486,7 @@ for technical_noise in technical_noise_values:
     for h1h2 in h1h2_factors:
         
         model = ODEModel()
-        model.load(figures_folder + "/fitted_ode_model.json")
+        model.load(save_folder + "/fitted_ode_model.json")
         
         model.technical_noise = technical_noise
         model.fixed_params["h1"] *= h1h2
@@ -509,7 +514,7 @@ for technical_noise in technical_noise_values:
     for h1h2 in h1h2_factors:
         
         model = ODEModel()
-        # model.load(figures_folder + "/fitted_ode_model.json")
+        # model.load(save_folder + "/fitted_ode_model.json")
         
         model.technical_noise = technical_noise
         model.fixed_params["h1"] *= h1h2
@@ -532,13 +537,13 @@ for technical_noise in technical_noise_values:
         print(f"R: {technical_noise}, h1h2: {h1h2}, RMSE: {np.mean(rmse)}")
 
 #Save results to disk:
-with open(figures_folder + "/ODE_noiseh1h2_records_fitted.pkl", "wb") as f:
+with open(save_folder + "/ODE_noiseh1h2_records_fitted.pkl", "wb") as f:
     pickle.dump(records_fitted, f)
 
-with open(figures_folder + "/ODE_noiseh1h2_records_chait.pkl", "wb") as f:
+with open(save_folder + "/ODE_noiseh1h2_records_chait.pkl", "wb") as f:
     pickle.dump(records_chait, f)
 
-with open(figures_folder + "/ODE_noiseh1h2_inputs.pkl", "wb") as f:
+with open(save_folder + "/ODE_noiseh1h2_inputs.pkl", "wb") as f:
     pickle.dump({"inputs": inputs, "groundtruth": groundtruth}, f)
     
 #%% Plot tables S3 & S4:
@@ -568,9 +573,9 @@ plt.table(
     )
 plt.axis("off")
 plt.axis("tight")
-plt.savefig(figures_folder + "/ODE_h1h2_records_chait.png", dpi=300)
-plt.savefig(figures_folder + "/ODE_h1h2_records_chait.svg", dpi=300)
-plt.savefig(figures_folder + "/ODE_h1h2_records_chait.pdf", dpi=300)
+plt.savefig(save_folder + "/ODE_h1h2_records_chait.png", dpi=300)
+plt.savefig(save_folder + "/ODE_h1h2_records_chait.svg", dpi=300)
+plt.savefig(save_folder + "/ODE_h1h2_records_chait.pdf", dpi=300)
 plt.show()
 # plt.axis("image")
 
@@ -580,7 +585,7 @@ technical_noise = 1e1
 h1h2 = 1e-4
 
 model = ODEModel()
-model.load(figures_folder + "/fitted_ode_model.json")
+model.load(save_folder + "/fitted_ode_model.json")
 
 model.technical_noise = technical_noise
 model.fixed_params["h1"] *= h1h2
@@ -622,7 +627,7 @@ for hparams in hyper_params:
     h1h2 = hparams["h1h2"]
     
     model = ODEModel()
-    model.load(figures_folder + "/fitted_ode_model.json")
+    model.load(save_folder + "/fitted_ode_model.json")
     
     model.technical_noise = technical_noise
     model.fixed_params["h1"] *= h1h2
@@ -644,10 +649,10 @@ for hparams in hyper_params:
         )
     print(f"R: {technical_noise}, h1h2: {h1h2}, RMSE: {np.mean(rmse)}")
 
-with open(figures_folder + "/ODE_final_eval_inputs.pkl", "wb") as f:
+with open(save_folder + "/ODE_final_eval_inputs.pkl", "wb") as f:
     pickle.dump({"inputs": inputs, "groundtruth": groundtruth}, f)
 
-with open(figures_folder + "/ODE_final_eval_records.pkl", "wb") as f:
+with open(save_folder + "/ODE_final_eval_records.pkl", "wb") as f:
     pickle.dump(records_final, f)
 
 for record in records_final:
@@ -655,7 +660,7 @@ for record in records_final:
 
 #%% Evaluate for LSTM-MLP & Linear regression model:
 
-with open(figures_folder + "/ODE_final_eval_inputs.pkl", "rb") as f:
+with open(save_folder + "/ODE_final_eval_inputs.pkl", "rb") as f:
     data = pickle.load(f)
     inputs = data["inputs"]
     groundtruth = data["groundtruth"]
@@ -698,23 +703,23 @@ print(np.median(linear_rmse))
 
 #%% Plot Median RMSE and timing (Fig. S7):
 
-with open(figures_folder + "/ODE_final_eval_records.pkl", "rb") as f:
+with open(save_folder + "/ODE_final_eval_records.pkl", "rb") as f:
     records_final = pickle.load(f)
 
 plt.figure(dpi=300)
 plt.bar(0, np.median(linear_rmse), color="orange", edgecolor="k")
 for r, record in enumerate(records_final):
     plt.bar(2+r, np.median(record["rmse"]), color="purple", edgecolor="k")
-    plt.bar(6, np.median(lstmmlp_rmse), color="green", edgecolor="k")
+plt.bar(6, np.median(lstmmlp_rmse), color="blue", edgecolor="k")
 plt.ylabel("Root mean square error")
 plt.xticks(
     ticks = [0, 3, 6],
     labels = ["Linear\nregression", "ODE models", "Our model"]
     )
 figname = f"Models_comparison_RMSE"
-plt.savefig(figures_folder + figname + ".png", dpi=300)
-plt.savefig(figures_folder + figname + ".svg", dpi=300)
-plt.savefig(figures_folder + figname + ".pdf", dpi=300)
+plt.savefig(save_folder + figname + ".png", dpi=300)
+plt.savefig(save_folder + figname + ".svg", dpi=300)
+plt.savefig(save_folder + figname + ".pdf", dpi=300)
 plt.show()
 
 plt.figure(dpi=300)
@@ -722,8 +727,8 @@ plt.bar(0, linear_timing/1e5, color="orange", edgecolor="k")
 for r, record in enumerate(records_final):
     plt.bar(2+r-.2, record["timing"]["state_estimation"]/1e5, color="xkcd:light purple", width=.4, edgecolor="k")
     plt.bar(2+r+.2, record["timing"]["prediction"]/1e5, color="purple", width=.4, edgecolor="k")
-    plt.bar(6-.2, encoder_timing/1e5, color="xkcd:light green", width=.4, edgecolor="k")
-    plt.bar(6+.2, decoder_timing/1e5, color="green", width=.4, edgecolor="k")
+plt.bar(6-.2, encoder_timing/1e5, color="xkcd:light blue", width=.4, edgecolor="k")
+plt.bar(6+.2, decoder_timing/1e5, color="blue", width=.4, edgecolor="k")
 plt.yscale("log")
 plt.ylabel("Computation time (s)")
 plt.xticks(
@@ -731,9 +736,9 @@ plt.xticks(
     labels = ["Linear\nregression", "ODE models", "Our model"]
     )
 figname = f"Models_comparison_timing"
-plt.savefig(figures_folder + figname + ".png", dpi=300)
-plt.savefig(figures_folder + figname + ".svg", dpi=300)
-plt.savefig(figures_folder + figname + ".pdf", dpi=300)
+plt.savefig(save_folder + figname + ".png", dpi=300)
+plt.savefig(save_folder + figname + ".svg", dpi=300)
+plt.savefig(save_folder + figname + ".pdf", dpi=300)
 plt.show()
 
 #%% Plot single-cell ODE samples (Fig. S8)
@@ -744,7 +749,7 @@ for record in records_final:
     indexes = [order[25_000], order[50_000], order[75_000]]
 
     model = ODEModel()
-    model.load(figures_folder + "/fitted_ode_model.json")
+    model.load(save_folder + "/fitted_ode_model.json")
     
     model.technical_noise = record["technical_noise"]
     model.fixed_params["h1"] *= record["h1h2"]
@@ -773,9 +778,9 @@ for record in records_final:
         plt.xlim([-6,2-1/12])
         plt.xlabel("Time (hours)")
         figname = f"ODE_samples_{(p+1)*25}percentile_h1h2{record['h1h2']:1.00e}_R{record['technical_noise']:1.00e}"
-        plt.savefig(figures_folder + figname + ".png", dpi=300)
-        plt.savefig(figures_folder + figname + ".svg", dpi=300)
-        plt.savefig(figures_folder + figname + ".pdf", dpi=300)
+        plt.savefig(save_folder + figname + ".png", dpi=300)
+        plt.savefig(save_folder + figname + ".svg", dpi=300)
+        plt.savefig(save_folder + figname + ".pdf", dpi=300)
         plt.show()
 
 #%% Plot single-cell linear regression samples (Fig. S8)
@@ -801,9 +806,9 @@ for p, cell in enumerate(indexes):
     plt.xlim([-6,2-1/12])
     plt.xlabel("Time (hours)")
     figname = f"LINEAR_samples_{(p+1)*25}percentile"
-    plt.savefig(figures_folder + figname + ".png", dpi=300)
-    plt.savefig(figures_folder + figname + ".svg", dpi=300)
-    plt.savefig(figures_folder + figname + ".pdf", dpi=300)
+    plt.savefig(save_folder + figname + ".png", dpi=300)
+    plt.savefig(save_folder + figname + ".svg", dpi=300)
+    plt.savefig(save_folder + figname + ".pdf", dpi=300)
     plt.show()
 
 #%% Plot single-cell LSTM-MLP samples (Fig. S8)
@@ -829,7 +834,7 @@ for p, cell in enumerate(indexes):
     plt.xlim([-6,2-1/12])
     plt.xlabel("Time (hours)")
     figname = f"LSTMLP_samples_{(p+1)*25}percentile"
-    plt.savefig(figures_folder + figname + ".png", dpi=300)
-    plt.savefig(figures_folder + figname + ".svg", dpi=300)
-    plt.savefig(figures_folder + figname + ".pdf", dpi=300)
+    plt.savefig(save_folder + figname + ".png", dpi=300)
+    plt.savefig(save_folder + figname + ".svg", dpi=300)
+    plt.savefig(save_folder + figname + ".pdf", dpi=300)
     plt.show()

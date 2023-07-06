@@ -22,9 +22,14 @@ from sklearn.decomposition import PCA
 
 import deepcellcontrol as dcc
 
-datasets_folder = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/data/"
-models_folder = "Y:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/"
-figures_folder = "D:/deepmpc_paper/revisions/"
+# Datasets (zenodo archive)
+datasets_folder = "Z:/data/Microscope/Papers/Lugagne_Blassick_Dunlop_NatComm_2023/datasets/"
+
+# Trained models (zenodo archive):
+models_folder = "Z:/data/Microscope/Papers/Lugagne_Blassick_Dunlop_NatComm_2023/models/"
+
+# Save images to:
+save_folder = "D:/papers/deepmpc/revisions/"
 
 def predict(model, inputs):
     
@@ -43,17 +48,22 @@ def predict(model, inputs):
 
 #%% Load saved eval data
 
-features = ('fluo1',
- 'area',
- 'sharpness',
- 'cell_count',
- 'chamber_mean_fluo1',
- 'chamber_std_fluo1',
- 'neighbor_stims',
- 'stims')
+features = (
+    'fluo1',
+    'area',
+    'sharpness',
+    'cell_count',
+    'chamber_mean_fluo1',
+    'chamber_std_fluo1',
+    'neighbor_stims',
+    'stims'
+    )
 
 import pickle
-with open(figures_folder + "/ODE_final_eval_inputs.pkl", "rb") as f:
+# This data is from ode_mpc.py, we re-use the same evaluation set to keep
+# results comparable. The exact file we used is on zenodo, but it can be 
+# randomly generated via ode_mpc.py too.
+with open(save_folder + "/ODE_final_eval_inputs.pkl", "rb") as f:
     data = pickle.load(f)
     eval_inputs = data["inputs"]
     groundtruth = data["groundtruth"]
@@ -68,9 +78,9 @@ for f, feature in enumerate(features):
     norm_inputs[:,:,f] = fake_dataset[feature]
 eval_inputs[0] = norm_inputs
 
-#%% Evaluate Increasing networtk size
+#%% Fig S1 - Evaluate Increasing networtk size
 
-folders_100 = {
+folders = {
     "replicate 1": (
         "2023-04-16_10-24-42_2e3c0f37-75a5-44b4-8b96-a722ffb42f7c/",
         "2023-04-16_10-24-42_77b3c0f3-bca6-42a3-8d9e-d4b32f0cbe5a/",
@@ -97,34 +107,6 @@ folders_100 = {
         ),
     }
 
-folders_1000 = {
-    "replicate 1": (
-        "2023-04-15_22-25-08_3c6a40a3-c0b4-4cd9-8908-1954a9ebbc63/",
-        "2023-04-15_22-25-08_023d8358-8646-4d2b-a43b-17d9d51001df/",
-        "2023-04-15_22-25-08_0057df48-b773-477d-9621-37bf1b6fe520/",
-        "2023-04-15_22-25-08_379fdac0-bf14-40ce-856a-559c8f633a99/",
-        "2023-04-16_11-22-00_337a5ab7-33f6-40a8-b9fe-5b4755f5589b/",
-        "2023-04-16_11-22-00_81b4eff3-d8f7-435b-bafe-43f77c4bc43d/",
-        ),
-    "replicate 2": (
-        "2023-04-16_19-27-18_c9c944f7-f48c-4283-9da2-98560472eb28/",
-        "2023-04-16_19-27-18_064b1c3f-401c-45a5-968c-05247026984f/",
-        "2023-04-16_19-27-18_0b75981a-89c7-4549-a6b4-2bb97de9db0f/",
-        "2023-04-16_19-27-18_2391fb47-3eb7-480a-a1dd-0b3b41f78160/",
-        "2023-04-16_19-27-18_b350b82f-63e1-44aa-903e-075cbe3bdfae/",
-        "2023-04-16_19-27-18_18e084e9-4cbb-4e91-9a6c-8468ade62ff3/",
-        ),
-    "replicate 3": (
-        "2023-04-16_19-27-31_be917615-ebb1-4a4a-a9af-a5548804d2bd/",
-        "2023-04-16_19-27-31_c6da6b94-29c7-481c-81dd-1e3ead639eb5/",
-        "2023-04-16_19-27-31_18a4a8d2-acd9-4710-89c9-51dff96d28fd/",
-        "2023-04-16_19-27-31_83fb5d35-fcb9-4846-abde-5d950da764f4/",
-        "2023-04-16_19-27-31_f22b7134-9ed6-4b00-afb2-3e8945d384bc/",
-        "2023-04-16_19-27-31_adb5eac7-1a85-4558-80c0-73270b27ac24/",
-        ),
-    }
-
-folders = folders_100 # We get the same results for 1000 batch size
 rmse_record = {}
 for replicate, folders_list in folders.items():
     
@@ -148,7 +130,7 @@ for replicate, folders_list in folders.items():
         
         print(f"{replicate}, {nb_params} params. RMSE - mean: {np.mean(rmse)}, median: {np.median(rmse)}")
 
-#%% Plot increasing network size (Fig S1)
+#%% Fig S1 - Plot increasing network size
 
 plt.figure(1, dpi=300)
 plt.figure(2, dpi=300)
@@ -181,20 +163,20 @@ plt.xlabel("Root mean square error (a.u.)")
 plt.ylabel("Count")
 plt.grid(axis="x", which="major")
 plt.legend(title="Parameters")
-plt.savefig(figures_folder+"IncreasingNetworks_100_distros.png", dpi=300)
-plt.savefig(figures_folder+"IncreasingNetworks_100_distros.svg", dpi=300)
-plt.savefig(figures_folder+"IncreasingNetworks_100_distros.pdf", dpi=300)
+plt.savefig(save_folder+"IncreasingNetworks_100_distros.png", dpi=300)
+plt.savefig(save_folder+"IncreasingNetworks_100_distros.svg", dpi=300)
+plt.savefig(save_folder+"IncreasingNetworks_100_distros.pdf", dpi=300)
 
 plt.figure(2)
 plt.ylabel("Root mean square error (a.u.)")
 plt.xticks(range(len(rmse_record)), rmse_record.keys())
 plt.title("median")
-plt.savefig(figures_folder+"IncreasingNetworks_100_bars.png", dpi=300)
-plt.savefig(figures_folder+"IncreasingNetworks_100_bars.svg", dpi=300)
-plt.savefig(figures_folder+"IncreasingNetworks_100_bars.pdf", dpi=300)
+plt.savefig(save_folder+"IncreasingNetworks_100_bars.png", dpi=300)
+plt.savefig(save_folder+"IncreasingNetworks_100_bars.svg", dpi=300)
+plt.savefig(save_folder+"IncreasingNetworks_100_bars.pdf", dpi=300)
 
 
-#%% Evaluate time
+#%% Fig S1 - Evaluate time
 
 folders_list = folders["replicate 1"]
 timing = {}
@@ -218,7 +200,7 @@ for f, folder in enumerate(folders_list):
     print(timing)
     time.sleep(2*60) # Give time to GPU to cool down
 
-#%% Plot time (Fig S1)
+#%% Fig S1 - Plot time
 
 plt.figure(dpi=300)
 r = 0
@@ -234,12 +216,12 @@ plt.yscale("log")
 plt.ylabel("Computation time (s)")
 plt.xticks(**ticks)
 # figname = f"Models_comparison_timing"
-plt.savefig(figures_folder+"IncreasingNetworks_timing.png", dpi=300)
-plt.savefig(figures_folder+"IncreasingNetworks_timing.svg", dpi=300)
-plt.savefig(figures_folder+"IncreasingNetworks_timing.pdf", dpi=300)
+plt.savefig(save_folder+"IncreasingNetworks_timing.png", dpi=300)
+plt.savefig(save_folder+"IncreasingNetworks_timing.svg", dpi=300)
+plt.savefig(save_folder+"IncreasingNetworks_timing.pdf", dpi=300)
 plt.show()
 
-#%% Evaluate Leave one out features
+#%% Fig S5 - Evaluate Leave one out features
 
 folders = {
     "replicate 1": (
@@ -316,7 +298,18 @@ for replicate, folders_list in folders.items():
         
         print(f"{replicate}, {missing}. RMSE - mean: {np.mean(rmse)}, median: {np.median(rmse)}")
 
-#%% Plot leave one out features (Fig S5)
+# No-past MLP:
+past, light = eval_inputs
+model = tf.keras.models.load_model(
+    models_folder + "2023-06-29_14-50-42_db965cf9-0460-4a83-9b0a-d2a2ec99dd97/model_besteval.hdf5"
+    )
+predictions = predict(model, [past, light])
+nopast_rmse = np.sqrt(
+    np.mean(((4095*predictions-groundtruth))**2,axis=1)
+    )
+
+
+#%% Fig S5 - Plot leave one out features
 plt.figure(1, dpi=300)
 plt.figure(2, dpi=300)
 # plt.figure(3, dpi=300)
@@ -356,29 +349,33 @@ plt.xlabel("Root mean square error (a.u.)")
 plt.ylabel("Count")
 plt.grid(axis="x", which="major")
 plt.legend(title="Missing")
-plt.savefig(figures_folder+"Features_distros.png", dpi=300)
-plt.savefig(figures_folder+"Features_distros.svg", dpi=300)
-plt.savefig(figures_folder+"Features_distros.pdf", dpi=300)
+plt.savefig(save_folder+"Features_distros.png", dpi=300)
+plt.savefig(save_folder+"Features_distros.svg", dpi=300)
+plt.savefig(save_folder+"Features_distros.pdf", dpi=300)
 
 plt.figure(2)
 plt.ylabel("Root mean square error (a.u.)")
 plt.xticks(range(len(ordered_list)), [x[0] for x in ordered_list], rotation=45, ha="right")
 plt.title("median")
-plt.savefig(figures_folder+"Features_bars.png", dpi=300)
-plt.savefig(figures_folder+"Features_bars.svg", dpi=300)
-plt.savefig(figures_folder+"Features_bars.pdf", dpi=300)
+plt.savefig(save_folder+"Features_bars.png", dpi=300)
+plt.savefig(save_folder+"Features_bars.svg", dpi=300)
+plt.savefig(save_folder+"Features_bars.pdf", dpi=300)
 
-#%% Load and split encoder in reference network
+#%% Fig S6 - Load and split encoder in all-features network:
 
 folder = "2023-04-17_10-29-30_f3b85ec3-880d-4bb6-b522-e12b2c968866/"
 model = tf.keras.models.load_model(
     models_folder + folder + "/model_besteval.hdf5"
     )
 encoder, _ = dcc.models.split(model)
-encoded_past = encoder.predict(eval_inputs[0], verbose=1)
+
+past = np.load(save_folder+"tsne_past.npy")
+past_nonan = past.copy()
+past_nonan[np.isnan(past_nonan)] = 0
+encoded_past = encoder.predict(past_nonan, verbose=1, batch_size=1000)
 encoded_past = np.concatenate(encoded_past, axis = -1)
 
-#%% Configure and fit t-SNE function. 
+#%% Fig S6 - Configure and fit t-SNE function. 
 tsne = TSNE(
     n_components=2, # default=2, Dimension of the embedded space.
     perplexity=30, # default=30.0, The perplexity is related to the number of nearest neighbors that is used in other manifold learning algorithms.
@@ -403,18 +400,19 @@ tsne_embed = tsne.fit_transform(encoded_past[:])
 plt.scatter(tsne_embed[:,0], tsne_embed[:,1], s=.1, alpha=1)
 plt.grid("both", "both")
 
-# np.save(figures_folder+"tsne_past.npy", eval_inputs[0])
-# np.save(figures_folder+"tsne_embedded.npy", embedded)
+# np.save(save_folder+"tsne_past.npy", past)
+# np.save(save_folder+"tsne_embedded.npy", tsne_embed)
 
-#%% Fit PCA
+#%% Fig S6 - Fit PCA
 
 pca = PCA(n_components=2, random_state=1)
-pca_embed = pca.fit_transform(encoded_past[:])
+pca_embed = pca.fit_transform(encoded_past)
 
-plt.scatter(pca_embed[:,0], pca_embed[:,1], s=.1, alpha=1)
-plt.grid("both", "both")
 
-#%% Plot t-SNE (FIg S6)
+#%% Fig S6 - Plot t-SNE & PCA + samples
+
+tsne_embed = np.load(save_folder+"tsne_embedded.npy")
+all_features = copy.copy(dcc.config.defaults["features"])
 
 def closest(x, y, embedded, number = 10):
     
@@ -465,7 +463,6 @@ def plot_sample(sample, features = all_features):
     plt.grid(which="both", axis="both")
     plt.ylim(0, 1)
 
-# tsne_embed = np.load(figures_folder+"tsne_embedded.npy")
 
 points = [
     {"letter":"C", "xy": (-60, 25), "name": "Empty chambers"},
@@ -495,14 +492,13 @@ for p, point in enumerate(points):
     x, y = point["xy"]
     idx = closest(x,y, tsne_embed, 1)[0]
 
-    plt.figure(p, dpi=300)
-    past = eval_inputs[0][idx]
-    plot_sample(past)
-    plt.subplot(2,1,1)
-    plt.title(point["name"])
-    plt.savefig(figures_folder+f"Embeddings_panel{point['letter']}.png", dpi=300)
-    plt.savefig(figures_folder+f"Embeddings_panel{point['letter']}.svg", dpi=300)
-    plt.savefig(figures_folder+f"Embeddings_panel{point['letter']}.pdf", dpi=300)
+    # plt.figure(p, dpi=300)
+    # plot_sample(past[idx])
+    # plt.subplot(2,1,1)
+    # plt.title(point["name"])
+    # plt.savefig(save_folder+f"Embeddings_panel{point['letter']}.png", dpi=300)
+    # plt.savefig(save_folder+f"Embeddings_panel{point['letter']}.svg", dpi=300)
+    # plt.savefig(save_folder+f"Embeddings_panel{point['letter']}.pdf", dpi=300)
     
     plt.figure(len(points))
     x, y = tsne_embed[idx]
@@ -511,30 +507,36 @@ for p, point in enumerate(points):
     plt.annotate(
         point["letter"], 
         (x, y), 
-        xytext = (0.5,3), 
+        xytext = (.5,3.5),
         color="k", 
         textcoords = 'offset points',
-        fontsize = 15,
+        fontsize = 14,
+        font = "Consolas",
         )
     
+    if p == 3:
+        xytext = (-5,3.5)
+    else:
+        xytext = (.5,3.5)
     x, y = pca_embed[idx]
     plt.subplot(1,2,2)
     plt.scatter(x, y, s=4, color="k")
     plt.annotate(
         point["letter"], 
         (x, y), 
-        xytext = (0.5,3), 
+        xytext = xytext, 
         color="k", 
         textcoords = 'offset points',
-        fontsize = 15,
+        fontsize = 14,
+        font = "Consolas",
         )
 
 plt.figure(len(points))
-plt.savefig(figures_folder+"Embeddings_tsne_pca.png", dpi=300)
-plt.savefig(figures_folder+"Embeddings_tsne_pca.svg", dpi=300)
-plt.savefig(figures_folder+"Embeddings_tsne_pca.pdf", dpi=300)    
+plt.savefig(save_folder+"Embeddings_tsne_pca.png", dpi=300)
+plt.savefig(save_folder+"Embeddings_tsne_pca.svg", dpi=300)
+plt.savefig(save_folder+"Embeddings_tsne_pca.pdf", dpi=300)
 
-#%% Load evaluation dataset for datasets shuffle and generate eval data:
+#%% Fig S2 - Load evaluation dataset for datasets shuffle and generate eval data:
 
 files = (
  'Z:/data/Microscope/jeanbaptiste/deepmpc/trainingsets/2022-04-24_TrainingSet8/deepcellcontrol_dataset/2022-04-24_TrainingSet8_dataset.pkl',
@@ -568,17 +570,17 @@ test_datasets.batch_size = 200_000
 eval_inputs, groundtruth = next(test_datasets)
 groundtruth = groundtruth[:,:,0]
 
-np.save(figures_folder+"setstest_past.npy", eval_inputs[0])
-np.save(figures_folder+"setstest_stims.npy", eval_inputs[1])
-np.save(figures_folder+"setstest_groundtruth.npy", groundtruth)
+np.save(save_folder+"setstest_past.npy", eval_inputs[0])
+np.save(save_folder+"setstest_stims.npy", eval_inputs[1])
+np.save(save_folder+"setstest_groundtruth.npy", groundtruth)
 
-#%% Evaluate datasets shuffle
+#%% Fig S2 - Evaluate datasets shuffle
 
 eval_inputs = (
-    np.load(figures_folder+"setstest_past.npy"),
-    np.load(figures_folder+"setstest_stims.npy")
+    np.load(save_folder+"setstest_past.npy"),
+    np.load(save_folder+"setstest_stims.npy")
     )
-groundtruth = np.load(figures_folder+"setstest_groundtruth.npy")
+groundtruth = np.load(save_folder+"setstest_groundtruth.npy")
 
 folders = (
     '2023-04-23_23-20-59_0d071bfe-ea37-4aa1-8250-ee52f06cb956',
@@ -629,7 +631,7 @@ for folder in folders:
     if record not in rmse_records:
         rmse_records.append(record)
 
-#%% Plot dataset shuffle (Fig S2)
+#%% Fig S2 - Plot dataset shuffle
 
 plt.figure(1, dpi=300)
 plt.figure(2, dpi=300)
@@ -673,9 +675,9 @@ plt.xlabel("Root mean square error (a.u.)")
 plt.ylabel("Count")
 plt.grid(axis="x", which="major")
 plt.legend(title="Datasets used for training")
-plt.savefig(figures_folder+"ShuffledSets_distros.png", dpi=300)
-plt.savefig(figures_folder+"ShuffledSets_distros.svg", dpi=300)
-plt.savefig(figures_folder+"ShuffledSets_distros.pdf", dpi=300)
+plt.savefig(save_folder+"ShuffledSets_distros.png", dpi=300)
+plt.savefig(save_folder+"ShuffledSets_distros.svg", dpi=300)
+plt.savefig(save_folder+"ShuffledSets_distros.pdf", dpi=300)
 # plt.show()
 
 plt.figure(2)
@@ -684,7 +686,7 @@ plt.xticks(range(len(rmse_records)), names, rotation=45, ha="right")
 plt.title("median")
 plt.xlabel("Datasets used for training")
 # plt.ylim(160,240)
-plt.savefig(figures_folder+"ShuffledSets_bars.png", dpi=300)
-plt.savefig(figures_folder+"ShuffledSets_bars.svg", dpi=300)
-plt.savefig(figures_folder+"ShuffledSets_bars.pdf", dpi=300)
+plt.savefig(save_folder+"ShuffledSets_bars.png", dpi=300)
+plt.savefig(save_folder+"ShuffledSets_bars.svg", dpi=300)
+plt.savefig(save_folder+"ShuffledSets_bars.pdf", dpi=300)
 # plt.show()
