@@ -1,0 +1,22 @@
+name: dcc_env
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python >= 3.10
+  - numpy >= 1.21
+  - scipy >= 1.7
+  - opencv >= 4.6
+  - tensorflow >= 2.7, < 2.11
+  - gillespy2 >= 1.0
+  - tqdm >= 4.57
+  - ffmpeg-python >= 0.2
+  - pooch >= 1.6
+  - scons >= 4.4
+  - plotly >= 4.1
+  - setuptools >= 41.0
+  - matplotlib >= 3.1
+  - gxx >= 12.2
+  - spyder >= 5.0
+  - mamba >= 1.2
+  - pandas >= 1.5

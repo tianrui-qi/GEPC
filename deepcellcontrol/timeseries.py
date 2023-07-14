@@ -254,11 +254,12 @@ def batch_train_eval(
         )
     
     # Plot history:
-    metrics_lin = lambda name : [np.mean(x[name]) for x in history.history['metrics']]
     plt.semilogy(history.history['loss'],label='$loss (MSE)$')
     plt.semilogy(np.sqrt(history.history['loss']),label='$\sqrt{loss}$')
-    plt.semilogy(metrics_lin('mae'),label='$validation MAE$')
-    plt.semilogy(metrics_lin('rmse'), label='$validation RMSE$')
+    if "metrics" in history.history:
+        metrics_lin = lambda name : [np.mean(x[name]) for x in history.history['metrics']]
+        plt.semilogy(metrics_lin('mae'),label='$validation MAE$')
+        plt.semilogy(metrics_lin('rmse'), label='$validation RMSE$')
     plt.grid(axis='y',which='both')
     plt.xlabel('epoch')
     plt.ylabel('loss')
@@ -270,61 +271,58 @@ def batch_train_eval(
     plt.clf()
     
     # Evaluate:
-    if evaluation_dataset is None:
-        metrics, eval_d = evaluate(
-            dataset, network, batch_size=100_000, num_batches=1, return_eval=True
-            )
+    if evaluation_dataset is None and dataset.test_ratio > 0:
+        metrics, eval_d = evaluate(dataset, network, return_eval=True)
+    elif evaluation_dataset is not None:
+        metrics, eval_d = evaluate(evaluation_dataset, network, return_eval=True)
     else:
-        metrics, eval_d = evaluate(
-            evaluation_dataset, network, batch_size=100_000, num_batches=1, return_eval=True
-            )
+        metrics = {}
 
-    # Save eval to disk:
-    np.save(os.path.join(save_folder,'eval_past.npy'),eval_d["input"][0])
-    np.save(os.path.join(save_folder,'eval_light.npy'),eval_d["input"][1])
-    np.save(os.path.join(save_folder,'eval_groundtruth.npy'),eval_d["groundtruth"])
-    np.save(os.path.join(save_folder,'eval_prediction.npy'),eval_d["prediction"])
-
-    # Plot evaluation:
-    plt.plot(metrics['mae'])
-    plt.plot(metrics['rmse'])
-    plt.grid(axis='y',which='both')
-    plt.xlabel('horizon')
-    plt.ylabel('error (a.u.)')
-    plt.title('evaluation MAE & RMSE')
-    plt.legend(('MAE','RMSE'))
-    plt.savefig(os.path.join(save_folder,'evaluation_error.png'),dpi=300)
-    plt.savefig(os.path.join(save_folder,'evaluation_error.svg'),dpi=300)
-    # plt.show()
-    plt.clf()
-    
-    # Plot single cell evaluations:
-    if plot_singlecell:
-        os.makedirs(os.path.join(save_folder,'single_cell_evals'))
-        fluos, stims = dataset.formatter.reconstruct(eval_d['input'],eval_d['groundtruth'])
-        for eval_num in range(50):
-            utils.evaluationPlot(
-                stims[eval_num],
-                fluos[eval_num,:params['past_steps']],
-                fluos[eval_num,params['past_steps']:],
-                eval_d["prediction"][eval_num],
-                dyn_range=1,
-                savefig = os.path.join(save_folder,'single_cell_evals','sample_%02d'%eval_num),
-                show = False
-                )
-    
-    if plot_autoencoding:
-        os.makedirs(os.path.join(save_folder,'autoencoding_evals'))
-        for eval_num in range(50):
-            utils.plot_autoencoding(
-                eval_d['groundtruth'][eval_num],
-                eval_d["prediction"][eval_num],
-                features_list = dataset.features,
-                savefig = os.path.join(
-                    save_folder,
-                    f'autoencoding_evals/sample_{eval_num:06d}'
+    if len(metrics) > 0:
+        # Plot evaluation:
+        plt.plot(metrics['mae'])
+        plt.plot(metrics['rmse'])
+        plt.grid(axis='y',which='both')
+        plt.xlabel('horizon')
+        plt.ylabel('error (a.u.)')
+        plt.title('evaluation MAE & RMSE')
+        plt.legend(('MAE','RMSE'))
+        plt.savefig(os.path.join(save_folder,'evaluation_error.png'),dpi=300)
+        plt.savefig(os.path.join(save_folder,'evaluation_error.svg'),dpi=300)
+        # plt.show()
+        plt.clf()
+        
+        # Plot single cell evaluations:
+        if plot_singlecell:
+            os.makedirs(os.path.join(save_folder,'single_cell_evals'), exist_ok=True)
+            fluos, stims = dataset.formatter.reconstruct(eval_d['input'],eval_d['groundtruth'])
+            if type(params['past_steps']) is int:
+                _past_steps = params['past_steps']
+            else:
+                _past_steps = params['past_steps'][1]
+            for eval_num in range(50):
+                utils.evaluationPlot(
+                    stims[eval_num],
+                    fluos[eval_num,:_past_steps],
+                    fluos[eval_num,_past_steps:],
+                    eval_d["prediction"][eval_num],
+                    dyn_range=1,
+                    savefig = os.path.join(save_folder,'single_cell_evals','sample_%02d'%eval_num),
+                    show = False
                     )
-                )
+        
+        if plot_autoencoding:
+            os.makedirs(os.path.join(save_folder,'autoencoding_evals'))
+            for eval_num in range(50):
+                utils.plot_autoencoding(
+                    eval_d['groundtruth'][eval_num],
+                    eval_d["prediction"][eval_num],
+                    features_list = dataset.features,
+                    savefig = os.path.join(
+                        save_folder,
+                        f'autoencoding_evals/sample_{eval_num:06d}'
+                        )
+                    )
     
     # Save relevant training data to pickle file:
     with open(save_folder+'/training_output.pkl','wb') as res_file:

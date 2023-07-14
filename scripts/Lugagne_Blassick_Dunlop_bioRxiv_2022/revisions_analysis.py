@@ -541,24 +541,13 @@ plt.savefig(save_folder+"Embeddings_tsne_pca.pdf", dpi=300)
 files = (
  'Z:/data/Microscope/jeanbaptiste/deepmpc/trainingsets/2022-04-24_TrainingSet8/deepcellcontrol_dataset/2022-04-24_TrainingSet8_dataset.pkl',
  )
-features = ('fluo1',
- 'area',
- 'sharpness',
- 'cell_count',
- 'chamber_mean_fluo1',
- 'chamber_std_fluo1',
- 'neighbor_stims',
- 'stims'
- )
+params = dcc.config.defaults
 test_datasets = dcc.data.Datasets(
     files,
-    features = features,
-    formatter = dcc.data.LSTMFormatter
+    formatter=dcc.data.LSTMFormatter,
+    parameters=params
     )
 test_datasets.test_ratio = 1
-test_datasets.horizon = 24
-test_datasets.past_steps = [36, 144]
-test_datasets.batch_size = 10_000
 test_datasets.mode = "evaluation"
 test_datasets.data_type='raw_dataset'
 test_datasets.load()

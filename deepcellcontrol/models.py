@@ -9,9 +9,11 @@ Created on Fri Aug 14 18:24:45 2020
 """
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
-    Dense, LSTM, Input, TimeDistributed, Concatenate, Flatten
+    Layer, Dense, LSTM, Input, TimeDistributed, Concatenate, Flatten,
+    Reshape, Conv2DTranspose, Conv2D, RepeatVector
     )
 from tensorflow.keras.optimizers import Adam
+import numpy as np
 
 
 def lstm_mlp(hyper_parameters):
@@ -34,9 +36,9 @@ def lstm_mlp(hyper_parameters):
     # Inputs:
     past_events = Input(
         (None, len(hyper_parameters["features"])),
-        name='past_inputs'
+        name='past_timeseries',
         )
-    future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
+    future_light = Input((hyper_parameters["horizon"],), name='future_light')
     
     # Encoder:
     state_h, state_c = _encoder(past_events, hyper_parameters)
@@ -65,7 +67,7 @@ def split(model, decode_mode="mlp"):
     model : Model
         Encoder-decoder model.
     decode_mode : str, optional
-        Decoder architecture type, options are "lstm" or "mlp".
+        Decoder architecture type, options are "lstm" or "mlp" or "cnn".
         The default is "mlp".
 
     Returns
@@ -78,9 +80,11 @@ def split(model, decode_mode="mlp"):
     """
     
     # Collect hyper_parameters:
+    name_list = [layer.name for layer in model.layers]
+    input_layer = name_list[0]
     hyper_parameters = dict(
-        past_steps = model.get_layer("past_inputs").output_shape[0][1],
-        features = ["" for _ in range(model.get_layer("past_inputs").output_shape[0][2])], # dummy list to for the len() call
+        past_steps = model.get_layer(input_layer).output_shape[0][1],
+        features = ["" for _ in range(model.get_layer(input_layer).output_shape[0][2])], # dummy list to for the len() call
         lstm_units = model.get_layer("encoder_0").output_shape[-1],
         latent_dim = model.get_layer("encoder_1").output_shape[0][-1],
         output_mode = model.get_layer("decoder_1").__class__.__name__.lower(), # Only useful for lstm decoder
@@ -91,10 +95,18 @@ def split(model, decode_mode="mlp"):
         hyper_parameters["mlp_layers"] = -1
         hyper_parameters["mlp_dim"] = model.get_layer("decoder_0").output_shape[-1]
         for layer in model.layers:
-            if layer.name.startswith("decoder_"):
+            if layer.name.startswith("decoder_") and layer.name != "decoder_inputs":
                 hyper_parameters["mlp_layers"]+=1
                 hyper_parameters["horizon"] = layer.output_shape[-1]
-            
+    elif decode_mode == "cnn": 
+        hyper_parameters["cnn_bins"] = 8*model.get_layer('decoder_1').output_shape[1]
+        cnn_filters = []
+        for layer in model.layers:
+            if layer.name.startswith("decoder_"):
+                cnn_filters += [layer.output_shape[-1],]
+                hyper_parameters["horizon"] = layer.output_shape[-2]
+        hyper_parameters["cnn_filters"] = cnn_filters[2:-1]
+    
     
     # Create encoder and transfer weights from model:
     encoder = lstm_encoder(hyper_parameters)
@@ -106,6 +118,9 @@ def split(model, decode_mode="mlp"):
         decoder = lstm_decoder(hyper_parameters)
     elif decode_mode == "mlp":
         decoder = mlp_decoder(hyper_parameters)
+    elif decode_mode == "cnn":
+        decoder = cnn_decoder(hyper_parameters)
+    
     for layer in model.layers:
         if layer.name.startswith("decoder_"):
             _transfer(model, decoder, layer.name)
@@ -314,7 +329,7 @@ def mlp_decoder(hyper_parameters):
     # Inputs:
     state_h = Input((hyper_parameters["latent_dim"],),name='state_h') 
     state_c = Input((hyper_parameters["latent_dim"],),name='state_c') 
-    future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
+    future_light = Input((hyper_parameters["horizon"],),name='future_light')
   
     # Decoder:
     prediction = _mlpdecoder(state_h, state_c, future_light, hyper_parameters)
@@ -358,7 +373,7 @@ def _mlpdecoder(state_h, state_c, future_light, hyper_parameters):
     # Concatenate inputs together:
     hidden = Concatenate(
         axis=-1,
-        name="prediction_inputs"
+        name="decoder_inputs"
         )([state_h, state_c, future_light])
     
     # Hidden layers:
@@ -378,6 +393,163 @@ def _mlpdecoder(state_h, state_c, future_light, hyper_parameters):
     
     return prediction
 
+def cnn_decoder(hyper_parameters):
+    """
+    Get CNN decoder network
+
+    Parameters
+    ----------
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    model : Model
+        Compiled CNN decoder model.
+
+    """
+    
+    # Inputs:
+    state_h = Input((hyper_parameters["latent_dim"],),name='state_h') 
+    state_c = Input((hyper_parameters["latent_dim"],),name='state_c') 
+    future_light = Input((hyper_parameters["horizon"],),name='future_light')
+  
+    # Decoder:
+    prediction = _cnndecoder(state_h, state_c, future_light, hyper_parameters)
+
+    # Finalize model:
+    model = Model([state_h, state_c, future_light], prediction)
+    model.compile(
+        loss=hyper_parameters["loss"],
+        optimizer = Adam(
+            learning_rate=hyper_parameters["learning_rate"]
+            )
+        )
+    
+    return model
+
+def _cnndecoder(state_h, state_c, future_light, hyper_parameters):
+    """
+    CNN decoder definition
+
+    Parameters
+    ----------
+    state_h : tf.Tensor
+        LSTM encoder hidden state.
+    state_c : tf.Tensor
+        LSTM encoder cell state.
+    future_light : tf.Tensor
+        Input tensor of (potential) future optogenetic sequence. 
+        See lstm_mlp().
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    prediction : tf.Tensor
+        Future fluorescence prediction.
+
+    """
+    
+    # Process parameters:
+    first_shape = (
+        int(hyper_parameters["cnn_bins"]/8), 
+        int(hyper_parameters["horizon"]/8)
+        )
+    latent_len = hyper_parameters["latent_dim"]*2 + hyper_parameters["horizon"]
+    filters = hyper_parameters["cnn_filters"]
+    
+    # Concatenate inputs together:
+    latent = Concatenate(
+        axis=-1,
+        name="decoder_inputs",
+        )([state_h, state_c, future_light])
+
+    # 1D latent to 3D tensor:
+    hidden = Dense(
+        first_shape[0] * first_shape[1] * filters[0],
+        activation="relu",
+        name="decoder_0"
+        )(latent)
+    hidden = Reshape(first_shape + (filters[0],), name="decoder_1")(hidden)
+    hidden = Conv2D(
+        filters[1], 3, activation = "relu", padding= "same", name="decoder_2"
+        )(hidden)
+    
+    # Upscaling block 1 (x2):
+    hidden = Conv2DTranspose(
+        filters[2], 3, activation="relu", strides=2, padding="same", name="decoder_3"
+        )(hidden)
+    hidden = Conv2D(
+        filters[3], 3, activation = "relu", padding= "same", name="decoder_4"
+        )(hidden)
+    
+    # Upscaling block 2 (x4):
+    hidden = Conv2DTranspose(
+        filters[4], 3, activation="relu", strides=2, padding="same", name="decoder_5"
+        )(hidden)
+    hidden = Conv2D(
+        filters[5], 3, activation = "relu", padding= "same", name="decoder_6"
+        )(hidden)
+    
+    # Upscaling block 3 (x8):
+    hidden = Conv2DTranspose(
+        filters[6], 3, activation="relu", strides=2, padding="same", name="decoder_7"
+        )(hidden)
+    hidden = Conv2D(
+        filters[7], 3, activation = "relu", padding= "same", name="decoder_8"
+        )(hidden)
+    
+    # Output:
+    prediction = Conv2D(
+        1, 3, activation="relu", padding="same", name="decoder_output"
+        )(hidden)
+    
+    return prediction
+
+
+def lstm_cnn(hyper_parameters):
+    """
+    Get LSTM-CNN encoder-decoder network
+
+    Parameters
+    ----------
+    hyper_parameters : Dict
+        Hyper-parameters dictionary. See config.defaults for a list of 
+        parameters
+
+    Returns
+    -------
+    model : Model
+        Compiled LSTM-CNN model.
+
+    """
+    
+    # Inputs:
+    past_events = Input(
+        (None, len(hyper_parameters["features"])),
+        name='past_timeseries',
+        )
+    future_light = Input((hyper_parameters["horizon"],), name='future_light')
+    
+    # Encoder:
+    state_h, state_c = _encoder(past_events, hyper_parameters)
+    
+    # Decoder:
+    prediction = _cnndecoder(state_h, state_c, future_light, hyper_parameters)
+
+    # Finalize model:
+    model = Model([past_events, future_light], prediction)
+    model.compile(
+        loss=hyper_parameters["loss"],
+        optimizer = Adam(
+            learning_rate=hyper_parameters["learning_rate"]
+            )
+        )
+    
+    return model
 
 def mlp_nopast(hyper_parameters):
     """
