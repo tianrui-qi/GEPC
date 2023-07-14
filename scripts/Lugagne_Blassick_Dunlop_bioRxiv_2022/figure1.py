@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 This script generates plots for Figure 1
+Note that it uses microscopy images and can not be reproduced from the zenodo
+archive data only.
 
 Created on Tue Sep 13 16:19:56 2022
 
@@ -14,9 +16,13 @@ import matplotlib.pyplot as plt
 
 import deepcellcontrol as dcc
 
-save_folder = "C:/Users/Administrator/jb/deepmpc_paper/figure1/"
-experiment = "Y:/data/Microscope/jeanbaptiste/deepmpc/trainingsets/2022-04-13_TrainingSet2/"
-pos = 29
+# Where to save files:
+save_folder = "D:/papers/deepmpc/figure1/"
+
+# Path to raw images data (BU ENG NAS):
+experiment = "Z:/data/Microscope/jeanbaptiste/deepmpc/trainingsets/2022-04-13_TrainingSet2/"
+
+pos = 29 # Position number
 f = 99 # Frame nb
 
 #%% Panel C - Mother Machine Images
@@ -52,9 +58,9 @@ cv2.imwrite(save_folder + "/Panel_C_deltaex_origfluo.png", F[:,:,::-1])
 
 #%% Panel D - cell contours
 # Note: this panel will not work if you do not have access to the raw images 
-# Note: this panel requires DeLTA to run
+# Note: this panel requires DeLTA to run (commit 8ceb015)
 
-sys.path.append("C:/Users/Administrator/jb/delta")
+sys.path.append("D:/delta")
 import delta
 
 # Load delta position

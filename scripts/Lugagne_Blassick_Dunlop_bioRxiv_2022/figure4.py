@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This script generates plots for Figure 4 and Movie S3
+This script generates plots for Figure 4, SI Fig 14, and Movie S3
 
 Created on Fri Sep  2 14:03:54 2022
 
@@ -9,28 +9,27 @@ Created on Fri Sep  2 14:03:54 2022
 import json
 import pickle
 import os
+import sys
 
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-import tensorflow as tf
+import matplotlib.cm as cm
 
 import deepcellcontrol as dcc
 
+# Experiments (zenodo archive)
+experiments_folder = "Z:/data/Microscope/Papers/Lugagne_Blassick_Dunlop_NatComm_2023/experiments/"
+
+# Save images to:
+save_folder = "D:/papers/deepmpc/figure4/"
 
 # experiments path:
-experiments = "Y:/data/Microscope/jeanbaptiste/deepmpc/control/"
 movie_folders = (
-    experiments + "2022-05-28_DeepMPC_2001_1",
-    experiments + "2022-06-01_DeepMPC_2001_2",
-    experiments + "2022-06-04_DeepMPC_2001_3"
+    experiments_folder + "2022-05-28_DeepMPC_2001_1",
+    experiments_folder + "2022-06-01_DeepMPC_2001_2",
+    experiments_folder + "2022-06-04_DeepMPC_2001_3"
     )
-
-# Folder with all trained models:
-models_scc = "Z:/projectnb2/dunlop/JB/deepcellcontrol/assets/models/"
-
-# Save figures to:
-save_folder = "C:/Users/Administrator/jb/deepmpc_paper/figure4/"
 
 um_ppixel = 120/(1851-57) # measured distance per pixel
 
@@ -49,6 +48,7 @@ whole_movie = np.zeros(
     shape=(movie_shape[0]*movie_shape[1],cutoff), dtype = np.float32
     )
 obj_movie = whole_movie.copy()
+inputs_movie = whole_movie.copy()
 pixels_to_xp = np.zeros(shape=(movie_shape[0]*movie_shape[1],2), dtype = int)
 for xp_ind, xpf in enumerate(movie_folders):
     
@@ -62,6 +62,10 @@ for xp_ind, xpf in enumerate(movie_folders):
     cells_fluo = np.load(xpf + "/cells_fluo.npy")
     whole_movie[local_shuffle] = cells_fluo
     
+    # Optogenetic stimulations:
+    cells_stims = np.load(xpf + "/cells_stims.npy")
+    inputs_movie[local_shuffle] = np.clip(cells_stims,0,1)
+    
     # Record pixel <-> xp correspondance
     pixels_to_xp[local_shuffle,0] = xp_ind
     pixels_to_xp[local_shuffle,1] = np.arange(local_obj.shape[0])
@@ -69,6 +73,7 @@ for xp_ind, xpf in enumerate(movie_folders):
 # De-shuffle movie:
 whole_movie = np.reshape(whole_movie,movie_shape+(cutoff,))
 obj_movie = np.reshape(obj_movie,movie_shape+(cutoff,))
+inputs_movie = np.reshape(inputs_movie,movie_shape+(cutoff,))
 pixels_to_xp = np.reshape(pixels_to_xp,movie_shape+(2,))
 
 #%% Panel A - Obj & Fluo movie kymogrpahs
@@ -211,21 +216,118 @@ for f in range(cutoff-1):
 
 #%% Panel B - Error over time
 
-plt.figure()
-rmse = np.sqrt(np.nanmean((objectives - fluorescence)**2, axis=0))
-x = np.arange(36, len(rmse), 1)/12
-plt.plot(x, rmse[36:])
-plt.xlim([0,x[-1]])
-yl = plt.ylim()
-plt.ylim([0, yl[1]])
-plt.xlabel("time (hours)")
-plt.ylabel("Root Mean Square Error (a.u.)")
-plt.savefig(save_folder+"Panel_B_errortime.png", dpi=300)
-plt.savefig(save_folder+"Panel_B_errortime.svg", dpi=300)
-plt.savefig(save_folder+"Panel_B_errortime.pdf", dpi=300)
+x = np.arange(384,)/12
+
+plt.subplot(2,1,1)
+av_obj = np.mean(obj_movie,axis=(0,1))
+av_obj[:36] = np.nan
+plt.plot(x, av_obj, "k")
+abs_error = np.abs((whole_movie-obj_movie)).reshape(-1,384)
+abs_error[:,:36] = np.nan
+dcc.utilities.plotq(abs_error, color="purple")
+rmse = np.sqrt(np.mean((abs_error)**2,axis=0))
+rmse[:36] = np.nan
+plt.plot(x,rmse)
+mae = np.mean(abs_error,axis=0)
+mae[:36] = np.nan
+plt.plot(x,mae)
+plt.xlim([0,383/12])
+plt.xticks(list(range(0,34,2)))
+
+plt.subplot(2,1,2)
+plt.fill_between([0,383/12], [1,1], facecolor=[0,1,0])
+av_inputs = np.mean(inputs_movie,axis=(0,1))
+plt.fill_between(x, 1-av_inputs, facecolor=[1,0,0], edgecolor=None)
+plt.xlim([0,383/12])
+plt.ylim([0,1])
+plt.xticks(list(range(0,34,2)))
+
+plt.savefig(save_folder+f"Panel_B_imecourses.svg", dpi=300)
+
+
+#%% Panel C - Error vs derivative of objective
+
+
+x = np.diff(obj_movie, axis=2)[:,:,72:].flatten()
+y = abs_error[:,73:].flatten()
+nbins = 10
+edges = np.concatenate(
+    (
+         -np.flip(np.logspace(np.log10(5), np.log10(500), nbins)),
+         np.logspace(np.log10(5), np.log10(500), nbins),
+         )
+    )
+
+# Compute error per diff bin:
+error_dist = []
+rmse_dist = []
+mean_dist = []
+emin, emax = -np.inf, edges[0]
+mask = np.logical_and(x>=emin, x<emax)
+yy = y[mask]
+error_dist.append(np.quantile(yy, q=[.25,.5,.75]))
+mean_dist.append(np.mean(yy))
+rmse_dist.append(np.sqrt(np.mean(yy**2)))
+for e in range(len(edges)-1):
+    emin, emax = edges[e:e+2]
+    mask = np.logical_and(x>=emin, x<emax)
+    yy = y[mask]
+    
+    error_dist.append(np.quantile(yy, q=[.25,.5,.75]))
+    mean_dist.append(np.mean(yy))
+    rmse_dist.append(np.sqrt(np.mean(yy**2)))
+emin, emax = edges[-1], np.inf
+mask = np.logical_and(x>=emin, x<emax)
+yy = y[mask]
+error_dist.append(np.quantile(yy, q=[.25,.5,.75]))
+mean_dist.append(np.mean(yy))
+rmse_dist.append(np.sqrt(np.mean(yy**2)))
+
+# Plot:
+xplot = []
+xplot.append(-3)
+for e in range(len(edges)-1):
+    emin, emax = edges[e:e+2]
+    if emin < 0 and emax < 0:
+        xpos = (emin-emax)/2 + emax
+    elif emin < 0:
+        xplot.append(0)
+        continue
+    else:
+        xpos = (emax-emin)/2 + emin
+    xplot.append(np.sign(xpos)*np.log10(np.abs(xpos)))
+xplot.append(3)
+plt.plot(xplot,[i[1] for i in error_dist], color="purple")
+plt.fill_between(
+    xplot,
+    [i[0] for i in error_dist],
+    [i[2] for i in error_dist],
+    color="purple",
+    alpha=.2,
+    )
+plt.plot(xplot, mean_dist, color="orange")
+plt.plot(xplot, rmse_dist, color="blue")
+plt.xticks(
+    np.concatenate(
+        (
+            [-3],
+            -np.flip(np.log10(np.arange(100,1000,100))),
+            -np.flip(np.log10(np.arange(10,100,10))),
+            -np.flip(np.log10(np.arange(5,10,1))),
+            np.log10(np.arange(5,10,1)),
+            np.log10(np.arange(10,100,10)),
+            np.log10(np.arange(100,1000,100)),
+            [3]
+            )
+        ),
+    ["-1000"] + [""]*8 + ["-100"] + [""]*8 + ["-10"] + [""]*10 + ["10"] + [""]*8 + ["100"] + [""]*8 + ["1000"]
+    )
+# plt.xticks(np.arange(0,1,.25))
+# plt.xlim([0,1])
+plt.savefig(save_folder+f"Panel_C_diff.svg", dpi=300)
 plt.show()
 
-#%% Panel C - Filamentation over time:
+#%% Panel D - Filamentation over time:
 
 plt.figure()
 x = np.arange(0, area.shape[1], 1)/12
@@ -235,12 +337,12 @@ plt.ylabel(r"fraction of cells > 6 um^2")
 yl = plt.ylim()
 plt.ylim([0, yl[1]])
 plt.xlabel("time (hours)")
-plt.savefig(save_folder+"Panel_C_areafraction.png", dpi=300)
-plt.savefig(save_folder+"Panel_C_areafraction.svg", dpi=300)
-plt.savefig(save_folder+"Panel_C_areafraction.pdf", dpi=300)
+plt.savefig(save_folder+"Panel_D_areafraction.png", dpi=300)
+plt.savefig(save_folder+"Panel_D_areafraction.svg", dpi=300)
+plt.savefig(save_folder+"Panel_D_areafraction.pdf", dpi=300)
 plt.show()
 
-#%% Panel C - Growth rate over time
+#%% Panel D - Growth rate over time
 
 plt.figure()
 x = np.arange(0, growth.shape[1], 1)/12
@@ -249,12 +351,12 @@ plt.xlim([0,x[-1]])
 plt.ylim([-.1, 1.5])
 plt.ylabel("growth rate (1/hour)")
 plt.xlabel("time (hours)")
-plt.savefig(save_folder+"Panel_C_growthtime.png", dpi=300)
-plt.savefig(save_folder+"Panel_C_growthtime.svg", dpi=300)
-plt.savefig(save_folder+"Panel_C_growthtime.pdf", dpi=300)
+plt.savefig(save_folder+"Panel_D_growthtime.png", dpi=300)
+plt.savefig(save_folder+"Panel_D_growthtime.svg", dpi=300)
+plt.savefig(save_folder+"Panel_D_growthtime.pdf", dpi=300)
 plt.show()
 
-#%% Panel D - Total growth hist:
+#%% Panel E - Total growth hist:
 
 plt.figure()
 plt.hist(avg_growth.flatten(), bins=200)
@@ -269,12 +371,12 @@ plt.ylim(yl)
 plt.xlim([-1, 3])
 plt.xlabel("growth rate (1/hour)")
 plt.ylabel("count")
-plt.savefig(save_folder+"Panel_D_growthdistro.png", dpi=300)
-plt.savefig(save_folder+"Panel_D_growthdistro.svg", dpi=300)
-plt.savefig(save_folder+"Panel_D_growthdistro.pdf", dpi=300)
+plt.savefig(save_folder+"Panel_E_growthdistro.png", dpi=300)
+plt.savefig(save_folder+"Panel_E_growthdistro.svg", dpi=300)
+plt.savefig(save_folder+"Panel_E_growthdistro.pdf", dpi=300)
 plt.show()
 
-#%% Panel E - RMSE per quantile
+#%% Panel F - RMSE per quantile
 
 def quantile_rmse(x, sq_error, q_num=100):
 
@@ -320,12 +422,114 @@ plt.xlim([0,100])
 plt.xlabel("Growth rate percentiles")
 plt.ylabel("Root mean square error (a.u.)")
 plt.legend()
-plt.savefig(save_folder+"Panel_E_errorvsgrowth.png", dpi=300)
-plt.savefig(save_folder+"Panel_E_errorvsgrowth.svg", dpi=300)
-plt.savefig(save_folder+"Panel_E_errorvsgrowth.pdf", dpi=300)
+plt.savefig(save_folder+"Panel_F_errorvsgrowth.png", dpi=300)
+plt.savefig(save_folder+"Panel_F_errorvsgrowth.svg", dpi=300)
+plt.savefig(save_folder+"Panel_F_errorvsgrowth.pdf", dpi=300)
+plt.show()
+
+#%% SI Fig. 14 - Panels A & B - Error and inputs kymographs + Distributions
+
+def color_hist(values, bins, colors):
+    
+    hist, edges = np.histogram(values, bins=bins)
+    hist = hist.astype(float)
+    hist /= max(hist)
+    for h, v in enumerate(hist):
+        plt.fill_between(
+            edges[h:h+2], [v, v], facecolor=colors[h], edgecolor=None
+            )
+
+error_kymograph = []
+inputs_kymograph = []
+inputs_frame = np.zeros((80,125,3), dtype=np.uint8)
+error_frame = np.zeros((80,125,3), dtype=np.uint8)
+ermap = cm.get_cmap("magma")
+error_comp = lambda I: (np.log10(np.abs(I))-np.log10(10))/(np.log10(1000)-np.log10(10))
+ticks = list(range(10,100,10)) + list(range(100,1000,100)) + list(range(1000,4095,1000))
+# error_comp = lambda I: (np.abs(I)-20)/(1000-20)
+for f in frame_nbs:
+    error = error_comp(whole_movie[:,:,f]-obj_movie[:,:,f])
+    error = np.clip(error, 0, 1)
+    error = ermap(error)[:,:,:3]
+    error_kymograph.append(error.copy())
+    
+    inputs_frame[:] = 0
+    inputs_frame[:,:,1][inputs_movie[:,:,f]>0.5] = 255
+    inputs_frame[:,:,0][inputs_movie[:,:,f]<0.5] = 255
+    inputs_kymograph.append(inputs_frame.copy())
+    
+    bins = np.logspace(np.log10(.1), np.log10(4095), 30, base=10)
+    colors = [ermap(error_comp(b)) for b in bins]
+    color_hist(np.abs(whole_movie[:,:,f]-obj_movie[:,:,f]).flatten(), bins, colors)
+    plt.xscale("log")
+    plt.xlim([1,4095])
+    plt.ylim([0, 1.1])
+    plt.xticks(ticks, [""]*len(ticks))
+    plt.savefig(
+        save_folder+f"SI_Fig_14_2001_dist{f:03d}.svg", 
+        dpi=300,
+        bbox_inches='tight'
+        )
+    plt.show()
+
+error_kymograph[0][:] = 0
+# Concatenate kymographs into strips
+inputs_kymograph = np.concatenate(inputs_kymograph, axis=0)
+error_kymograph = np.concatenate(error_kymograph, axis=0)
+inputs_kymograph = (inputs_kymograph).astype(np.uint8)
+error_kymograph = (error_kymograph*255).astype(np.uint8)
+cv2.imwrite(save_folder+"SI_Fig_14_2001_kymograph_error.tif", error_kymograph[:,:,::-1])
+cv2.imwrite(save_folder+"SI_Fig_14_2001_kymograph_inputs.tif", inputs_kymograph[:,:,::-1])
+
+plt.imshow(error_kymograph, cmap=ermap)
+ticks = list(range(10,100,10)) + list(range(100,1000,100)) + [995]
+ticks = [255*error_comp(x) for x in ticks]
+labels = ["10"] + [""]*8 + ["100"] + [""]*8 + ["1000"]
+cbar = plt.colorbar(extend="both")
+cbar.set_ticks(ticks)
+cbar.set_ticklabels(labels)
+plt.savefig(save_folder+f"SI_Fig_14_2001_colormap.svg", dpi=300)
+plt.show()
+
+
+#%% SI Fig. 14 - Panel C - Gaussian Kernel Density Error v Objective
+
+import numpy as np
+from scipy.stats import gaussian_kde
+
+abs_error = np.abs((whole_movie-obj_movie)).reshape(-1,384)
+abs_error[:,:36] = np.nan
+x = obj_movie[:,:,72:].flatten()
+y = abs_error[:,72:].flatten()
+
+# Downsample otherwise it takes ages:
+x = x[::10]
+y = np.log10(y[::10])
+
+k = gaussian_kde(np.vstack([x, y]))
+xi, yi = np.mgrid[x.min():x.max():x.size**0.5*1j,0:np.log10(4095):y.size**0.5*1j]
+zi = k(np.vstack([xi.flatten(), yi.flatten()]))
+
+# Plot
+ticks = list(range(1,10,1)) + list(range(10,100,10)) + list(range(100,1000,100)) + list(range(1000,4095,1000))
+ticks = [np.log10(x) for x in ticks]
+labels = [""]*9 + ["10"] + [""]*8 + ["100"] + [""]*8 + ["1000"] + [""]*3
+plt.contourf(xi, yi, zi.reshape(xi.shape))
+plt.yticks(ticks, labels)
+plt.ylim(1,np.log10(2000))
+plt.colorbar()
+plt.savefig(save_folder+f"SI_Fig_14_2001_KDEerror.svg", dpi=300)
+plt.show()
+
+unique, counts = np.unique(obj_movie[:,:,72:].flatten(), return_counts=True)
+plt.fill_between(unique, counts)
+plt.xlim([500,2000])
+plt.ylim([0,90_000])
+plt.savefig(save_folder+f"SI_Fig_14_2001_ObjDist.svg", dpi=300)
 plt.show()
 
 #%% SI Movie 3 - 2001: A Space Odyssey
+# Note: this requires DeLTA to run (commit 8ceb015).
 
 plt.style.use('dark_background')
 compiled = []
@@ -339,10 +543,14 @@ for f in range(0,cutoff):
     fluo = dcc.utilities.color_img(whole_movie[:,:,f], vmin=.05, cmap=dcc.utilities.gfpmap)
     
     obj = cv2.resize(
-        obj, dsize = [x*5 for x in obj.shape[:2]][::-1], interpolation=cv2.INTER_NEAREST
+        obj,
+        dsize = tuple([x*5 for x in obj.shape[:2]][::-1]),
+        interpolation=cv2.INTER_NEAREST
         )
     fluo = cv2.resize(
-        fluo, dsize = [x*5 for x in fluo.shape[:2]][::-1], interpolation=cv2.INTER_NEAREST
+        fluo,
+        dsize = tuple([x*5 for x in fluo.shape[:2]][::-1]),
+        interpolation=cv2.INTER_NEAREST
         )
     
     plt.subplot(1,2,1)
@@ -379,8 +587,6 @@ for f in range(0,cutoff):
     plt.clf()
 
 
-import sys
-sys.path.append("C:/Users/Administrator/jb/delta")
+sys.path.append("D:/delta")
 import delta
-
 delta.utilities.vidwrite(compiled, save_folder + "SI_movie_3_2001SpaceOdyssey.mp4")

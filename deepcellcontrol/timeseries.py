@@ -107,7 +107,10 @@ def train(
         epochs=epochs,
         callbacks=callbacks
         )
-    network.load_weights(os.path.join(save_folder,'model.hdf5'))
+    if evaluation_clbk is not None:
+        network.load_weights(os.path.join(save_folder,'model_besteval.hdf5'))
+    else:
+        network.load_weights(os.path.join(save_folder,'model.hdf5'))
     
     # Add rmse and mae to history metrics a posteriori:
     if evaluation_clbk is not None:
@@ -157,6 +160,7 @@ def evaluate(
     
     # Get batches and compile evaluation:
     rmse = mae = 0
+    xval_all, yval_all, yhat_all = [], [], []
     for _ in range(num_batches):
         
         # get X and Y data:
@@ -164,6 +168,10 @@ def evaluate(
         yval = np.squeeze(yval)
         yhat = network.predict(xval,verbose=verbose)
         yhat = np.squeeze(yhat)
+        if return_eval:
+            xval_all.append(xval)
+            yval_all.append(yval)
+            yhat_all.append(yhat)
         
         # Compile error metrics:
         rmse = rmse + np.sqrt(np.mean(np.square(yhat-yval),axis=0))  # RMSE over prediction horizon
@@ -176,7 +184,15 @@ def evaluate(
         print("RMSE = %g, MAE = %g"%(np.mean(rmse),np.mean(mae)))
     
     if return_eval:
-        return dict(rmse=rmse, mae=mae), dict(input=xval, groundtruth=yval, prediction=yhat)
+        inputs = [
+            np.concatenate([x[0] for x in xval_all], axis=0),
+            np.concatenate([x[1] for x in xval_all], axis=0),
+            ]
+        return dict(rmse=rmse, mae=mae), dict(
+            input=inputs,
+            groundtruth=np.concatenate(yval_all, axis=0),
+            prediction=np.concatenate(yhat_all, axis=0),
+            )
     return dict(rmse=rmse, mae=mae)
 
 
@@ -255,9 +271,19 @@ def batch_train_eval(
     
     # Evaluate:
     if evaluation_dataset is None:
-        metrics, eval_d = evaluate(dataset, network, return_eval=True)
+        metrics, eval_d = evaluate(
+            dataset, network, batch_size=100_000, num_batches=1, return_eval=True
+            )
     else:
-        metrics, eval_d = evaluate(evaluation_dataset, network, return_eval=True)
+        metrics, eval_d = evaluate(
+            evaluation_dataset, network, batch_size=100_000, num_batches=1, return_eval=True
+            )
+
+    # Save eval to disk:
+    np.save(os.path.join(save_folder,'eval_past.npy'),eval_d["input"][0])
+    np.save(os.path.join(save_folder,'eval_light.npy'),eval_d["input"][1])
+    np.save(os.path.join(save_folder,'eval_groundtruth.npy'),eval_d["groundtruth"])
+    np.save(os.path.join(save_folder,'eval_prediction.npy'),eval_d["prediction"])
 
     # Plot evaluation:
     plt.plot(metrics['mae'])

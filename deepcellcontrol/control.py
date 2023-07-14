@@ -132,7 +132,7 @@ class _MPC(_Controller):
         )
 
         # Run optimization:
-        while (self.strategy_optimizer.iterations > 0):  # Optimizer sets iterations to -1 when stopping condition is met
+        while (self.strategy_optimizer.iterations > 0):  # Optimizer sets iterations to 0 when stopping condition is met
 
             predictions = self.run_strategies(inputs, strategies)
 
@@ -608,16 +608,16 @@ class _Optimizer:
 
         # Check if stopping condition is met:
         if self.iterations >= self.max_iterations:
-            self.iterations = 0  # Stopping condition is met -> set to -1
+            self.iterations = 0  # Stopping condition is met -> set to 0
             return self.best_strategy(scores)
         # Otherwise run optimization step:
         self.iterations += 1
         return self.run(scores)
 
-    def run(self):
+    def run(self, scores):
         pass  # To be defined in sub-classes
 
-    def best_strategy(self):
+    def best_strategy(self, scores):
         pass  # To be defined in sub-classes
 
 
@@ -821,7 +821,10 @@ class BinaryParticleSwarmOptimizer(_Optimizer):
             global_best_arr += [
                 np.repeat(
                     self.bests[
-                        np.newaxis, score_ind, np.argmin(self.best_scores[score_ind]), :
+                        np.newaxis,
+                        score_ind,
+                        np.argmin(self.best_scores[score_ind]),
+                        :,
                     ],
                     self.bests.shape[1],
                     axis=0,
@@ -883,5 +886,96 @@ class BinaryParticleSwarmOptimizer(_Optimizer):
             best_strategies[strat_ind] = self.strategies[
                 strat_ind, np.argmin(scores[strat_ind], axis=0), :
             ]
+
+        return best_strategies
+
+
+class OneShotOptimizer(_Optimizer):
+    """
+    One-shot optimizer that runs a number of random input sequences
+    once and directly returns the best result, there are no
+    iterations.
+    """
+
+    def __init__(self, particles=1000, *args, **kwargs):
+        """
+        Instanciation.
+
+        Parameters
+        ----------
+        particles : int, optional
+            Number of particles to run / strategies to evaluate per cell.
+            The default is 1000.
+
+        Returns
+        -------
+        None.
+
+        """
+        # Initialize class (only 1 iteration to do)
+        super().__init__(iterations=1, *args, **kwargs)
+        self.num_particles = particles
+
+        self.strategies = None
+
+    def run(self, scores):
+        """
+        Return random strategies for each cell.
+
+        Parameters
+        ----------
+        scores : 1D numpy array of NaNs
+            The dimension of axis 0 is used to know the number of cells and
+            duplicate the strategies array.
+
+        Returns
+        -------
+        3D numpy array of bools
+            Random control strategies over horizon, repeated for each
+            cell. Size is cells -by- particles -by- horizon.
+
+        """
+
+        rng = np.random.default_rng()
+        self.strategies = np.empty(
+            (scores.shape[0], self.num_particles, self.horizon),
+            dtype=np.float32,
+        )
+        for cell in range(scores.shape[0]):
+            unique_strategies = rng.choice(
+                2**self.horizon, size=self.num_particles, replace=False
+            )
+            for particle, strategy in enumerate(unique_strategies):
+                self.strategies[cell, particle, :] = \
+                    strategy & (1 << np.arange(self.horizon)) > 0
+
+        # Null optimizer simply returns all strategies:
+        return self.strategies
+
+    def best_strategy(self, scores):
+        """
+        Identify best strategy for each cell.
+
+        Parameters
+        ----------
+        scores : 2D numpy array of floats
+            RMSE between each strategy per cell and corresponding objective.
+            Size is cells -by- 2^horizon.
+
+        Returns
+        -------
+        2D numpy array of bools
+            Array containing best strategies for each cell. Size is
+            cells -by- horizon.
+
+        """
+
+        best_strategies = np.empty(
+            (scores.shape[0], self.horizon), dtype=np.uint8
+        )
+        for score_ind in range(scores.shape[0]):
+            best_strategies[score_ind] = self.strategies[
+                score_ind, np.argmin(scores[score_ind], axis=0), :
+                ]
 
         return best_strategies

@@ -8,7 +8,9 @@ Created on Fri Aug 14 18:24:45 2020
 @author: jeanbaptiste
 """
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, LSTM, Input, TimeDistributed, Concatenate
+from tensorflow.keras.layers import (
+    Dense, LSTM, Input, TimeDistributed, Concatenate, Flatten
+    )
 from tensorflow.keras.optimizers import Adam
 
 
@@ -79,6 +81,7 @@ def split(model, decode_mode="mlp"):
     hyper_parameters = dict(
         past_steps = model.get_layer("past_inputs").output_shape[0][1],
         features = ["" for _ in range(model.get_layer("past_inputs").output_shape[0][2])], # dummy list to for the len() call
+        lstm_units = model.get_layer("encoder_0").output_shape[-1],
         latent_dim = model.get_layer("encoder_1").output_shape[0][-1],
         output_mode = model.get_layer("decoder_1").__class__.__name__.lower(), # Only useful for lstm decoder
         loss = model.loss, # These aren' really useful
@@ -194,7 +197,11 @@ def _encoder(past_events,hyper_parameters):
     """
     
     # Encoding LSTM: (return internal states to feed into decoder)
-    intermediate = LSTM(64,name='encoder_0',return_sequences=True)(past_events)
+    intermediate = LSTM(
+        hyper_parameters["lstm_units"],
+        name='encoder_0',
+        return_sequences=True
+        )(past_events)
     _, state_h, state_c = LSTM(
         hyper_parameters["latent_dim"],return_state=True,name='encoder_1'
         )(intermediate)
@@ -389,7 +396,13 @@ def mlp_nopast(hyper_parameters):
 
     """
     
+    # This is not actually used:
+    past_events = Input(
+        (None, len(hyper_parameters["features"])),
+        name='past_inputs'
+        )
     
+    # Input:
     future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
     
     # Hidden layers:
@@ -408,7 +421,41 @@ def mlp_nopast(hyper_parameters):
             )(hidden)
 
     # Finalize model:
-    model = Model(future_light, prediction)
+    model = Model([past_events, future_light], prediction)
+    model.compile(
+        loss=hyper_parameters["loss"],
+        optimizer = Adam(
+            learning_rate=hyper_parameters["learning_rate"]
+            )
+        )
+    
+    return model
+
+def linear_predictor(hyper_parameters):
+    
+    future_light = Input((hyper_parameters["horizon"],),name='future_inputs')
+    
+    # Inputs:
+    past_events = Input(
+        (hyper_parameters["past_steps"], len(hyper_parameters["features"])),
+        name='past_timeseries'
+        )
+    flat_events = Flatten(name="flattened_past")(past_events)
+    future_light = Input((hyper_parameters["horizon"],),name='future_light')
+    inputs = Concatenate(axis=-1, name="concatenated_inputs")(
+        [flat_events, future_light]
+        )
+    
+    # Linear predictor:
+    prediction = Dense(
+        hyper_parameters["horizon"], 
+        activation="linear",
+        name="linear_predictor",
+        use_bias=True,
+        )(inputs)
+
+    # Finalize model:
+    model = Model([past_events, future_light], prediction)
     model.compile(
         loss=hyper_parameters["loss"],
         optimizer = Adam(
