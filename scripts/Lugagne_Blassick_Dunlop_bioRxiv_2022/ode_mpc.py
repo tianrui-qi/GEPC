@@ -723,6 +723,28 @@ plt.savefig(save_folder + figname + ".pdf", dpi=300)
 plt.show()
 
 plt.figure(dpi=300)
+# Log-spaced bins:
+nbins = 100
+bins = np.logspace(0, 4, nbins + 1, base=10)
+# Plot hists:
+counts, _ = np.histogram(linear_rmse, bins = bins)
+plt.stairs(counts, bins, color = "orange", lw=2)
+counts, _ = np.histogram(records_final[1]["rmse"], bins = bins)
+plt.stairs(counts, bins, color = "purple", lw=2)
+counts, _ = np.histogram(lstmmlp_rmse, bins = bins)
+plt.stairs(counts, bins, color = "blue", lw=2)
+plt.xscale("log")
+plt.xlim([5, 5000])
+plt.ylim([0, 5000])
+plt.xlabel("Root mean square error (a.u.)")
+plt.ylabel("Count")
+figname = f"Models_comparison_distros"
+plt.savefig(save_folder + figname + ".png", dpi=300)
+plt.savefig(save_folder + figname + ".svg", dpi=300)
+plt.savefig(save_folder + figname + ".pdf", dpi=300)
+plt.show()
+
+plt.figure(dpi=300)
 plt.bar(0, linear_timing/1e5, color="orange", edgecolor="k")
 for r, record in enumerate(records_final):
     plt.bar(2+r-.2, record["timing"]["state_estimation"]/1e5, color="xkcd:light purple", width=.4, edgecolor="k")
@@ -736,9 +758,9 @@ plt.xticks(
     labels = ["Linear\nregression", "ODE models", "Our model"]
     )
 figname = f"Models_comparison_timing"
-plt.savefig(save_folder + figname + ".png", dpi=300)
-plt.savefig(save_folder + figname + ".svg", dpi=300)
-plt.savefig(save_folder + figname + ".pdf", dpi=300)
+# plt.savefig(save_folder + figname + ".png", dpi=300)
+# plt.savefig(save_folder + figname + ".svg", dpi=300)
+# plt.savefig(save_folder + figname + ".pdf", dpi=300)
 plt.show()
 
 #%% Plot single-cell ODE samples (Fig. S8)
