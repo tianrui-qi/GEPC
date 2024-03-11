@@ -26,8 +26,12 @@ if len(sys.argv) > 1:
 # Load datasets:
 training_set, evaluation_set = dcc.data.load_datasets(params)
 
+training_set.test_ratio = .1
+
 # Init model:
 network = dcc.models.lstm_mlp(params)
+if params["training_init_weights"] is not None:
+    network.load_weights(params["training_init_weights"])
 
 # Train and evaluate:
 network = dcc.timeseries.batch_train_eval(
