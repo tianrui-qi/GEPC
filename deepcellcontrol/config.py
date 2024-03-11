@@ -67,7 +67,13 @@ fluo_features = (
     "chamber_std_fluo",
     "chamber_mean_fluo1",
     "chamber_median_fluo1",
-    "chamber_std_fluo1"
+    "chamber_std_fluo1",
+    "chamber_mean_fluo2",
+    "chamber_median_fluo2",
+    "chamber_std_fluo2",
+    "chamber_mean_fluo3",
+    "chamber_median_fluo3",
+    "chamber_std_fluo3",
     )
 length_features = ("length", "width")
 count_features = ("cell_count",)
