@@ -1128,7 +1128,7 @@ def compile_dataset(
     return dataset
 
 
-def format_dataset_from_motherspkl(folder):
+def format_dataset_from_motherspkl(folder, features = None):
 
     # Load mothers measurements:
     with  open(folder + "/mothers.pkl","rb") as f:
@@ -1136,12 +1136,13 @@ def format_dataset_from_motherspkl(folder):
 
     # Get feature names list
     with  open(folder + "/experiment_settings.json","r") as f:
-        features = json.load(f)["features"]
+        mothers_features = json.load(f)["features"]
+    features = features or mothers_features
 
     # Find last timepoint:
     values = np.sum(
-        mothers[0][0][10][:, [x for x, n in enumerate(features) if n!="stims"]],
-        axis=1
+        np.array(mothers[0][0])[:,:,[x for x, n in enumerate(mothers_features) if n!="stims"]],
+        axis=(0,2)
         )
     cutoff = np.nonzero(values)[0][-1]+1
 
@@ -1154,12 +1155,12 @@ def format_dataset_from_motherspkl(folder):
     for series in mothers:
         for position in series:
             for chamber in position:
-                for f, feature in enumerate(features):
-                    dataset[feature].append(chamber[:cutoff,f])
+                for feature in features:
+                    dataset[feature].append(chamber[:cutoff,mothers_features.index(feature)])
 
     # Array-ify:
     for feature in features:
-        dataset[feature] = np.array(dataset[feature])
+        dataset[feature] = np.array(dataset[feature])[:,:,np.newaxis]
 
     return dataset
 
