@@ -940,7 +940,7 @@ def load_datasets(parameters):
             formatter = LSTMFormatter,
             parameters = parameters
             )
-        training_set.test_ratio = 0
+        training_set.test_ratio = 0.1
         training_set.mode = "training"
         training_set.load()
         training_set.normalize()
