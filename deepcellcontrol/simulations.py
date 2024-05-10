@@ -13,10 +13,17 @@ import copy
 import itertools
 from multiprocessing import Pool
 import ast
+import importlib
+import warnings
 
 import numpy as np
-import gillespy2 as gp2
 from scipy.integrate import solve_ivp
+
+if importlib.util.find_spec("gillespy2") is None:
+    warnings.warn("Could not load GillesPy2 module.")
+else:
+    import gillespy2 as gp2
+
 
 SAMPLING = 5
 
