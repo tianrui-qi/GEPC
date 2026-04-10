@@ -1,0 +1,16 @@
+name: gepc
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.13
+  - hydra-core=1.3
+  - lightning=2.5
+  - tensorboard
+  - scipy
+  - gillespy2
+  - scons
+  - jupyter
+  - pandas
+  - matplotlib
+  - setuptools=81.0

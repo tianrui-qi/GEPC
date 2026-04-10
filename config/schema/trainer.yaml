@@ -1,0 +1,10 @@
+trainer:
+  # train
+  max_epochs: 1000
+  gradient_clip_val: 1.0
+  # log
+  log_save_fold: log/${name}
+  # ckpt
+  ckpt_save_fold: ckpt/${name}
+  ckpt_load_path: null
+  resume: false

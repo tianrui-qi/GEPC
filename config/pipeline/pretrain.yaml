@@ -1,0 +1,11 @@
+# @package _global_
+
+defaults:
+  - /schema/data@_here_
+  - /schema/model@_here_: lstm
+  - /schema/objective@_here_
+  - /schema/trainer@_here_
+  - _self_
+
+name: sanity
+seed: 42

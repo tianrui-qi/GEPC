@@ -1,0 +1,16 @@
+model:
+  name: transformer
+  # input
+  input_dim: 2
+  horizon: ${data.horizon}
+  max_seq_len: ${data.past_steps}
+  # encoder
+  model_dim: 64
+  nhead: 4
+  num_layers: 2
+  dim_feedforward: 128
+  future_hidden_size: 64
+  # decoder
+  decoder_hidden_sizes: [128, 64]
+  kernel_size: 3
+  dropout: 0.1

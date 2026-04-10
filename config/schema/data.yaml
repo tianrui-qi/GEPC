@@ -1,0 +1,23 @@
+data:
+  # cell
+  # choices: CcaSR_gillespie_simple_noE, CcaSR_gillespie_simple
+  cell_class: CcaSR_gillespie_simple
+  # simulator
+  solver: gillespy2   # choices: gillespy2, ode
+  camera_noise_perc: 5.0
+  scale: 4095.0
+  # window
+  past_steps: 36
+  horizon: 12
+  sim_steps: 288
+  nostim_steps: 0
+  # loader
+  batch_size: 128
+  num_workers: 0
+  shuffle: true
+  # split
+  train_cells: 50
+  val_cells: 10
+  samples_per_cell: 500
+  # seed
+  seed: ${seed}
