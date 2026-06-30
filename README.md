@@ -39,6 +39,36 @@ conda env create -f environment.yaml
 conda activate gepc
 ```
 
+## Data And Checkpoints
+
+The repository does not track the local [`data/`](data) directory. Precomputed
+simulation pools, TensorBoard logs, and trained checkpoints are available on
+[OSF](https://osf.io/mnvcz/).
+
+After downloading, place the folder at the repository root so the paths below
+exist:
+
+- `data/simulate/`
+- `data/train-log/`
+- `data/train-ckpt/`
+
+You can download the artifacts from the OSF web page, or use `osfclient`:
+
+```bash
+conda install -n gepc -c conda-forge osfclient
+osf -p mnvcz clone /tmp/gepc-osf
+mkdir -p data
+rsync -a /tmp/gepc-osf/osfstorage/data/ data/
+```
+
+If the OSF project is private, authenticate with your OSF account:
+
+```bash
+export OSF_PASSWORD="your-osf-password"
+osf -u your-osf-email -p mnvcz clone /tmp/gepc-osf
+unset OSF_PASSWORD
+```
+
 ## Training
 
 Generate one simulation dataset:
@@ -59,7 +89,7 @@ Run the Transformer counterpart:
 python -m script.train --config-name experiment/train/Style4-Past36-Transformer
 ```
 
-Artifacts are written under [`data/`](data):
+Generated artifacts are written under [`data/`](data):
 
 - simulation datasets under [`data/simulate/`](data/simulate)
 - simulation job logs under [`data/simulate-log/`](data/simulate-log)
