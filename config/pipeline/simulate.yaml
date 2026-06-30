@@ -4,7 +4,7 @@ defaults:
   - /schema/simulator@_here_
   - _self_
 
-name: sanity
+name: ???
 seed: 1000
 
 simulator:

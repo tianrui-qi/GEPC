@@ -8,7 +8,7 @@ defaults:
   - /schema/trainer@_here_
   - _self_
 
-name: sanity
+name: ???
 seed: 105
 
 data:
