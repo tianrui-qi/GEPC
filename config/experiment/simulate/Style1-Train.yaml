@@ -1,0 +1,14 @@
+# @package _global_
+
+defaults:
+  - /pipeline@_here_: simulate
+  - _self_
+
+name: "Style1-Train"
+seed: 1000
+
+simulator:
+  num_cells: 100
+  cell_class: CcaSR_gillespie_simple_noE
+  solver: ode
+  camera_noise_perc: 0.0

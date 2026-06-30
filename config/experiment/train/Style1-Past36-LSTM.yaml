@@ -1,0 +1,11 @@
+# @package _global_
+
+defaults:
+  - /pipeline@_here_: train
+  - _self_
+
+name: "Style1-Past36-LSTM"
+
+data:
+  train_load_path: data/simulate/Style1-Train.pkl
+  valid_load_path: data/simulate/Style1-Valid.pkl

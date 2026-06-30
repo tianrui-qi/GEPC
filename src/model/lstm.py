@@ -1,11 +1,7 @@
-from __future__ import annotations
-
-from collections.abc import Sequence
-
 import torch
 
 
-class LSTMForecast(torch.nn.Module):
+class LSTM(torch.nn.Module):
     def __init__(
         self,
         input_dim: int,
@@ -13,7 +9,7 @@ class LSTMForecast(torch.nn.Module):
         encoder_hidden_size: int,
         latent_dim: int,
         future_hidden_size: int,
-        decoder_hidden_sizes: Sequence[int],
+        decoder_hidden_sizes: list[int],
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
@@ -46,11 +42,11 @@ class LSTMForecast(torch.nn.Module):
     def forward(
         self,
         past: torch.Tensor,
-        future_stim: torch.Tensor,
+        future_target: torch.Tensor,
     ) -> torch.Tensor:
         encoded, _ = self.encoder_0(past)
         _, (hidden, _) = self.encoder_1(encoded)
         past_context = hidden[-1]
-        future_context = self.future_projection(future_stim)
+        future_context = self.future_projection(future_target)
         features = torch.cat([past_context, future_context], dim=-1)
         return self.decoder(features)

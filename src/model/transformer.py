@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-from collections.abc import Sequence
-
 import torch
 
 
@@ -18,7 +14,7 @@ class CausalConv1d(torch.nn.Conv1d):
         return x[..., :-self._trim] if self._trim > 0 else x
 
 
-class TransformerForecast(torch.nn.Module):
+class Transformer(torch.nn.Module):
     def __init__(
         self,
         input_dim: int,
@@ -29,7 +25,7 @@ class TransformerForecast(torch.nn.Module):
         num_layers: int,
         dim_feedforward: int,
         future_hidden_size: int,
-        decoder_hidden_sizes: Sequence[int],
+        decoder_hidden_sizes: list[int],
         kernel_size: int = 3,
         dropout: float = 0.1,
     ) -> None:
@@ -76,13 +72,13 @@ class TransformerForecast(torch.nn.Module):
     def forward(
         self,
         past: torch.Tensor,
-        future_stim: torch.Tensor,
+        future_target: torch.Tensor,
     ) -> torch.Tensor:
         x = past.transpose(1, 2)
         x = self.input_projection(x).transpose(1, 2)
         x = x + self.position_embedding[:, : x.shape[1]]
         x = self.encoder(x)
         past_context = self.norm(x).mean(dim=1)
-        future_context = self.future_projection(future_stim)
+        future_context = self.future_projection(future_target)
         features = torch.cat([past_context, future_context], dim=-1)
         return self.decoder(features)

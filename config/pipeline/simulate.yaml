@@ -1,0 +1,11 @@
+# @package _global_
+
+defaults:
+  - /schema/simulator@_here_
+  - _self_
+
+name: sanity
+seed: 1000
+
+simulator:
+  data_save_path: data/simulate/${name}.pkl

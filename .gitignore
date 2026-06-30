@@ -158,9 +158,8 @@ outcmaes/
 # macOS files
 .DS_Store
 
-# Lightning outputs
-ckpt/
-log/
-
 # Hydra outputs
 outputs/
+
+# User
+data/

@@ -1,10 +1,11 @@
 trainer:
+  _target_: src.trainer.Trainer
   # train
-  max_epochs: 1000
+  max_epochs: 200
   gradient_clip_val: 1.0
   # log
-  log_save_fold: log/${name}
+  log_save_fold: ???
   # ckpt
-  ckpt_save_fold: ckpt/${name}
+  ckpt_save_fold: ???
   ckpt_load_path: null
   resume: false

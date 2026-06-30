@@ -10,7 +10,7 @@ dependencies:
   - scipy
   - gillespy2
   - scons
+  - tqdm
   - jupyter
-  - pandas
   - matplotlib
   - setuptools=81.0

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 
 import lightning
@@ -7,7 +5,6 @@ import lightning.pytorch.callbacks
 import lightning.pytorch.loggers
 import torch
 
-from ..utils.config import resolve_repo_path
 
 class Trainer:
     def __init__(
@@ -21,18 +18,18 @@ class Trainer:
     ) -> None:
         self.ckpt_load_path = ckpt_load_path
         self.resume = resume
-        self.log_save_fold = resolve_repo_path(log_save_fold)
-        self.ckpt_save_fold = resolve_repo_path(ckpt_save_fold)
-        self.log_save_fold.mkdir(parents=True, exist_ok=True)
-        self.ckpt_save_fold.mkdir(parents=True, exist_ok=True)
+        self.log_save_fold = log_save_fold
+        self.ckpt_save_fold = ckpt_save_fold
+        os.makedirs(self.log_save_fold, exist_ok=True)
+        os.makedirs(self.ckpt_save_fold, exist_ok=True)
 
         logger = lightning.pytorch.loggers.TensorBoardLogger(
-            save_dir=str(self.log_save_fold),
+            save_dir=self.log_save_fold,
             name="",
             version="",
         )
         checkpoint = lightning.pytorch.callbacks.ModelCheckpoint(
-            dirpath=str(self.ckpt_save_fold),
+            dirpath=self.ckpt_save_fold,
             filename="best",
             monitor="loss/valid",
             mode="min",
@@ -52,39 +49,39 @@ class Trainer:
             log_every_n_steps=1,
             logger=logger,
             callbacks=[checkpoint, lr_monitor],
-            benchmark=True,
         )
 
     def fit(
         self,
         objective,
-        datamodule: lightning.LightningDataModule,
+        data: lightning.LightningDataModule,
     ) -> None:
         if self.ckpt_load_path is not None and not self.resume:
             self.load_model_weights_(objective.model, self.ckpt_load_path)
         self.trainer.fit(
             model=objective,
-            datamodule=datamodule,
+            datamodule=data,
             ckpt_path=self.ckpt_load_path if self.resume else None,
         )
 
     @staticmethod
     def find_checkpoint(ckpt_load_fold: str, stem: str = "last") -> str:
-        checkpoint_dir = resolve_repo_path(ckpt_load_fold)
-        for filename in os.listdir(checkpoint_dir):
+        for filename in os.listdir(ckpt_load_fold):
             if filename.startswith(stem) and filename.endswith(".ckpt"):
-                return str(checkpoint_dir / filename)
-        raise FileNotFoundError(f"Could not find checkpoint with stem '{stem}' in {checkpoint_dir}")
+                return os.path.join(ckpt_load_fold, filename)
+        raise FileNotFoundError(
+            f"Could not find checkpoint with stem '{stem}' in {ckpt_load_fold}"
+        )
 
     @staticmethod
     def load_model_weights_(
         model: torch.nn.Module,
         ckpt_load_path: str,
     ) -> torch.nn.Module:
-        checkpoint = torch.load(resolve_repo_path(ckpt_load_path), map_location=torch.device("cpu"))
+        checkpoint = torch.load(ckpt_load_path, map_location=torch.device("cpu"))
         state_dict = checkpoint.get("state_dict", checkpoint)
         model_state = {
-            key.replace("model.", ""): value
+            key.replace("model.", "", 1).replace("network.", "", 1): value
             for key, value in state_dict.items()
             if key.startswith("model.")
         }

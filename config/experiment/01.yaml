@@ -1,9 +1,0 @@
-# @package _global_
-
-defaults:
-  - /pipeline@_here_: pretrain
-  - _self_
-
-# experiment
-name: "01"
-seed: 105

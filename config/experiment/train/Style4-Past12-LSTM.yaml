@@ -1,0 +1,12 @@
+# @package _global_
+
+defaults:
+  - /pipeline@_here_: train
+  - _self_
+
+name: "Style4-Past12-LSTM"
+
+data:
+  past_steps: 12
+  train_load_path: data/simulate/Style4-Train.pkl
+  valid_load_path: data/simulate/Style4-Valid.pkl

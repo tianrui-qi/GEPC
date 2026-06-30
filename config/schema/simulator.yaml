@@ -1,0 +1,42 @@
+simulator:
+  # output
+  data_save_path: ???
+  overwrite: false
+  # cell
+  # choices: CcaSR_gillespie_simple_noE, CcaSR_gillespie_simple
+  cell_class: CcaSR_gillespie_simple
+  # solver
+  # choices: ode, gillespy2
+  solver: gillespy2
+  sampling: 5
+  # camera
+  camera_mult: 40.0
+  camera_offset: 100.0
+  camera_max: 4095.0
+  camera_noise_perc: 5.0
+  # dataset
+  num_cells: 100
+  seed: ${seed}
+  # stimulus
+  steps: 320
+  nostim_steps: 0
+  stim_config_index: 0
+  stim_configs:
+    - [3, -2]
+    - [1, -2]
+    - [0, -2]
+    - [3, -3]
+    - [2, -3]
+    - [4, -3]
+    - [1, -3]
+  # cell parameters
+  eta: 1.0
+  nu: 0.01
+  h1: 0.04
+  h2: 0.001
+  a: 0.025
+  k_h: 45.0
+  n_h: 3.6
+  tau: 12.0
+  mu: 40.0
+  sigma: 2.0

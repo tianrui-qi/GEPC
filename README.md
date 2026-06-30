@@ -1,20 +1,23 @@
 # GEPC
 
 GEPC now uses a lightweight PyTorch + Lightning + Hydra training pipeline.
-The repository is organized around one training entrypoint in [`script/pretrain.py`](/Users/tianrui.qi/Documents/GitHub/GEPC/script/pretrain.py), modular source code in [`src/`](/Users/tianrui.qi/Documents/GitHub/GEPC/src), and executed analysis notebooks in [`notebook/`](/Users/tianrui.qi/Documents/GitHub/GEPC/notebook).
+The repository is organized around two main entrypoints: [`script/simulate.py`](script/simulate.py) for generating simulation data and [`script/train.py`](script/train.py) for inverse-control training.
 
 ## Structure
 
-- [`script/`](/Users/tianrui.qi/Documents/GitHub/GEPC/script): minimal main scripts
-- [`config/pipeline/`](/Users/tianrui.qi/Documents/GitHub/GEPC/config/pipeline): top-level Hydra pipelines
-- [`config/schema/data.yaml`](/Users/tianrui.qi/Documents/GitHub/GEPC/config/schema/data.yaml): data configuration
-- [`config/schema/model/`](/Users/tianrui.qi/Documents/GitHub/GEPC/config/schema/model): selectable model groups
-- [`config/experiment/`](/Users/tianrui.qi/Documents/GitHub/GEPC/config/experiment): concrete experiment presets
-- [`src/data/`](/Users/tianrui.qi/Documents/GitHub/GEPC/src/data): datasets, simulation backend, LightningDataModule
-- [`src/model/`](/Users/tianrui.qi/Documents/GitHub/GEPC/src/model): LSTM and Transformer forecasters
-- [`src/objective/`](/Users/tianrui.qi/Documents/GitHub/GEPC/src/objective): LightningModule objectives
-- [`src/trainer/`](/Users/tianrui.qi/Documents/GitHub/GEPC/src/trainer): Lightning trainer wrapper with TensorBoard + checkpoints
-- [`notebook/`](/Users/tianrui.qi/Documents/GitHub/GEPC/notebook): executed downstream analysis notebooks
+- [`script/`](script): minimal main scripts
+- [`notebook/`](notebook): post-training analysis from checkpoints and simulation data
+- [`config/pipeline/`](config/pipeline): top-level Hydra pipelines
+- [`config/schema/data.yaml`](config/schema/data.yaml): training data loading configuration
+- [`config/schema/simulator.yaml`](config/schema/simulator.yaml): simulation data generation configuration
+- [`config/schema/model/`](config/schema/model): selectable model groups
+- [`config/experiment/simulate/`](config/experiment/simulate): simulation data presets
+- [`config/experiment/train/`](config/experiment/train): training experiment presets
+- [`src/data.py`](src/data.py): Dataset and LightningDataModule
+- [`src/simulator.py`](src/simulator.py): cell simulation and camera model
+- [`src/model/`](src/model): LSTM and Transformer inverse-control models
+- [`src/objective.py`](src/objective.py): LightningModule objective
+- [`src/trainer.py`](src/trainer.py): Lightning trainer wrapper with TensorBoard + checkpoints
 
 ## Environment
 
@@ -38,25 +41,39 @@ conda activate gepc
 
 ## Training
 
+Generate one simulation dataset:
+
+```bash
+python -m script.simulate --config-name experiment/simulate/Style4-Train
+```
+
 Run the long-range experiment:
 
 ```bash
-python -m script.pretrain +experiment=01
+python -m script.train --config-name experiment/train/Style4-Past36-LSTM
 ```
 
-You can swap Hydra model groups directly from the CLI, and data overrides stay flat:
+Run the Transformer counterpart:
 
 ```bash
-python -m script.pretrain +experiment=01 model=transformer data.batch_size=128 trainer.max_epochs=8
+python -m script.train --config-name experiment/train/Style4-Past36-Transformer
 ```
 
-Artifacts are written by experiment name:
+Artifacts are written under [`data/`](data):
 
-- TensorBoard logs under [`log/`](/Users/tianrui.qi/Documents/GitHub/GEPC/log)
-- checkpoints under [`ckpt/`](/Users/tianrui.qi/Documents/GitHub/GEPC/ckpt)
+- simulation datasets under [`data/simulate/`](data/simulate)
+- simulation job logs under [`data/simulate-log/`](data/simulate-log)
+- TensorBoard logs under [`data/train-log/`](data/train-log)
+- checkpoints under [`data/train-ckpt/`](data/train-ckpt)
 
 ## Analysis
 
-Prediction and experiment analysis live entirely in executed Jupyter notebooks. The repository currently includes one executed analysis notebook:
+Post-training analysis is done in notebooks. The notebooks load trained checkpoints from [`data/train-ckpt/`](data/train-ckpt) and validation data from [`data/simulate/`](data/simulate), then compute predictions and render the final figures.
 
-- [`notebook/analysis01.ipynb`](/Users/tianrui.qi/Documents/GitHub/GEPC/notebook/analysis01.ipynb)
+Current figure notebooks:
+
+- [`notebook/evaluation-Base.ipynb`](notebook/evaluation-Base.ipynb)
+- [`notebook/evaluation-ErrorRelateToCosineTargetPeriod.ipynb`](notebook/evaluation-ErrorRelateToCosineTargetPeriod.ipynb)
+- [`notebook/ablation-ModelArchitectures.ipynb`](notebook/ablation-ModelArchitectures.ipynb)
+- [`notebook/ablation-DataSimulationMethod.ipynb`](notebook/ablation-DataSimulationMethod.ipynb)
+- [`notebook/ablation-InputLength.ipynb`](notebook/ablation-InputLength.ipynb)

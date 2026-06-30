@@ -1,0 +1,14 @@
+# @package _global_
+
+defaults:
+  - /pipeline@_here_: simulate
+  - _self_
+
+name: "Style4-Valid"
+seed: 2000
+
+simulator:
+  num_cells: 10
+  cell_class: CcaSR_gillespie_simple
+  solver: gillespy2
+  camera_noise_perc: 5.0
