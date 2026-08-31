@@ -193,10 +193,10 @@ Together, these notebooks reproduce all figures shown in the project [presentati
 
 ## Acknowledgements
 
-This project was developed by [Tianrui Qi](https://www.linkedin.com/in/tianrui-qi/) during his Ph.D. lab rotation in the [Dunlop Lab](http://www.dunloplab.com) at Boston University.
+This project was developed by [Tianrui Qi](https://www.linkedin.com/in/tianrui-qi/) during his third Ph.D. lab rotation in the [Dunlop Lab](http://www.dunloplab.com) at Boston University.
 Thanks to [Dr. Mary Dunlop](https://www.linkedin.com/in/mary-dunlop-5328756/) for hosting the rotation and to [Dr. Hossein Moghimian](https://www.linkedin.com/in/hossein-moghimian-783251103/) for his support throughout the project.
 
 ## References
 
-1.  Klumpe, H. E., Lugagne, J.-B., Khalil, A. S. & Dunlop, M. J. Deep neural networks for predicting single-cell responses and probability landscapes. *ACS Synth. Biol.* **12**, 2367-2381 (2023). [doi:10.1021/acssynbio.3c00203](https://doi.org/10.1021/acssynbio.3c00203).
-2.  Lugagne, J.-B., Blassick, C. M. & Dunlop, M. J. Deep model predictive control of gene expression in thousands of single cells. *Nat. Commun.* **15**, 2148 (2024). [doi:10.1038/s41467-024-46361-1](https://doi.org/10.1038/s41467-024-46361-1).
+1.  Klumpe, H. E., Lugagne, J.-B., Khalil, A. S. & Dunlop, M. J. [Deep neural networks for predicting single-cell responses and probability landscapes.](https://doi.org/10.1021/acssynbio.3c00203) *ACS Synth. Biol.* **12**, 2367-2381 (2023).
+2.  Lugagne, J.-B., Blassick, C. M. & Dunlop, M. J. [Deep model predictive control of gene expression in thousands of single cells.](https://doi.org/10.1038/s41467-024-46361-1) *Nat. Commun.* **15**, 2148 (2024).
