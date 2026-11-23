@@ -26,18 +26,18 @@ conda activate gepc
 
 ### Data
 
-Simulated cell pools, trained model checkpoints, and TensorBoard training logs are available on [OSF](https://osf.io/mnvcz/).
-You can download them from the command line as follows:
+The simulated cell pools, trained model checkpoints, and TensorBoard logs
+are available through iCloud Drive. The download link is configured in
+[`config/pipeline/setup.yaml`](config/pipeline/setup.yaml).
+With the `gepc` environment active, run the following command from the
+repository root:
 
 ```bash
-# clone the OSF storage
-osf --project mnvcz clone
-# merge OSF storage into the project root
-rsync -av --progress mnvcz/osfstorage/data/ ./data/
-rm -r mnvcz
+python -m script.setup
 ```
 
-After downloading the OSF artifacts, the repository should contain:
+The [setup](script/setup.py) places the files in the following
+directories and skips files that already exist:
 
 ```text
 data/
@@ -85,7 +85,7 @@ python -m script.simulate --config-name experiment/simulate/${style}-${pool}
 
 We use [Hydra](https://github.com/facebookresearch/hydra)'s syntax to define, manage, and override simulation parameters.
 The template simulation pipeline is defined in [`config/pipeline/simulate.yaml`](config/pipeline/simulate.yaml), and the eight runnable presets under [`config/experiment/simulate/`](config/experiment/simulate/) inherit from this template pipeline.
-The provided simulation pools on [OSF](https://osf.io/mnvcz/) were generated from these presets.
+The simulation pools provided under [Data](#data) were generated from these presets.
 To define a new simulation setting, create a new `.yaml` preset under [`config/experiment/simulate/`](config/experiment/simulate/) and pass it to `--config-name`.
 [Hydra](https://github.com/facebookresearch/hydra) also supports command-line overrides for any config parameter.
 For example, to generate 200 cells for a training pool:
@@ -147,7 +147,8 @@ python -m script.train --config-name experiment/train/Style4-Past36-LSTM
 
 We use [Hydra](https://github.com/facebookresearch/hydra)'s syntax to define, manage, and override training parameters.
 The template training pipeline is defined in [`config/pipeline/train.yaml`](config/pipeline/train.yaml), and the eight runnable presets under [`config/experiment/train/`](config/experiment/train/) inherit from this template pipeline.
-The provided checkpoints and TensorBoard logs on [OSF](https://osf.io/mnvcz/) were generated from these presets.
+The model checkpoints and TensorBoard logs provided under [Data](#data)
+were generated from these presets.
 To define a new training setting, create a new `.yaml` preset under [`config/experiment/train/`](config/experiment/train/) and pass it to `--config-name`.
 Please refer to [Hydra](https://github.com/facebookresearch/hydra)'s
 [documentation](https://hydra.cc/docs/intro/)
